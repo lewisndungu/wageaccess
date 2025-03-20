@@ -129,11 +129,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
     // Format into a more user-friendly structure
     const events = await Promise.all(
       attendanceRecords.map(async (record) => {
-        const employee = await storage.getEmployee(record.employeeId);
+        const employeeWithDetails = await storage.getEmployeeWithDetails(record.employeeId);
+        const user = employeeWithDetails ? employeeWithDetails.user : null;
         return {
           id: record.id,
           employeeId: record.employeeId,
-          employeeName: employee ? employee.name : 'Unknown Employee',
+          employeeName: user ? user.name : 'Unknown Employee',
           event: record.clockInTime ? 'Clock In' : 'Clock Out',
           time: record.clockInTime || record.clockOutTime,
           status: record.status
@@ -346,7 +347,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "Employee not found" });
       }
       
-      const employee = employeeWithDetails.employee || employeeWithDetails;
+      // Use the employee data directly from employeeWithDetails
       const user = employeeWithDetails.user;
       
       // 1. Validate attendance records exist for this employee
@@ -356,8 +357,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Filter for this month's records
       const thisMonthAttendance = attendanceRecords.filter(record => {
-        const recordDate = new Date(record.date);
-        return recordDate >= startOfMonth && recordDate <= now;
+        // Safely handle date - ensure it's not null
+        if (record.date) {
+          const recordDate = new Date(record.date);
+          return recordDate >= startOfMonth && recordDate <= now;
+        }
+        return false;
       });
       
       if (thisMonthAttendance.length === 0) {
@@ -371,7 +376,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const totalWorkingDays = 22; // Average working days in a month
       
       // Calculate monthly salary from hourly rate (assuming 8-hour workday)
-      const hourlyRate = parseFloat(employee.hourlyRate as string || "0");
+      const hourlyRate = parseFloat(employeeWithDetails.hourlyRate?.toString() || "0");
       const monthlySalary = hourlyRate * 8 * totalWorkingDays; // 8 hours/day, 22 days/month
       
       const calculatedEarnedWage = monthlySalary * (daysWorked / totalWorkingDays);
@@ -390,8 +395,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const processingFee = amount * 0.05; // 5% processing fee
       const ewaRequest = await storage.createEwaRequest({
         employeeId,
-        amount,
-        processingFee,
+        amount: amount.toString(), // Convert to string for decimal type
+        processingFee: processingFee.toString(), // Convert to string for decimal type
         reason: reason || "Emergency funds needed",
         requestDate: now,
         approvalDate: null,
@@ -480,7 +485,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     
     await storage.createWalletTransaction({
       walletId: wallet.id,
-      amount: parsedAmount,
+      amount: parsedAmount.toString(), // Convert to string for decimal type
       transactionType: 'topup',
       description: 'Wallet top-up',
       referenceId: `TOP-${Date.now()}`,

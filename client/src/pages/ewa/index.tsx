@@ -113,32 +113,35 @@ export default function EWAPage() {
   ];
 
   return (
-    <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <h1 className="text-2xl font-bold tracking-tight">Earned Wage Access</h1>
-        <div className="flex space-x-2">
+    <div className="space-y-8">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">Earned Wage Access</h1>
+          <p className="text-muted-foreground mt-1">Manage employee early wage access requests and disbursements</p>
+        </div>
+        <div className="flex flex-wrap gap-3">
           <Link to="/ewa/analytics">
-            <Button variant="outline" className="flex items-center">
-              <BarChart2 className="mr-2 h-4 w-4" />
+            <Button variant="outline" size="sm" className="flex items-center h-9">
+              <BarChart2 className="mr-1.5 h-4 w-4" />
               Analytics
             </Button>
           </Link>
           <Link to="/ewa/management-reporting">
-            <Button variant="outline" className="flex items-center">
-              <FileText className="mr-2 h-4 w-4" />
+            <Button variant="outline" size="sm" className="flex items-center h-9">
+              <FileText className="mr-1.5 h-4 w-4" />
               Reports
             </Button>
           </Link>
           <Link to="/ewa/wallet">
-            <Button variant="outline" className="flex items-center">
-              <Wallet className="mr-2 h-4 w-4" />
-              Wallet: {formatCurrency(walletData.balance)}
+            <Button variant="outline" size="sm" className="flex items-center h-9">
+              <Wallet className="mr-1.5 h-4 w-4" />
+              <span className="whitespace-nowrap">Wallet: {formatCurrency(walletData.balance)}</span>
             </Button>
           </Link>
           <Dialog>
             <DialogTrigger asChild>
-              <Button className="flex items-center">
-                <Plus className="mr-2 h-4 w-4" />
+              <Button size="sm" className="flex items-center h-9">
+                <Plus className="mr-1.5 h-4 w-4" />
                 New Request
               </Button>
             </DialogTrigger>
@@ -167,8 +170,8 @@ export default function EWAPage() {
         </div>
       </div>
       
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <Card className="shadow-glass dark:shadow-glass-dark h-32">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+        <Card className="bg-white dark:bg-gray-800 shadow-sm border border-gray-100 dark:border-gray-800 overflow-hidden">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">Pending Requests</CardTitle>
           </CardHeader>
@@ -180,7 +183,7 @@ export default function EWAPage() {
           </CardContent>
         </Card>
         
-        <Card className="shadow-glass dark:shadow-glass-dark h-32">
+        <Card className="bg-white dark:bg-gray-800 shadow-sm border border-gray-100 dark:border-gray-800 overflow-hidden">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">Disbursed This Month</CardTitle>
           </CardHeader>
@@ -192,7 +195,7 @@ export default function EWAPage() {
           </CardContent>
         </Card>
         
-        <Card className="shadow-glass dark:shadow-glass-dark h-32">
+        <Card className="bg-white dark:bg-gray-800 shadow-sm border border-gray-100 dark:border-gray-800 overflow-hidden">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">Wallet Balance</CardTitle>
           </CardHeader>
@@ -207,22 +210,22 @@ export default function EWAPage() {
         </Card>
       </div>
       
-      <Card className="shadow-glass dark:shadow-glass-dark">
+      <Card className="bg-white dark:bg-gray-800 shadow-sm border border-gray-100 dark:border-gray-800 overflow-hidden">
         <CardHeader>
-          <div className="flex justify-between items-center">
+          <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4">
             <div>
               <CardTitle>EWA Requests</CardTitle>
               <CardDescription>Manage employee earned wage access requests</CardDescription>
             </div>
-            <Button variant="outline" className="flex items-center">
-              <Download className="mr-2 h-4 w-4" />
+            <Button variant="outline" size="sm" className="flex items-center h-9 self-start">
+              <Download className="mr-1.5 h-4 w-4" />
               Export
             </Button>
           </div>
         </CardHeader>
         <CardContent>
           <Tabs defaultValue={activeTab} onValueChange={setActiveTab}>
-            <TabsList className="mb-4">
+            <TabsList className="mb-6">
               <TabsTrigger value="all">All Requests</TabsTrigger>
               <TabsTrigger value="pending">Pending</TabsTrigger>
               <TabsTrigger value="approved">Approved</TabsTrigger>
@@ -235,7 +238,7 @@ export default function EWAPage() {
             
             <TabsContent value="pending" className="mt-0">
               {filteredRequests.length > 0 ? (
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
                   {filteredRequests.map(request => (
                     <EWARequestCard 
                       key={request.id} 
@@ -245,17 +248,19 @@ export default function EWAPage() {
                   ))}
                 </div>
               ) : (
-                <div className="text-center py-12">
-                  <CreditCard className="mx-auto h-12 w-12 text-gray-400" />
-                  <h3 className="mt-2 text-lg font-medium">No pending requests</h3>
-                  <p className="mt-1 text-sm text-gray-500">There are no pending EWA requests at this time.</p>
+                <div className="text-center py-16 px-4">
+                  <CreditCard className="mx-auto h-12 w-12 text-muted-foreground opacity-20" />
+                  <h3 className="mt-4 text-lg font-medium">No pending requests</h3>
+                  <p className="mt-2 text-sm text-muted-foreground max-w-md mx-auto">
+                    There are no pending EWA requests at this time. New requests will appear here for your approval.
+                  </p>
                 </div>
               )}
             </TabsContent>
             
             <TabsContent value="approved" className="mt-0">
               {filteredRequests.length > 0 ? (
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
                   {filteredRequests.map(request => (
                     <EWARequestCard 
                       key={request.id} 
@@ -265,10 +270,12 @@ export default function EWAPage() {
                   ))}
                 </div>
               ) : (
-                <div className="text-center py-12">
-                  <CreditCard className="mx-auto h-12 w-12 text-gray-400" />
-                  <h3 className="mt-2 text-lg font-medium">No approved requests</h3>
-                  <p className="mt-1 text-sm text-gray-500">There are no approved EWA requests waiting for disbursement.</p>
+                <div className="text-center py-16 px-4">
+                  <CreditCard className="mx-auto h-12 w-12 text-muted-foreground opacity-20" />
+                  <h3 className="mt-4 text-lg font-medium">No approved requests</h3>
+                  <p className="mt-2 text-sm text-muted-foreground max-w-md mx-auto">
+                    There are no approved EWA requests waiting for disbursement. Approved requests that haven't been paid yet will appear here.
+                  </p>
                 </div>
               )}
             </TabsContent>

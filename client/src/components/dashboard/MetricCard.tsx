@@ -1,4 +1,5 @@
 import { Card } from "@/components/ui/card";
+import { ArrowUpRight, ArrowDownRight, Users, Clock, DollarSign, CreditCard } from "lucide-react";
 
 interface MetricCardProps {
   title: string;
@@ -19,25 +20,46 @@ export function MetricCard({
   additionalInfo,
   colorClass = "text-primary"
 }: MetricCardProps) {
-  const changeColorClass = isPositiveChange ? "text-[#10B981]" : "text-[#EF4444]";
-  const bgColorClass = `bg-${colorClass}/10`;
+  const changeColorClass = isPositiveChange ? "text-emerald-500" : "text-rose-500";
+  
+  // Map icon name to Lucide icon
+  const getIcon = () => {
+    switch (iconName) {
+      case "team-line":
+        return <Users className={`w-5 h-5 ${colorClass}`} />;
+      case "time-line":
+        return <Clock className={`w-5 h-5 ${colorClass}`} />;
+      case "money-dollar-box-line":
+        return <DollarSign className={`w-5 h-5 ${colorClass}`} />;
+      case "bank-card-line":
+        return <CreditCard className={`w-5 h-5 ${colorClass}`} />;
+      default:
+        return <Users className={`w-5 h-5 ${colorClass}`} />;
+    }
+  };
   
   return (
-    <Card className="bg-white dark:bg-gray-800 rounded-xl p-4 shadow-glass dark:shadow-glass-dark">
+    <Card className="bg-white dark:bg-gray-800 rounded-xl p-6 shadow-sm border border-gray-100 dark:border-gray-800 h-full">
       <div className="flex justify-between">
         <div>
-          <p className="text-sm text-gray-500 dark:text-gray-400">{title}</p>
-          <div className="flex items-end mt-1">
+          <p className="text-sm text-muted-foreground font-medium">{title}</p>
+          <div className="flex items-end mt-2">
             <p className="text-2xl font-bold">{value}</p>
-            <p className={`text-sm ml-2 ${changeColorClass}`}>{change}</p>
+            <div className={`flex items-center text-sm ml-3 ${changeColorClass}`}>
+              {isPositiveChange ? 
+                <ArrowUpRight className="w-3.5 h-3.5 mr-1" /> : 
+                <ArrowDownRight className="w-3.5 h-3.5 mr-1" />
+              }
+              <span>{change}</span>
+            </div>
           </div>
         </div>
-        <div className={`${bgColorClass} p-2 rounded-lg`}>
-          <i className={`ri-${iconName} text-xl ${colorClass}`}></i>
+        <div className={`flex items-center justify-center h-10 w-10 rounded-xl bg-primary/10`}>
+          {getIcon()}
         </div>
       </div>
       {additionalInfo && (
-        <div className="mt-3">
+        <div className="mt-4">
           {additionalInfo}
         </div>
       )}

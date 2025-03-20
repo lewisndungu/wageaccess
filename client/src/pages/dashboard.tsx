@@ -28,11 +28,14 @@ export default function Dashboard() {
   const { defaultActions } = useQuickActions();
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       {/* Key Metrics Section */}
-      <section className="mb-6 animate-slide-in-left" style={{ animationDelay: "0.1s" }}>
-        <h2 className="text-lg font-semibold mb-4">Key Metrics</h2>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <section className="animate-slide-in-left" style={{ animationDelay: "0.1s" }}>
+        <div className="mb-6">
+          <h2 className="text-xl font-semibold mb-1.5">Key Metrics</h2>
+          <p className="text-sm text-muted-foreground">Overview of your organization's performance</p>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
           <MetricCard
             title="Total Employees"
             value={stats.employeeCount.total.toString()}
@@ -96,14 +99,20 @@ export default function Dashboard() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Quick Actions */}
         <section className="lg:col-span-1 animate-slide-in-left" style={{ animationDelay: "0.2s" }}>
-          <h2 className="text-lg font-semibold mb-4">Quick Actions</h2>
+          <div className="mb-5">
+            <h2 className="text-xl font-semibold mb-1.5">Quick Actions</h2>
+            <p className="text-sm text-muted-foreground">Common tasks you can perform</p>
+          </div>
           <QuickActions actions={defaultActions} />
         </section>
         
         {/* Recent Activity */}
         <section className="lg:col-span-2 animate-slide-in-right" style={{ animationDelay: "0.2s" }}>
-          <div className="flex justify-between items-center mb-4">
-            <h2 className="text-lg font-semibold">Recent Activity</h2>
+          <div className="flex justify-between items-center mb-5">
+            <div>
+              <h2 className="text-xl font-semibold mb-1.5">Recent Activity</h2>
+              <p className="text-sm text-muted-foreground">Latest updates from your workspace</p>
+            </div>
             <Link to="/activities">
               <Button variant="link" className="text-primary hover:text-primary/80">View All</Button>
             </Link>
@@ -113,24 +122,29 @@ export default function Dashboard() {
       </div>
       
       {/* Employee Overview */}
-      <section className="mt-6 animate-slide-in-left" style={{ animationDelay: "0.3s" }}>
-        <div className="flex justify-between items-center mb-4">
-          <h2 className="text-lg font-semibold">Employee Overview</h2>
-          <div className="flex items-center space-x-2">
+      <section className="animate-slide-in-left" style={{ animationDelay: "0.3s" }}>
+        <div className="flex justify-between items-center mb-5">
+          <div>
+            <h2 className="text-xl font-semibold mb-1.5">Employee Overview</h2>
+            <p className="text-sm text-muted-foreground">Complete list of active employees</p>
+          </div>
+          <div className="flex items-center space-x-3">
             <Button variant="outline" size="sm" className="flex items-center">
-              <Filter className="h-4 w-4 mr-1" />
+              <Filter className="h-4 w-4 mr-1.5" />
               <span>Filter</span>
             </Button>
             <Link to="/employees/new">
               <Button size="sm" className="flex items-center">
-                <UserPlus className="h-4 w-4 mr-1" />
+                <UserPlus className="h-4 w-4 mr-1.5" />
                 <span>Add Employee</span>
               </Button>
             </Link>
           </div>
         </div>
         
-        <EmployeeTable data={employeeData} />
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-100 dark:border-gray-800 overflow-hidden">
+          <EmployeeTable data={employeeData} />
+        </div>
       </section>
     </div>
   );

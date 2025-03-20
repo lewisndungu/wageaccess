@@ -169,7 +169,7 @@ export function EWARequestCard({ request, onStatusChange }: EWARequestCardProps)
           <div className="flex justify-between items-start">
             <div>
               <CardTitle className="text-lg">{formatCurrency(request.amount)}</CardTitle>
-              <CardDescription>{getStatusBadge(request.status)}</CardDescription>
+              <div className="mt-1">{getStatusBadge(request.status)}</div>
             </div>
             <Avatar>
               <AvatarImage src={request.employeeImage} alt={request.employeeName} />

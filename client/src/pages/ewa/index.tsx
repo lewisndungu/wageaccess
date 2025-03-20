@@ -7,8 +7,10 @@ import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger, DialogClose } from "@/components/ui/dialog";
 import { ColumnDef } from "@tanstack/react-table";
 import { EWARequestCard } from "@/components/ewa/EWARequestCard";
+import { EWARequestForm } from "@/components/ewa/EWARequestForm";
 import { ewaRequests, formatCurrency, formatDateTime } from "@/lib/mock-data";
 import { CreditCard, Download, Plus, User, Wallet } from "lucide-react";
 
@@ -121,10 +123,35 @@ export default function EWAPage() {
               Wallet: {formatCurrency(walletData.balance)}
             </Button>
           </Link>
-          <Button className="flex items-center">
-            <Plus className="mr-2 h-4 w-4" />
-            New Request
-          </Button>
+          <Dialog>
+            <DialogTrigger asChild>
+              <Button className="flex items-center">
+                <Plus className="mr-2 h-4 w-4" />
+                New Request
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+              <DialogHeader>
+                <DialogTitle>New EWA Request</DialogTitle>
+                <DialogDescription>
+                  Create a new earned wage access request
+                </DialogDescription>
+              </DialogHeader>
+              
+              <div className="py-4">
+                <EWARequestForm onSuccess={() => {
+                  refetch();
+                  setActiveTab('pending');
+                }} />
+              </div>
+              
+              <DialogFooter>
+                <Button variant="outline" asChild>
+                  <DialogClose>Cancel</DialogClose>
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
         </div>
       </div>
       

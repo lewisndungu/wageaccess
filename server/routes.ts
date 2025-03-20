@@ -121,6 +121,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
     return res.status(200).json(attendanceRecords);
   });
   
+  // Recent attendance events for real-time updates
+  app.get("/api/attendance/recent-events", async (_req, res) => {
+    const date = new Date();
+    const attendanceRecords = await storage.getAttendanceForDate(date);
+    
+    // Format into a more user-friendly structure
+    const events = await Promise.all(
+      attendanceRecords.map(async (record) => {
+        const employee = await storage.getEmployee(record.employeeId);
+        return {
+          id: record.id,
+          employeeId: record.employeeId,
+          employeeName: employee ? employee.name : 'Unknown Employee',
+          event: record.clockInTime ? 'Clock In' : 'Clock Out',
+          time: record.clockInTime || record.clockOutTime,
+          status: record.status
+        };
+      })
+    );
+    
+    return res.status(200).json(events);
+  });
+  
   app.get("/api/attendance/employee/:id", async (req, res) => {
     const id = parseInt(req.params.id);
     
@@ -305,6 +328,103 @@ export async function registerRoutes(app: Express): Promise<Server> {
       return res.status(201).json(ewaRequest);
     } catch (error) {
       return res.status(500).json({ message: "Failed to create EWA request" });
+    }
+  });
+  
+  // Integrated endpoint: Create EWA request based on attendance and update system flags
+  app.post("/api/ewa/integrated-request", async (req, res) => {
+    const { employeeId, amount, reason } = req.body;
+    
+    if (!employeeId || !amount) {
+      return res.status(400).json({ message: "Employee ID and amount are required" });
+    }
+    
+    try {
+      // Get employee details with user information
+      const employeeWithDetails = await storage.getEmployeeWithDetails(employeeId);
+      if (!employeeWithDetails) {
+        return res.status(404).json({ message: "Employee not found" });
+      }
+      
+      const employee = employeeWithDetails.employee || employeeWithDetails;
+      const user = employeeWithDetails.user;
+      
+      // 1. Validate attendance records exist for this employee
+      const now = new Date();
+      const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+      const attendanceRecords = await storage.getAttendanceForEmployee(employeeId);
+      
+      // Filter for this month's records
+      const thisMonthAttendance = attendanceRecords.filter(record => {
+        const recordDate = new Date(record.date);
+        return recordDate >= startOfMonth && recordDate <= now;
+      });
+      
+      if (thisMonthAttendance.length === 0) {
+        return res.status(400).json({ 
+          message: "No attendance records found for this month. Cannot process EWA request without attendance data."
+        });
+      }
+      
+      // 2. Calculate earned wage based on attendance (simplified calculation)
+      const daysWorked = thisMonthAttendance.length;
+      const totalWorkingDays = 22; // Average working days in a month
+      
+      // Calculate monthly salary from hourly rate (assuming 8-hour workday)
+      const hourlyRate = parseFloat(employee.hourlyRate as string || "0");
+      const monthlySalary = hourlyRate * 8 * totalWorkingDays; // 8 hours/day, 22 days/month
+      
+      const calculatedEarnedWage = monthlySalary * (daysWorked / totalWorkingDays);
+      
+      // 3. Validate that requested amount doesn't exceed the allowed percentage
+      const maxAllowedPercentage = 0.5; // 50% of earned wage
+      const maxAllowedAmount = calculatedEarnedWage * maxAllowedPercentage;
+      
+      if (amount > maxAllowedAmount) {
+        return res.status(400).json({ 
+          message: `Requested amount exceeds maximum allowed EWA (${maxAllowedAmount.toFixed(2)})`
+        });
+      }
+      
+      // 4. Create the EWA request
+      const processingFee = amount * 0.05; // 5% processing fee
+      const ewaRequest = await storage.createEwaRequest({
+        employeeId,
+        amount,
+        processingFee,
+        reason: reason || "Emergency funds needed",
+        requestDate: now,
+        approvalDate: null,
+        disbursementDate: null,
+        status: "pending",
+        approvedBy: null,
+        notes: "Created via integrated endpoint"
+      });
+      
+      // 5. Update system flags to indicate integration occurred
+      // (This would normally be done through a SystemContext update, 
+      // but we'll simulate it by adding this info to the response)
+      
+      // 6. Return comprehensive response with all related data
+      return res.status(201).json({
+        success: true,
+        ewaRequest,
+        attendanceData: {
+          daysWorked,
+          totalWorkingDays,
+          earnedWage: calculatedEarnedWage,
+          maxAllowedAmount
+        },
+        systemUpdates: {
+          attendanceProcessed: true,
+          earnedWageCalculated: true,
+          ewaRequestCreated: true
+        }
+      });
+      
+    } catch (error) {
+      console.error("Error in integrated EWA request:", error);
+      return res.status(500).json({ message: "Failed to process integrated EWA request" });
     }
   });
   

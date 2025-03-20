@@ -16,6 +16,7 @@ import EWAPage from "@/pages/ewa/index";
 import WalletPage from "@/pages/ewa/wallet";
 import EWAAnalyticsPage from "@/pages/ewa/analytics";
 import EmployeeEWADashboardPage from "@/pages/ewa/employee-dashboard";
+import ManagementReportingPage from "@/pages/ewa/management-reporting";
 import ProfilePage from "@/pages/profile";
 import NotFound from "@/pages/not-found";
 
@@ -35,6 +36,7 @@ function AppRoutes() {
       <Route path="/ewa/analytics" element={<EWAAnalyticsPage />} />
       <Route path="/ewa/employee-dashboard" element={<EmployeeEWADashboardPage />} />
       <Route path="/ewa/employee-dashboard/:id" element={<EmployeeEWADashboardPage />} />
+      <Route path="/ewa/management-reporting" element={<ManagementReportingPage />} />
       <Route path="/profile" element={<ProfilePage />} />
       <Route path="*" element={<NotFound />} />
     </Routes>

@@ -12,7 +12,7 @@ import { ColumnDef } from "@tanstack/react-table";
 import { EWARequestCard } from "@/components/ewa/EWARequestCard";
 import { EWARequestForm } from "@/components/ewa/EWARequestForm";
 import { ewaRequests, formatCurrency, formatDateTime } from "@/lib/mock-data";
-import { BarChart2, CreditCard, Download, Plus, User, Wallet } from "lucide-react";
+import { BarChart2, CreditCard, Download, FileText, Plus, User, Wallet } from "lucide-react";
 
 interface EWARequest {
   id: number;
@@ -123,6 +123,12 @@ export default function EWAPage() {
               Analytics
             </Button>
           </Link>
+          <Link to="/ewa/management-reporting">
+            <Button variant="outline" className="flex items-center">
+              <FileText className="mr-2 h-4 w-4" />
+              Reports
+            </Button>
+          </Link>
           <Link to="/ewa/wallet">
             <Button variant="outline" className="flex items-center">
               <Wallet className="mr-2 h-4 w-4" />
@@ -193,7 +199,7 @@ export default function EWAPage() {
           <CardContent>
             <div className="text-2xl font-bold">{formatCurrency(walletData.balance)}</div>
             <div className="text-sm text-muted-foreground mt-1">
-              <Link href="/ewa/wallet">
+              <Link to="/ewa/wallet">
                 <span className="text-primary hover:underline cursor-pointer">Top up wallet</span>
               </Link>
             </div>

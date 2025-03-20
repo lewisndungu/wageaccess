@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Link } from "wouter";
+import { Link } from "react-router-dom";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -12,7 +12,7 @@ import { ColumnDef } from "@tanstack/react-table";
 import { EWARequestCard } from "@/components/ewa/EWARequestCard";
 import { EWARequestForm } from "@/components/ewa/EWARequestForm";
 import { ewaRequests, formatCurrency, formatDateTime } from "@/lib/mock-data";
-import { CreditCard, Download, Plus, User, Wallet } from "lucide-react";
+import { BarChart2, CreditCard, Download, Plus, User, Wallet } from "lucide-react";
 
 interface EWARequest {
   id: number;
@@ -117,7 +117,13 @@ export default function EWAPage() {
       <div className="flex justify-between items-center">
         <h1 className="text-2xl font-bold tracking-tight">Earned Wage Access</h1>
         <div className="flex space-x-2">
-          <Link href="/ewa/wallet">
+          <Link to="/ewa/analytics">
+            <Button variant="outline" className="flex items-center">
+              <BarChart2 className="mr-2 h-4 w-4" />
+              Analytics
+            </Button>
+          </Link>
+          <Link to="/ewa/wallet">
             <Button variant="outline" className="flex items-center">
               <Wallet className="mr-2 h-4 w-4" />
               Wallet: {formatCurrency(walletData.balance)}

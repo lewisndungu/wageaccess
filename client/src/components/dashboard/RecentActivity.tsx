@@ -47,7 +47,7 @@ export function RecentActivity({ filter, limit = 5 }: RecentActivityProps) {
   const displayActivities = filteredActivities.slice(0, limit);
 
   return (
-    <Card className="bg-white dark:bg-gray-800 rounded-xl shadow-glass dark:shadow-glass-dark h-full">
+    <Card className="bg-white dark:bg-gray-800 rounded-xl shadow-glass dark:shadow-glass-dark h-full relative z-0">
       <CardHeader className="p-4 pb-0">
         <div className="flex items-center justify-between">
           <div className="flex space-x-2">

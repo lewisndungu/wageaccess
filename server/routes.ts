@@ -398,12 +398,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         amount: amount.toString(), // Convert to string for decimal type
         processingFee: processingFee.toString(), // Convert to string for decimal type
         reason: reason || "Emergency funds needed",
-        requestDate: now,
-        approvalDate: null,
-        disbursementDate: null,
         status: "pending",
-        approvedBy: null,
-        notes: "Created via integrated endpoint"
+        approvedBy: null
+        // requestDate is defaulted by the schema
       });
       
       // 5. Update system flags to indicate integration occurred
@@ -479,8 +476,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
     
     const parsedAmount = parseFloat(amount);
+    const currentBalance = parseFloat(wallet.balance?.toString() || "0");
     const updatedWallet = await storage.updateWallet(wallet.id, {
-      balance: wallet.balance + parsedAmount
+      balance: (currentBalance + parsedAmount).toString() // Convert to string for decimal type
     });
     
     await storage.createWalletTransaction({

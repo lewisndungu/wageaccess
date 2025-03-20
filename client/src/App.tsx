@@ -3,7 +3,7 @@ import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { UserProvider } from "@/context/UserContext";
-import { SystemProvider } from "@/context/SystemContext";
+import { SystemProvider, useSystem, SystemNotification } from "@/context/SystemContext";
 import { ThemeProvider } from "@/components/ui/theme-provider";
 
 import MainLayout from "@/layouts/MainLayout";
@@ -25,15 +25,55 @@ import NotFound from "@/pages/not-found";
 
 // System-wide notifications component
 function SystemNotifications() {
-  // This would utilize the notifications from SystemContext
-  // to show floating alerts for cross-module events 
-  return null; // Placeholder - will be implemented later
+  const { notifications, clearNotification } = useSystem();
+  
+  if (notifications.length === 0) return null;
+  
+  return (
+    <div className="fixed bottom-4 right-4 z-50 flex flex-col gap-2 max-w-md">
+      {notifications.map((notification: SystemNotification) => (
+        <div 
+          key={notification.id} 
+          className={`
+            p-4 rounded-lg shadow-lg transition-all duration-300 transform translate-y-0
+            ${notification.type === 'success' ? 'bg-green-50 border-l-4 border-green-500 text-green-700' : ''}
+            ${notification.type === 'error' ? 'bg-red-50 border-l-4 border-red-500 text-red-700' : ''}
+            ${notification.type === 'warning' ? 'bg-amber-50 border-l-4 border-amber-500 text-amber-700' : ''}
+            ${notification.type === 'info' ? 'bg-blue-50 border-l-4 border-blue-500 text-blue-700' : ''}
+          `}
+        >
+          <div className="flex justify-between items-start">
+            <div>
+              <h4 className="font-medium">{notification.title}</h4>
+              <p className="text-sm mt-1">{notification.message}</p>
+            </div>
+            <button 
+              onClick={() => clearNotification(notification.id)}
+              className="text-gray-400 hover:text-gray-600"
+            >
+              ✕
+            </button>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
 }
 
 // System-wide loading overlay
 function LoadingOverlay() {
-  // This would show a full-screen loading overlay when system-wide loading is active
-  return null; // Placeholder - will be implemented later
+  const { isLoading } = useSystem();
+  
+  if (!isLoading) return null;
+  
+  return (
+    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center">
+      <div className="bg-white dark:bg-gray-800 p-4 rounded-lg shadow-lg flex flex-col items-center">
+        <div className="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full mb-2"></div>
+        <p className="text-sm font-medium text-gray-700 dark:text-gray-300">Loading...</p>
+      </div>
+    </div>
+  );
 }
 
 function AppRoutes() {

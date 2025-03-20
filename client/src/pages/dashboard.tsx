@@ -9,15 +9,39 @@ import { dashboardStats, employees, recentActivities } from "@/lib/mock-data";
 import { Button } from "@/components/ui/button";
 import { Filter, UserPlus } from "lucide-react";
 
+// Define the Employee type to match what EmployeeTable expects
+interface Employee {
+  id: number;
+  employeeNumber: string;
+  name: string;
+  department: string;
+  position: string;
+  contact: string;
+  email: string;
+  status: "present" | "absent" | "late";
+  profileImage?: string;
+}
+
 export default function Dashboard() {
   const { data: stats } = useQuery({
     queryKey: ['/api/statistics/dashboard'],
     initialData: dashboardStats
   });
   
-  const { data: employeeData } = useQuery({
+  // Map the employees data to ensure all fields match the expected Employee type
+  const { data: employeeData } = useQuery<Employee[]>({
     queryKey: ['/api/employees/active'],
-    initialData: employees
+    initialData: employees.map(emp => ({
+      id: emp.id,
+      employeeNumber: emp.employeeNumber,
+      name: emp.name,
+      department: emp.department,
+      position: emp.position,
+      contact: emp.contact,
+      email: emp.email,
+      status: emp.status as "present" | "absent" | "late",
+      profileImage: emp.profileImage
+    }))
   });
   
   const { data: activities } = useQuery({

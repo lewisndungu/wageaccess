@@ -156,6 +156,86 @@ export async function registerRoutes(app: Express): Promise<Server> {
     return res.status(200).json(attendanceRecords);
   });
   
+  // Clock In/Out endpoint
+  app.post("/api/attendance/clock", async (req, res) => {
+    try {
+      const { employeeId, action, timestamp, location } = req.body;
+      
+      if (!employeeId || !action) {
+        return res.status(400).json({ message: "Employee ID and action are required" });
+      }
+      
+      const employee = await storage.getEmployee(employeeId);
+      
+      if (!employee) {
+        return res.status(404).json({ message: "Employee not found" });
+      }
+      
+      const now = timestamp ? new Date(timestamp) : new Date();
+      const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      
+      // Check for existing attendance record for today
+      const existingRecords = await storage.getAttendanceForEmployee(employeeId);
+      const todayRecord = existingRecords.find(record => {
+        if (!record.date) return false;
+        const recordDate = new Date(record.date);
+        return recordDate.getFullYear() === today.getFullYear() &&
+               recordDate.getMonth() === today.getMonth() &&
+               recordDate.getDate() === today.getDate();
+      });
+      
+      let attendance;
+      
+      if (todayRecord) {
+        // Update existing record
+        if (action === 'clockIn' && !todayRecord.clockInTime) {
+          attendance = await storage.updateAttendance(todayRecord.id, {
+            clockInTime: now,
+            status: 'present',
+            ...(location ? { geoLocation: JSON.stringify(location) } : {})
+          });
+        } else if (action === 'clockOut' && todayRecord.clockInTime && !todayRecord.clockOutTime) {
+          // Calculate hours worked
+          const clockIn = new Date(todayRecord.clockInTime);
+          const hoursWorked = (now.getTime() - clockIn.getTime()) / (1000 * 60 * 60);
+          
+          attendance = await storage.updateAttendance(todayRecord.id, {
+            clockOutTime: now,
+            ...(location ? { geoLocation: JSON.stringify(location) } : {})
+          });
+        } else {
+          return res.status(400).json({ 
+            message: action === 'clockIn' 
+              ? "Already clocked in for today" 
+              : "Cannot clock out without clocking in first"
+          });
+        }
+      } else if (action === 'clockIn') {
+        // Create new attendance record for clock in
+        attendance = await storage.createAttendance({
+          employeeId,
+          date: today,
+          clockInTime: now,
+          clockOutTime: null,
+          status: 'present',
+          geoLocation: location ? JSON.stringify(location) : null,
+          approvedBy: null,
+          notes: `Self-logged via app: ${action}`
+        });
+      } else {
+        return res.status(400).json({ message: "Cannot clock out without clocking in first" });
+      }
+      
+      return res.status(200).json(attendance);
+    } catch (error) {
+      console.error("Error in clock in/out:", error);
+      return res.status(500).json({ 
+        message: "Failed to process attendance", 
+        error: error instanceof Error ? error.message : "Unknown error" 
+      });
+    }
+  });
+  
   app.post("/api/attendance", validateBody(insertAttendanceSchema), async (req, res) => {
     try {
       const attendance = await storage.createAttendance(req.body);

@@ -122,6 +122,15 @@ export function AttendanceDashboard() {
     initialData: employees,
   });
 
+  // Function to calculate rate change (needs to be defined before metrics)
+  function calculateRateChange(currentRate: number, previousRate: number): number {
+    return currentRate - previousRate;
+  }
+  
+  // Calculate attendance rate
+  const attendanceRate = calculateAttendanceRate(records);
+  const previousRate = calculatePreviousAttendanceRate();
+  
   // Calculate metrics based on the records
   const metrics = {
     totalEmployees: employeeList.length,
@@ -129,9 +138,9 @@ export function AttendanceDashboard() {
     late: records.filter(r => r.status === 'late').length,
     absent: records.filter(r => r.status === 'absent').length,
     avgCheckIn: calculateAverageCheckInTime(records),
-    attendanceRate: calculateAttendanceRate(records),
-    previousRate: calculatePreviousAttendanceRate(),
-    rateChange: calculateRateChange(),
+    attendanceRate: attendanceRate,
+    previousRate: previousRate,
+    rateChange: calculateRateChange(attendanceRate, previousRate),
   };
 
   // Generate department attendance data
@@ -249,11 +258,6 @@ export function AttendanceDashboard() {
   // Function to calculate previous attendance rate (mock)
   function calculatePreviousAttendanceRate(): number {
     return 87; // Mock previous rate
-  }
-
-  // Function to calculate rate change
-  function calculateRateChange(): number {
-    return metrics.attendanceRate - metrics.previousRate;
   }
 
   // Function to generate department data

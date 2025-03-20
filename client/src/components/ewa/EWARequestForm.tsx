@@ -1,293 +1,298 @@
-import { useState, useEffect } from 'react';
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import { useState } from "react";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { apiRequest } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
-import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Slider } from "@/components/ui/slider";
-import { Switch } from "@/components/ui/switch";
+import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { Card, CardContent } from "@/components/ui/card";
+import { Progress } from "@/components/ui/progress";
+
 import { toast } from "@/hooks/use-toast";
-import { apiRequest, queryClient } from "@/lib/queryClient";
-import { useQuery } from "@tanstack/react-query";
-import { employees } from "@/lib/mock-data";
 import { calculateEarnedWage, formatKES } from "@/lib/tax-utils";
-import { Calendar, CreditCard, DollarSign, HelpCircle, BadgePercent, AlertCircle } from "lucide-react";
+import { AlertCircle, Check, DollarSign, HelpCircle } from "lucide-react";
 
 interface EWARequestFormProps {
   onSuccess?: () => void;
 }
 
+const ewaRequestSchema = z.object({
+  amount: z.coerce.number()
+    .min(1000, "Minimum request amount is KES 1,000")
+    .max(100000, "Maximum request amount is KES 100,000"),
+  reason: z.string()
+    .min(5, "Please provide a reason for your request")
+    .max(200, "Reason must be less than 200 characters"),
+});
+
+type EWARequestFormValues = z.infer<typeof ewaRequestSchema>;
+
 export function EWARequestForm({ onSuccess }: EWARequestFormProps) {
-  const [employeeId, setEmployeeId] = useState('');
-  const [requestAmount, setRequestAmount] = useState<number>(0);
-  const [reason, setReason] = useState('');
-  const [processingFee, setProcessingFee] = useState<number>(0);
-  const [maxAvailable, setMaxAvailable] = useState<number>(0);
+  const queryClient = useQueryClient();
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [agreeToTerms, setAgreeToTerms] = useState(false);
   
-  // Fetch employees
-  const { data: employeeList } = useQuery({
-    queryKey: ['/api/employees/active'],
-    initialData: employees,
+  // Get employee data
+  const { data: employeeData } = useQuery({
+    queryKey: ['/api/employees/current'],
+    initialData: {
+      id: 1,
+      name: 'James Mwangi',
+      department: 'IT',
+      position: 'Senior Developer',
+      baseSalary: 85000,
+      hourlyRate: 500,
+      daysWorked: 14,
+      totalWorkingDays: 22,
+      availableForEwa: 35000,
+      nextPayrollDate: '2023-08-31',
+    },
   });
   
-  // Get selected employee
-  const selectedEmployee = employeeId 
-    ? employeeList.find(emp => emp.id.toString() === employeeId) 
-    : null;
-    
-  // Calculate max available amount when employee changes
-  useEffect(() => {
-    if (selectedEmployee) {
-      // In a real app, we would fetch this data from the API
-      // For now, generate mock data based on employee ID
-      
-      // Mock salary data - 50,000 KES base + 10,000 per employee ID
-      const monthlySalary = 50000 + (parseInt(employeeId) * 10000);
-      
-      // Assume employee has worked 15 days out of 22 working days
-      const daysWorked = 15;
-      const workingDaysInMonth = 22;
-      
-      // Calculate earned wage so far
-      const earnedWageSoFar = calculateEarnedWage(monthlySalary, daysWorked, workingDaysInMonth);
-      
-      // Maximum available is 50% of earned wage
-      const maxAvailableAmount = Math.floor(earnedWageSoFar * 0.5);
-      
-      setMaxAvailable(maxAvailableAmount);
-      setRequestAmount(Math.min(10000, maxAvailableAmount)); // Set a default amount
-    } else {
-      setMaxAvailable(0);
-      setRequestAmount(0);
-    }
-  }, [employeeId, selectedEmployee]);
+  // Calculate available amount using tax utils
+  const earnedWage = calculateEarnedWage(
+    employeeData.baseSalary,
+    employeeData.daysWorked,
+    employeeData.totalWorkingDays
+  );
   
-  // Calculate processing fee (2% of request amount)
-  useEffect(() => {
-    const fee = Math.round(requestAmount * 0.02);
-    setProcessingFee(fee);
-  }, [requestAmount]);
+  const maxAvailable = Math.min(
+    earnedWage * 0.5, // 50% of earned wage
+    employeeData.availableForEwa
+  );
   
-  // Format amount in KES
-  const formatAmount = (amount: number): string => {
-    return formatKES(amount);
-  };
+  // Form setup
+  const form = useForm<EWARequestFormValues>({
+    resolver: zodResolver(ewaRequestSchema),
+    defaultValues: {
+      amount: 5000,
+      reason: "",
+    },
+  });
   
-  // Handle amount slider change
-  const handleAmountChange = (value: number[]) => {
-    setRequestAmount(value[0]);
-  };
+  // Get current amount value for calculations
+  const watchAmount = form.watch("amount") || 0;
   
-  // Handle submission
-  const handleSubmit = async () => {
-    if (!selectedEmployee) {
-      toast({
-        title: "Error",
-        description: "Please select an employee",
-        variant: "destructive",
+  // Calculate fee (2% of requested amount)
+  const processingFee = watchAmount * 0.02;
+  
+  // Calculate total deduction
+  const totalDeduction = watchAmount + processingFee;
+  
+  // Calculate percentage of available amount
+  const percentageRequested = Math.min(100, (watchAmount / maxAvailable) * 100);
+  
+  // Submit handler
+  const { mutate: submitRequest } = useMutation({
+    mutationFn: async (values: EWARequestFormValues) => {
+      setIsSubmitting(true);
+      return await apiRequest('POST', '/api/ewa/requests', {
+        employeeId: employeeData.id,
+        amount: values.amount,
+        reason: values.reason,
+        processingFee: processingFee,
       });
-      return;
-    }
-    
-    if (requestAmount <= 0 || requestAmount > maxAvailable) {
+    },
+    onSuccess: () => {
       toast({
-        title: "Error",
-        description: `Please enter a valid amount between 1 and ${formatAmount(maxAvailable)}`,
-        variant: "destructive",
-      });
-      return;
-    }
-    
-    if (!reason.trim()) {
-      toast({
-        title: "Error",
-        description: "Please provide a reason for the request",
-        variant: "destructive",
-      });
-      return;
-    }
-    
-    if (!agreeToTerms) {
-      toast({
-        title: "Error",
-        description: "Please agree to the terms and conditions",
-        variant: "destructive",
-      });
-      return;
-    }
-    
-    setIsSubmitting(true);
-    
-    try {
-      // In a real app, we would call the API
-      // Mock successful submission
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      toast({
-        title: "Request Submitted",
-        description: `Your EWA request for ${formatAmount(requestAmount)} has been submitted successfully.`,
+        title: "Request submitted",
+        description: "Your EWA request has been submitted for processing.",
       });
       
-      // Reset form
-      setEmployeeId('');
-      setRequestAmount(0);
-      setReason('');
-      setAgreeToTerms(false);
+      queryClient.invalidateQueries({ queryKey: ['/api/ewa/requests'] });
       
-      // Call success callback if provided
       if (onSuccess) {
         onSuccess();
       }
       
-      // Invalidate queries to refresh data
-      queryClient.invalidateQueries({ queryKey: ['/api/ewa'] });
-    } catch (error) {
+      form.reset();
+      setIsSubmitting(false);
+    },
+    onError: (error) => {
       toast({
-        title: "Error",
-        description: error instanceof Error ? error.message : "Failed to submit request",
+        title: "Request failed",
+        description: error instanceof Error ? error.message : "Failed to submit EWA request",
         variant: "destructive",
       });
-    } finally {
       setIsSubmitting(false);
-    }
-  };
+    },
+  });
+  
+  function onSubmit(values: EWARequestFormValues) {
+    submitRequest(values);
+  }
+  
+  // Amount presets
+  const amountPresets = [5000, 10000, 15000, 20000];
   
   return (
-    <Card className="shadow-glass dark:shadow-glass-dark">
-      <CardHeader>
-        <CardTitle className="flex items-center">
-          <CreditCard className="mr-2 h-5 w-5" />
-          Earned Wage Access Request
-        </CardTitle>
-        <CardDescription>
-          Request early access to your earned wages
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-6">
-        <div className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="employee">Employee</Label>
-            <Select value={employeeId} onValueChange={setEmployeeId}>
-              <SelectTrigger id="employee">
-                <SelectValue placeholder="Select employee" />
-              </SelectTrigger>
-              <SelectContent>
-                {employeeList.map(emp => (
-                  <SelectItem key={emp.id} value={emp.id.toString()}>
-                    {emp.name} - {emp.department}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          
-          {selectedEmployee && (
-            <div className="border p-4 rounded-md bg-primary/5">
-              <div className="flex items-center mb-3">
-                <div className="w-10 h-10 rounded-full bg-primary/20 flex items-center justify-center mr-3">
-                  {selectedEmployee.profileImage ? (
-                    <img 
-                      src={selectedEmployee.profileImage} 
-                      alt={selectedEmployee.name} 
-                      className="w-full h-full rounded-full object-cover"
-                    />
-                  ) : (
-                    <span className="text-primary font-medium">
-                      {selectedEmployee.name.charAt(0)}
-                    </span>
-                  )}
-                </div>
-                <div>
-                  <p className="font-medium">{selectedEmployee.name}</p>
-                  <p className="text-sm text-muted-foreground">{selectedEmployee.department}</p>
-                </div>
-              </div>
-              
-              <div className="grid grid-cols-2 gap-4 text-sm">
-                <div>
-                  <p className="text-muted-foreground">Maximum Available</p>
-                  <p className="font-medium">{formatAmount(maxAvailable)}</p>
-                </div>
-                <div>
-                  <p className="text-muted-foreground">Processing Fee</p>
-                  <p className="font-medium">{formatAmount(processingFee)}</p>
-                </div>
-              </div>
-            </div>
-          )}
-          
-          <div className="space-y-2">
+    <div className="space-y-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <Card className="bg-muted/30">
+          <CardContent className="p-4 space-y-4">
             <div className="flex justify-between items-center">
-              <Label htmlFor="amount">Request Amount (KES)</Label>
-              <span className="text-lg font-medium">{formatAmount(requestAmount)}</span>
-            </div>
-            
-            <Slider
-              disabled={!selectedEmployee}
-              value={[requestAmount]}
-              min={0}
-              max={maxAvailable || 10000}
-              step={500}
-              onValueChange={handleAmountChange}
-              className="my-4"
-            />
-            
-            <div className="flex justify-between text-sm text-muted-foreground">
-              <span>KES 0</span>
-              <span>KES {formatKES(maxAvailable || 10000)}</span>
-            </div>
-          </div>
-          
-          <div className="space-y-2">
-            <Label htmlFor="reason">Reason for Request</Label>
-            <Textarea
-              id="reason"
-              value={reason}
-              onChange={(e) => setReason(e.target.value)}
-              placeholder="Please provide a reason for your EWA request"
-              rows={3}
-            />
-          </div>
-          
-          <div className="bg-blue-50 p-4 rounded-md border border-blue-100 text-blue-800 text-sm">
-            <div className="flex items-start">
-              <HelpCircle className="h-5 w-5 mr-2 flex-shrink-0 mt-0.5" />
               <div>
-                <p className="font-medium">Earned Wage Access Information</p>
-                <ul className="list-disc list-inside mt-1 space-y-1">
-                  <li>You can only access wages you've already earned</li>
-                  <li>A processing fee of 2% applies to all EWA requests</li>
-                  <li>The requested amount will be deducted from your next paycheck</li>
-                  <li>Funds will be transferred to your registered bank account</li>
-                </ul>
+                <p className="text-sm font-medium">Available for EWA</p>
+                <p className="text-2xl font-bold">
+                  {formatKES(maxAvailable)}
+                </p>
+              </div>
+              <div className="bg-primary/10 p-3 rounded-full">
+                <DollarSign className="h-6 w-6 text-primary" />
               </div>
             </div>
+            
+            <div className="space-y-2">
+              <div className="flex justify-between text-sm">
+                <span>Total Earned (Current Period)</span>
+                <span className="font-medium">{formatKES(earnedWage)}</span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span>Days Worked</span>
+                <span className="font-medium">{employeeData.daysWorked} of {employeeData.totalWorkingDays}</span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span>Next Payroll Date</span>
+                <span className="font-medium">{new Date(employeeData.nextPayrollDate).toLocaleDateString()}</span>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        
+        <Card className="bg-muted/30">
+          <CardContent className="p-4 space-y-4">
+            <div>
+              <p className="text-sm font-medium">Your Request Summary</p>
+            </div>
+            
+            <div className="space-y-2">
+              <div className="flex justify-between text-sm">
+                <span>Request Amount</span>
+                <span className="font-medium">{formatKES(watchAmount)}</span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span>Processing Fee (2%)</span>
+                <span className="font-medium">{formatKES(processingFee)}</span>
+              </div>
+              <div className="flex justify-between text-sm font-medium">
+                <span>Total Deduction</span>
+                <span>{formatKES(totalDeduction)}</span>
+              </div>
+            </div>
+            
+            <div className="pt-2">
+              <p className="text-sm mb-2">Amount Requested</p>
+              <Progress value={percentageRequested} className="h-2" />
+              <div className="flex justify-between text-xs mt-1">
+                <span>0%</span>
+                <span>50%</span>
+                <span>100%</span>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+      
+      <Form {...form}>
+        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+          <FormField
+            control={form.control}
+            name="amount"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Request Amount (KES)</FormLabel>
+                <div className="relative">
+                  <DollarSign className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500" />
+                  <FormControl>
+                    <Input
+                      {...field}
+                      type="number"
+                      placeholder="Enter amount"
+                      className="pl-10"
+                      min={1000}
+                      max={maxAvailable}
+                    />
+                  </FormControl>
+                </div>
+                <FormDescription className="flex justify-between">
+                  <span>Min: {formatKES(1000)}</span>
+                  <span>Max: {formatKES(maxAvailable)}</span>
+                </FormDescription>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+          
+          <div className="grid grid-cols-4 gap-2">
+            {amountPresets.map((preset) => (
+              <Button
+                key={preset}
+                type="button"
+                variant="outline"
+                onClick={() => form.setValue('amount', preset, { shouldValidate: true })}
+                disabled={preset > maxAvailable}
+                className={watchAmount === preset ? 'border-primary' : ''}
+              >
+                {formatKES(preset)}
+              </Button>
+            ))}
           </div>
           
-          <div className="flex items-center space-x-2">
-            <Switch 
-              id="terms" 
-              checked={agreeToTerms}
-              onCheckedChange={setAgreeToTerms}
-            />
-            <Label htmlFor="terms" className="text-sm cursor-pointer">
-              I agree to the terms and conditions for early wage access
-            </Label>
+          <FormField
+            control={form.control}
+            name="reason"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Reason for Request</FormLabel>
+                <FormControl>
+                  <Textarea
+                    {...field}
+                    placeholder="Briefly describe why you need an advance"
+                    rows={3}
+                  />
+                </FormControl>
+                <FormDescription>
+                  This information helps with processing your request
+                </FormDescription>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+          
+          <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-amber-800">
+            <div className="flex items-start">
+              <AlertCircle className="h-4 w-4 mr-2 mt-0.5" />
+              <p className="text-sm">
+                The requested amount plus the processing fee will be deducted from your next paycheck.
+              </p>
+            </div>
           </div>
-        </div>
-      </CardContent>
-      <CardFooter>
-        <Button 
-          onClick={handleSubmit} 
-          disabled={!selectedEmployee || requestAmount <= 0 || !reason.trim() || !agreeToTerms || isSubmitting}
-          className="w-full"
-        >
-          {isSubmitting ? "Submitting..." : "Submit Request"}
-        </Button>
-      </CardFooter>
-    </Card>
+          
+          <div className="flex flex-col space-y-2">
+            <Button
+              type="submit"
+              disabled={isSubmitting || watchAmount > maxAvailable}
+              className="w-full"
+            >
+              {isSubmitting ? (
+                <>Processing...</>
+              ) : (
+                <>
+                  <Check className="mr-2 h-4 w-4" />
+                  Submit EWA Request
+                </>
+              )}
+            </Button>
+            
+            <div className="text-xs text-center text-muted-foreground flex items-center justify-center">
+              <HelpCircle className="h-3 w-3 mr-1" />
+              EWA requests are typically processed within 24 hours
+            </div>
+          </div>
+        </form>
+      </Form>
+    </div>
   );
 }

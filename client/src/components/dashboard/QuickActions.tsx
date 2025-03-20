@@ -1,9 +1,11 @@
 import { Card, CardContent } from "@/components/ui/card";
 import { useLocation } from "wouter";
+import { FileBarChart, Clock, CreditCard, UserPlus, ChevronRight } from "lucide-react";
+import { ReactNode } from "react";
 
 interface ActionItem {
   title: string;
-  icon: string;
+  icon: ReactNode;
   handler: () => void;
   isPrimary?: boolean;
 }
@@ -28,10 +30,10 @@ export function QuickActions({ actions }: QuickActionsProps) {
                 } transition-colors`}
             >
               <span className="flex items-center">
-                <i className={`ri-${action.icon} text-xl mr-2`}></i>
+                <span className="mr-2">{action.icon}</span>
                 <span>{action.title}</span>
               </span>
-              <i className="ri-arrow-right-line"></i>
+              <ChevronRight className="h-4 w-4" />
             </button>
           ))}
         </div>
@@ -46,23 +48,23 @@ export function useQuickActions() {
   const defaultActions: ActionItem[] = [
     {
       title: "Generate Payroll Report",
-      icon: "file-chart-line",
+      icon: <FileBarChart className="h-5 w-5" />,
       handler: () => setLocation("/payroll"),
       isPrimary: true
     },
     {
       title: "Process Bulk Attendance",
-      icon: "time-line",
+      icon: <Clock className="h-5 w-5" />,
       handler: () => setLocation("/attendance")
     },
     {
       title: "Review EWA Requests",
-      icon: "bank-card-line",
+      icon: <CreditCard className="h-5 w-5" />,
       handler: () => setLocation("/ewa")
     },
     {
       title: "Add New Employee",
-      icon: "user-add-line",
+      icon: <UserPlus className="h-5 w-5" />,
       handler: () => setLocation("/employees/new")
     }
   ];

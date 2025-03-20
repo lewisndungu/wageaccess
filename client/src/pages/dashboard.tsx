@@ -7,6 +7,7 @@ import { RecentActivity } from "@/components/dashboard/RecentActivity";
 import { EmployeeTable } from "@/components/dashboard/EmployeeTable";
 import { dashboardStats, employees, recentActivities } from "@/lib/mock-data";
 import { Button } from "@/components/ui/button";
+import { Filter, UserPlus } from "lucide-react";
 
 export default function Dashboard() {
   const { data: stats } = useQuery({
@@ -117,12 +118,12 @@ export default function Dashboard() {
           <h2 className="text-lg font-semibold">Employee Overview</h2>
           <div className="flex items-center space-x-2">
             <Button variant="outline" size="sm" className="flex items-center">
-              <i className="ri-filter-3-line mr-1"></i>
+              <Filter className="h-4 w-4 mr-1" />
               <span>Filter</span>
             </Button>
             <Link href="/employees/new">
               <Button size="sm" className="flex items-center">
-                <i className="ri-user-add-line mr-1"></i>
+                <UserPlus className="h-4 w-4 mr-1" />
                 <span>Add Employee</span>
               </Button>
             </Link>

@@ -10,10 +10,12 @@ import { Textarea } from "@/components/ui/textarea";
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Card, CardContent } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
+import { Skeleton } from "@/components/ui/skeleton";
 
 import { toast } from "@/hooks/use-toast";
 import { calculateEarnedWage, formatKES } from "@/lib/tax-utils";
-import { AlertCircle, Check, DollarSign, HelpCircle } from "lucide-react";
+import { AlertCircle, Check, DollarSign, HelpCircle, Info } from "lucide-react";
+import { calculateAvailableEWA } from "@/lib/integration-service";
 
 interface EWARequestFormProps {
   onSuccess?: () => void;
@@ -35,7 +37,7 @@ export function EWARequestForm({ onSuccess }: EWARequestFormProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   
   // Get employee data
-  const { data: employeeData } = useQuery({
+  const { data: employeeData, isLoading: isLoadingEmployee } = useQuery({
     queryKey: ['/api/employees/current'],
     initialData: {
       id: 1,
@@ -51,14 +53,38 @@ export function EWARequestForm({ onSuccess }: EWARequestFormProps) {
     },
   });
   
-  // Calculate available amount using tax utils
-  const earnedWage = calculateEarnedWage(
+  // Get available EWA using integration service (based on attendance)
+  const { data: availableEWA, isLoading: isLoadingEWA } = useQuery({
+    queryKey: ['/api/ewa/available', employeeData.id],
+    queryFn: async () => {
+      // Use integration service to calculate available amount based on attendance
+      const result = await calculateAvailableEWA(employeeData.id);
+      return result || {
+        employeeId: employeeData.id,
+        earned: 0,
+        totalWithdrawn: 0,
+        maxAllowedPercentage: 0.5,
+        availableAmount: 0,
+        asOfDate: new Date()
+      };
+    },
+    enabled: !!employeeData.id, // Only run if we have an employee ID
+    refetchInterval: 1000 * 60 * 5, // Refetch every 5 minutes
+  });
+  
+  // Determine if we should use integrated data or fallback to manual calculation
+  const isLoadingData = isLoadingEmployee || isLoadingEWA;
+  
+  // If we have the integrated data, use it, otherwise fallback to manual calculation
+  const earnedWage = availableEWA?.earned || calculateEarnedWage(
     employeeData.baseSalary,
     employeeData.daysWorked,
     employeeData.totalWorkingDays
   );
   
-  const maxAvailable = Math.min(
+  const totalWithdrawn = availableEWA?.totalWithdrawn || 0;
+  
+  const maxAvailable = availableEWA?.availableAmount || Math.min(
     earnedWage * 0.5, // 50% of earned wage
     employeeData.availableForEwa
   );

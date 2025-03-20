@@ -1,0 +1,97 @@
+Create a comprehensive Jahazii SaaS application that integrates all modules into a cohesive, logically connected system. The application should feature seamless navigation between components and consistent data flow throughout the platform.
+System-Wide Integration
+Implement a central architecture that:
+
+Creates a unified data ecosystem connecting:
+
+Employee management system
+Attendance tracking
+Payroll calculations
+Earned Wage Access (EWA) functionality
+Self-Log features
+
+
+Establishes logical workflows between modules:
+
+Attendance data directly influences payroll calculations
+Employee information feeds into all other systems
+EWA requests reference available earned wages from attendance/payroll
+Self-log actions update attendance which affects payroll and EWA availability
+
+
+Maintains consistent state management for:
+
+User authentication and role-based access
+Current pay period context
+Organization structure (departments, reporting lines)
+System-wide notifications and alerts
+
+
+
+Cross-Module Functionality
+Implement connections between key business processes:
+
+Employee Lifecycle Management:
+
+New employee creation triggers setup across all modules
+Department changes affect reporting in attendance and payroll
+Inactive status properly reflected in all systems
+
+
+Financial Calculations Flow:
+
+Attendance records → Hours worked → Gross pay calculation
+EWA requests → Available balance reduction → Net pay adjustment
+Wallet transactions → Disbursement records → Financial reporting
+
+
+Reporting Consistency:
+
+Standardized date ranges across all reporting interfaces
+Unified export formats and data structures
+Consistent metrics and KPIs throughout dashboards
+
+
+
+Unified User Experience
+Create a consistent experience across the application:
+
+Global Navigation System:
+
+Sidebar navigation with logical grouping of related functions
+Contextual sub-navigation within each major section
+Breadcrumb trails showing relationship between screens
+Quick action shortcuts to related functions
+
+
+Common UI Patterns:
+
+Consistent card layouts, data tables, and form designs
+Standardized status indicators and color-coding
+Unified confirmation flows and error handling
+Shared component library for all modules
+
+
+Responsive Design Strategy:
+
+Adaptive layouts that prioritize different functions on mobile vs. desktop
+Touch-optimized interfaces for field employees
+Manager-focused desktop experiences for complex tasks
+
+
+
+Data Synchronization
+Implement robust data management across modules:
+
+Real-Time Updates:
+
+Attendance changes immediately reflect in payroll projections
+EWA disbursements instantly update available balances
+Employee status changes propagate throughout the system
+
+
+Historical Data Consistency:
+
+Attendance corrections properly update historical payroll records
+Audit trails for all financial transactions across modules
+Version control for important documents and calculations

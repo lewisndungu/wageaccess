@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Link } from 'wouter';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { EmployeeEWADashboard } from "@/components/ewa/EmployeeEWADashboard";
@@ -70,10 +70,13 @@ export default function SelfServicePage() {
             <CardContent className="p-6">
               <div className="flex flex-col items-center text-center">
                 <Avatar className="h-20 w-20 mb-4">
-                  <AvatarImage src={userData.profileImage} alt={userData.name} />
-                  <AvatarFallback>
-                    <User className="h-10 w-10" />
-                  </AvatarFallback>
+                  {userData?.profileImage ? (
+                    <AvatarImage src={userData.profileImage} alt={userData.name || 'User'} />
+                  ) : (
+                    <AvatarFallback>
+                      <User className="h-10 w-10" />
+                    </AvatarFallback>
+                  )}
                 </Avatar>
                 <h2 className="text-xl font-bold">{employeeData.name}</h2>
                 <p className="text-sm text-muted-foreground">{employeeData.position}</p>
@@ -176,15 +179,15 @@ export default function SelfServicePage() {
         </div>
         
         <div className="lg:col-span-3">
-          <TabsContent value="dashboard" className="mt-0" hidden={activeTab !== 'dashboard'}>
+          {activeTab === 'dashboard' && (
             <EmployeeEWADashboard employeeId={employeeData.id} />
-          </TabsContent>
+          )}
           
-          <TabsContent value="history" className="mt-0" hidden={activeTab !== 'history'}>
+          {activeTab === 'history' && (
             <EmployeeRequestHistory employeeId={employeeData.id} />
-          </TabsContent>
+          )}
           
-          <TabsContent value="request" className="mt-0" hidden={activeTab !== 'request'}>
+          {activeTab === 'request' && (
             <Card>
               <CardHeader>
                 <CardTitle>Request Earned Wage Access</CardTitle>
@@ -196,9 +199,9 @@ export default function SelfServicePage() {
                 <EWARequestForm onSuccess={() => setActiveTab('history')} />
               </CardContent>
             </Card>
-          </TabsContent>
+          )}
           
-          <TabsContent value="faq" className="mt-0" hidden={activeTab !== 'faq'}>
+          {activeTab === 'faq' && (
             <Card>
               <CardHeader>
                 <CardTitle>Frequently Asked Questions</CardTitle>
@@ -254,7 +257,7 @@ export default function SelfServicePage() {
                 <Button variant="outline">Contact Support</Button>
               </CardFooter>
             </Card>
-          </TabsContent>
+          )}
         </div>
       </div>
     </div>

@@ -1,4 +1,4 @@
-import { Switch, Route } from "wouter";
+import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
@@ -17,35 +17,37 @@ import WalletPage from "@/pages/ewa/wallet";
 import ProfilePage from "@/pages/profile";
 import NotFound from "@/pages/not-found";
 
-function Router() {
+function AppRoutes() {
   return (
-    <Switch>
-      <Route path="/" component={Dashboard} />
-      <Route path="/dashboard" component={Dashboard} />
-      <Route path="/employees" component={EmployeesPage} />
-      <Route path="/employees/:id" component={EmployeeDetailPage} />
-      <Route path="/attendance" component={AttendancePage} />
-      <Route path="/attendance/self-log" component={SelfLogPage} />
-      <Route path="/payroll" component={PayrollPage} />
-      <Route path="/payroll/:id" component={PayrollDetailPage} />
-      <Route path="/ewa" component={EWAPage} />
-      <Route path="/ewa/wallet" component={WalletPage} />
-      <Route path="/profile" component={ProfilePage} />
-      <Route component={NotFound} />
-    </Switch>
+    <Routes>
+      <Route path="/" element={<Dashboard />} />
+      <Route path="/dashboard" element={<Dashboard />} />
+      <Route path="/employees" element={<EmployeesPage />} />
+      <Route path="/employees/:id" element={<EmployeeDetailPage />} />
+      <Route path="/attendance" element={<AttendancePage />} />
+      <Route path="/attendance/self-log" element={<SelfLogPage />} />
+      <Route path="/payroll" element={<PayrollPage />} />
+      <Route path="/payroll/:id" element={<PayrollDetailPage />} />
+      <Route path="/ewa" element={<EWAPage />} />
+      <Route path="/ewa/wallet" element={<WalletPage />} />
+      <Route path="/profile" element={<ProfilePage />} />
+      <Route path="*" element={<NotFound />} />
+    </Routes>
   );
 }
 
 function App() {
   return (
-    <QueryClientProvider client={queryClient}>
-      <UserProvider>
-        <MainLayout>
-          <Router />
-        </MainLayout>
-        <Toaster />
-      </UserProvider>
-    </QueryClientProvider>
+    <BrowserRouter>
+      <QueryClientProvider client={queryClient}>
+        <UserProvider>
+          <MainLayout>
+            <AppRoutes />
+          </MainLayout>
+          <Toaster />
+        </UserProvider>
+      </QueryClientProvider>
+    </BrowserRouter>
   );
 }
 

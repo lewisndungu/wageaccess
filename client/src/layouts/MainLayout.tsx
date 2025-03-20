@@ -1,5 +1,5 @@
 import { useState, useEffect, ReactNode } from "react";
-import { Link, useLocation } from "wouter";
+import { Link, useLocation } from "react-router-dom";
 import { useUser } from "@/context/UserContext";
 import { useJahaziiTheme } from "@/hooks/use-theme";
 import { Button } from "@/components/ui/button";
@@ -14,14 +14,15 @@ interface SidebarLinkProps {
 }
 
 const SidebarLink = ({ to, icon, label, active }: SidebarLinkProps) => (
-  <Link href={to}>
-    <a className={`flex items-center px-4 py-2.5 text-sm font-medium rounded-lg 
+  <Link 
+    to={to}
+    className={`flex items-center px-4 py-2.5 text-sm font-medium rounded-lg 
       ${active 
         ? "text-white bg-primary hover:bg-primary/90" 
-        : "text-gray-800 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800"}`}>
-      <i className={`ri-${icon} text-xl mr-3`}></i>
-      <span>{label}</span>
-    </a>
+        : "text-gray-800 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800"}`}
+  >
+    <i className={`ri-${icon} text-xl mr-3`}></i>
+    <span>{label}</span>
   </Link>
 );
 
@@ -30,7 +31,7 @@ interface MainLayoutProps {
 }
 
 export default function MainLayout({ children }: MainLayoutProps) {
-  const [location] = useLocation();
+  const location = useLocation();
   const { user } = useUser();
   const { theme, toggleTheme } = useJahaziiTheme();
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -38,9 +39,9 @@ export default function MainLayout({ children }: MainLayoutProps) {
   
   useEffect(() => {
     // Update page title based on current location
-    const path = location.split('/')[1] || 'dashboard';
+    const path = location.pathname.split('/')[1] || 'dashboard';
     setPageTitle(path.charAt(0).toUpperCase() + path.slice(1));
-  }, [location]);
+  }, [location.pathname]);
   
   const toggleSidebar = () => {
     setIsSidebarOpen(!isSidebarOpen);
@@ -95,7 +96,7 @@ export default function MainLayout({ children }: MainLayoutProps) {
                 to="/dashboard" 
                 icon="dashboard-line" 
                 label="Dashboard" 
-                active={location === '/' || location === '/dashboard'} 
+                active={location.pathname === '/' || location.pathname === '/dashboard'} 
               />
             </li>
             <li>
@@ -103,7 +104,7 @@ export default function MainLayout({ children }: MainLayoutProps) {
                 to="/employees" 
                 icon="team-line" 
                 label="Employees" 
-                active={location.startsWith('/employees')} 
+                active={location.pathname.startsWith('/employees')} 
               />
             </li>
             <li>
@@ -111,7 +112,7 @@ export default function MainLayout({ children }: MainLayoutProps) {
                 to="/attendance" 
                 icon="time-line" 
                 label="Attendance" 
-                active={location.startsWith('/attendance')} 
+                active={location.pathname.startsWith('/attendance')} 
               />
             </li>
             <li>
@@ -119,7 +120,7 @@ export default function MainLayout({ children }: MainLayoutProps) {
                 to="/payroll" 
                 icon="money-dollar-box-line" 
                 label="Payroll" 
-                active={location.startsWith('/payroll')} 
+                active={location.pathname.startsWith('/payroll')} 
               />
             </li>
             <li>
@@ -127,7 +128,7 @@ export default function MainLayout({ children }: MainLayoutProps) {
                 to="/ewa" 
                 icon="bank-card-line" 
                 label="Earned Wage Access" 
-                active={location.startsWith('/ewa')} 
+                active={location.pathname.startsWith('/ewa')} 
               />
             </li>
             <li>
@@ -135,7 +136,7 @@ export default function MainLayout({ children }: MainLayoutProps) {
                 to="/attendance/self-log" 
                 icon="login-box-line" 
                 label="Self-Log" 
-                active={location === '/attendance/self-log'} 
+                active={location.pathname === '/attendance/self-log'} 
               />
             </li>
             <li className="pt-4 mt-4 border-t border-gray-200 dark:border-gray-800">
@@ -143,7 +144,7 @@ export default function MainLayout({ children }: MainLayoutProps) {
                 to="/profile" 
                 icon="user-settings-line" 
                 label="My Profile" 
-                active={location === '/profile'} 
+                active={location.pathname === '/profile'} 
               />
             </li>
           </ul>

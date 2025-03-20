@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { useNavigate } from "react-router-dom";
 import { DataTable } from "@/components/ui/data-table";
 import { ColumnDef } from "@tanstack/react-table";
 import { Button } from "@/components/ui/button";
@@ -34,6 +35,7 @@ interface PayrollRecord {
 }
 
 export default function PayrollPage() {
+  const navigate = useNavigate();
   const [payPeriod, setPayPeriod] = useState("current");
   const [isProcessingDialogOpen, setIsProcessingDialogOpen] = useState(false);
   
@@ -110,7 +112,7 @@ export default function PayrollPage() {
         <Button
           variant="ghost"
           className="h-8 w-8 p-0"
-          onClick={() => window.location.href = `/payroll/${row.original.id}`}
+          onClick={() => navigate(`/payroll/${row.original.id}`)}
         >
           <svg
             xmlns="http://www.w3.org/2000/svg"
@@ -148,12 +150,10 @@ export default function PayrollPage() {
             <Download className="mr-2 h-4 w-4" />
             Export
           </Button>
-          <DialogTrigger asChild>
-            <Button onClick={() => setIsProcessingDialogOpen(true)} className="flex items-center">
-              <FileSpreadsheet className="mr-2 h-4 w-4" />
-              Process Payroll
-            </Button>
-          </DialogTrigger>
+          <Button onClick={() => setIsProcessingDialogOpen(true)} className="flex items-center">
+            <FileSpreadsheet className="mr-2 h-4 w-4" />
+            Process Payroll
+          </Button>
         </div>
       </div>
       

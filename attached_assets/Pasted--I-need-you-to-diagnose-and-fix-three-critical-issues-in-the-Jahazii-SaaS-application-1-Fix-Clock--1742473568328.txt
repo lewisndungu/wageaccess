@@ -1,0 +1,61 @@
+
+I need you to diagnose and fix three critical issues in the Jahazii SaaS application:
+1. Fix Clock-In/Out Functionality
+The current attendance system is encountering errors when users attempt to clock in or out. Please:
+1. Diagnose the error source:
+    * Check the console logs for specific error messages
+    * Examine the request/response cycle for the clock-in/out API calls
+    * Verify if the issue is in the frontend event handlers or backend processing
+2. Implement error-resistant clock-in/out:
+    * Add proper error handling with user-friendly messages
+    * Implement retry mechanisms for failed requests
+    * Fix the state updates after clock actions to ensure UI reflects changes
+    * Ensure time values are properly formatted before submission
+3. Add local fallback:
+    * Create a mechanism to temporarily store attendance actions locally if API fails
+    * Implement sync functionality to process stored actions when connection is restored
+    * Provide clear status indicators during the process
+2. Repair Payroll Processing
+The payroll processing functionality is failing with errors. Please:
+1. Identify processing failures:
+    * Debug calculation errors in the payroll generation
+    * Check for data type mismatches or null values breaking the calculations
+    * Verify if attendance data is being properly pulled into payroll processing
+2. Fix calculation logic:
+    * Ensure proper handling of decimal precision for financial calculations
+    * Correct the hours worked calculations based on attendance records
+    * Fix EWA deduction logic and net pay calculations
+    * Implement proper validation before processing
+3. Improve error reporting:
+    * Add step-by-step validation in the payroll process
+    * Create meaningful error messages for specific failure points
+    * Implement partial processing capability for valid records when some have errors
+3. Resolve Employee Creation Issues
+The employee creation page is not loading. Please:
+1. Fix page loading issues:
+    * Debug the initialization errors preventing the employee form from rendering
+    * Check for missing dependencies or component errors
+    * Verify route configuration and navigation to the employee creation page
+2. Implement robust form handling:
+    * Add progressive loading of form sections to prevent complete failure
+    * Implement field-level validation to identify problematic inputs
+    * Create a simplified employee creation flow as fallback if full form fails
+3. Add data validation:
+    * Ensure all required fields are properly validated before submission
+    * Implement type checking for all employee data fields
+    * Add unique identifier verification to prevent duplicate entries
+Implementation Approach
+When fixing these issues, please:
+1. Use defensive programming techniques:
+    * Add try/catch blocks around critical functionality
+    * Implement proper null checking before accessing properties
+    * Add default values for all calculations and operations
+2. Improve feedback mechanisms:
+    * Show clear loading states during operations
+    * Provide specific error messages that guide users on how to resolve issues
+    * Add success confirmations after operations complete
+3. Ensure cross-browser compatibility:
+    * Test fixes in multiple browsers
+    * Use standard JavaScript methods instead of newer features that might not be supported
+    * Validate all date/time handling works consistently
+The fixes should maintain the existing design language and integrate seamlessly with the rest of the application. Focus on making these core functions robust and error-resistant while providing meaningful feedback to users when issues occur.

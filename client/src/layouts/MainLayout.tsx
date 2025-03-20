@@ -12,7 +12,7 @@ import {
 
 interface SidebarLinkProps {
   to: string;
-  icon: string;
+  icon: React.ReactNode;
   label: string;
   active?: boolean;
 }
@@ -64,7 +64,7 @@ export default function MainLayout({ children }: MainLayoutProps) {
         <div className="h-16 flex items-center justify-center border-b border-gray-200 dark:border-gray-800">
           <div className="flex items-center space-x-2">
             <div className="bg-primary rounded-md h-8 w-8 flex items-center justify-center text-white">
-              <i className="ri-money-dollar-circle-line text-xl"></i>
+              <BadgeDollarSign className="h-5 w-5" />
             </div>
             <span className="text-xl font-semibold text-primary">Jahazii</span>
           </div>
@@ -98,7 +98,7 @@ export default function MainLayout({ children }: MainLayoutProps) {
             <li>
               <SidebarLink 
                 to="/dashboard" 
-                icon="dashboard-line" 
+                icon={<LayoutDashboard size={18} />} 
                 label="Dashboard" 
                 active={location.pathname === '/' || location.pathname === '/dashboard'} 
               />
@@ -106,7 +106,7 @@ export default function MainLayout({ children }: MainLayoutProps) {
             <li>
               <SidebarLink 
                 to="/employees" 
-                icon="team-line" 
+                icon={<Users size={18} />} 
                 label="Employees" 
                 active={location.pathname.startsWith('/employees')} 
               />
@@ -114,7 +114,7 @@ export default function MainLayout({ children }: MainLayoutProps) {
             <li>
               <SidebarLink 
                 to="/attendance" 
-                icon="time-line" 
+                icon={<Clock size={18} />} 
                 label="Attendance" 
                 active={location.pathname.startsWith('/attendance')} 
               />
@@ -122,7 +122,7 @@ export default function MainLayout({ children }: MainLayoutProps) {
             <li>
               <SidebarLink 
                 to="/payroll" 
-                icon="money-dollar-box-line" 
+                icon={<DollarSign size={18} />} 
                 label="Payroll" 
                 active={location.pathname.startsWith('/payroll')} 
               />
@@ -130,7 +130,7 @@ export default function MainLayout({ children }: MainLayoutProps) {
             <li>
               <SidebarLink 
                 to="/ewa" 
-                icon="bank-card-line" 
+                icon={<CreditCard size={18} />} 
                 label="Earned Wage Access" 
                 active={location.pathname.startsWith('/ewa')} 
               />
@@ -138,7 +138,7 @@ export default function MainLayout({ children }: MainLayoutProps) {
             <li>
               <SidebarLink 
                 to="/attendance/self-log" 
-                icon="login-box-line" 
+                icon={<LogIn size={18} />} 
                 label="Self-Log" 
                 active={location.pathname === '/attendance/self-log'} 
               />
@@ -146,7 +146,7 @@ export default function MainLayout({ children }: MainLayoutProps) {
             <li className="pt-4 mt-4 border-t border-gray-200 dark:border-gray-800">
               <SidebarLink 
                 to="/profile" 
-                icon="user-settings-line" 
+                icon={<UserCog size={18} />} 
                 label="My Profile" 
                 active={location.pathname === '/profile'} 
               />
@@ -193,7 +193,7 @@ export default function MainLayout({ children }: MainLayoutProps) {
                 <h1 className="text-xl font-semibold text-gray-800 dark:text-white">{pageTitle}</h1>
                 <div className="flex items-center text-xs text-gray-500 dark:text-gray-400">
                   <span>Home</span>
-                  <i className="ri-arrow-right-s-line mx-1"></i>
+                  <ArrowRight className="mx-1 h-3 w-3" />
                   <span>{pageTitle}</span>
                 </div>
               </div>
@@ -262,7 +262,7 @@ export default function MainLayout({ children }: MainLayoutProps) {
           <div className="container mx-auto flex flex-col md:flex-row items-center justify-between">
             <div className="flex items-center mb-4 md:mb-0">
               <div className="bg-primary rounded-md h-8 w-8 flex items-center justify-center text-white mr-2">
-                <i className="ri-money-dollar-circle-line text-xl"></i>
+                <BadgeDollarSign className="h-5 w-5" />
               </div>
               <div>
                 <p className="text-sm font-medium text-gray-600 dark:text-gray-400">© 2023 Jahazii. All rights reserved.</p>

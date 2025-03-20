@@ -3,6 +3,8 @@ import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { UserProvider } from "@/context/UserContext";
+import { SystemProvider } from "@/context/SystemContext";
+import { ThemeProvider } from "@/components/ui/theme-provider";
 
 import MainLayout from "@/layouts/MainLayout";
 import Dashboard from "@/pages/dashboard";
@@ -20,6 +22,19 @@ import ManagementReportingPage from "@/pages/ewa/management-reporting";
 import SelfServicePage from "@/pages/ewa/self-service";
 import ProfilePage from "@/pages/profile";
 import NotFound from "@/pages/not-found";
+
+// System-wide notifications component
+function SystemNotifications() {
+  // This would utilize the notifications from SystemContext
+  // to show floating alerts for cross-module events 
+  return null; // Placeholder - will be implemented later
+}
+
+// System-wide loading overlay
+function LoadingOverlay() {
+  // This would show a full-screen loading overlay when system-wide loading is active
+  return null; // Placeholder - will be implemented later
+}
 
 function AppRoutes() {
   return (
@@ -47,16 +62,22 @@ function AppRoutes() {
 
 function App() {
   return (
-    <BrowserRouter>
-      <QueryClientProvider client={queryClient}>
-        <UserProvider>
-          <MainLayout>
-            <AppRoutes />
-          </MainLayout>
-          <Toaster />
-        </UserProvider>
-      </QueryClientProvider>
-    </BrowserRouter>
+    <ThemeProvider defaultTheme="light" storageKey="jahazii-theme">
+      <BrowserRouter>
+        <QueryClientProvider client={queryClient}>
+          <UserProvider>
+            <SystemProvider>
+              <MainLayout>
+                <AppRoutes />
+              </MainLayout>
+              <SystemNotifications />
+              <LoadingOverlay />
+              <Toaster />
+            </SystemProvider>
+          </UserProvider>
+        </QueryClientProvider>
+      </BrowserRouter>
+    </ThemeProvider>
   );
 }
 

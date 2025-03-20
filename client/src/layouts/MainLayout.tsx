@@ -1,9 +1,11 @@
 import { useState, useEffect, ReactNode } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { useUser } from "@/context/UserContext";
+import { useSystem } from "@/context/SystemContext";
 import { useJahaziiTheme } from "@/hooks/use-theme";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { GlobalHeader } from "@/components/system/GlobalHeader";
 import { 
   SearchIcon, MenuIcon, BellIcon, User, LayoutDashboard, 
   Users, Clock, DollarSign, CreditCard, LogIn, UserCog, 
@@ -254,6 +256,12 @@ export default function MainLayout({ children }: MainLayoutProps) {
         
         {/* Main content */}
         <main className="p-4 lg:p-6 animate-fade-in">
+          {/* Global system context header - only shown on certain pages */}
+          {(location.pathname.startsWith('/attendance') || 
+            location.pathname.startsWith('/payroll') || 
+            location.pathname.startsWith('/ewa')) && (
+            <GlobalHeader />
+          )}
           {children}
         </main>
         

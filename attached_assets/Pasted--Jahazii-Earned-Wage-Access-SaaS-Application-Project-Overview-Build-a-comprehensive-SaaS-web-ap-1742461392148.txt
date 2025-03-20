@@ -1,0 +1,176 @@
+# Jahazii Earned Wage Access SaaS Application
+
+## Project Overview
+Build a comprehensive SaaS web application for Jahazii (https://jahazii.io/), an earned wage access provider that enables employers to manage employee data, track attendance, calculate payroll, and provide earned wage access services. The application should follow Jahazii's existing brand design language.
+
+## Technology Stack
+- Use React for the frontend
+- Implement the provided Tailwind CSS configuration
+- Design responsive interfaces for all user roles
+
+## Key User Roles
+1. **HR Professionals/Employers** - Primary dashboard users
+2. **Employees** - For attendance tracking and EWA requests
+3. **Supervisors** - For attendance verification
+4. **Individual Employees** - Personal dashboard view
+
+## Core Features
+
+### 1. Navigation & Layout
+- **Sidebar Navigation** with sections for:
+  - Dashboard
+  - Employees
+  - Attendance
+  - Payroll
+  - Earned Wage Access
+  - Self-Log
+  - My Profile (for employee view)
+- **Responsive design** following Jahazii's brand aesthetics
+- **Dark/Light mode** support
+- **Role-based navigation** that adapts based on user type
+
+### 2. Dashboard
+- **Key Metrics** displayed in visually appealing tiles:
+  - Total employee count (active vs. inactive)
+  - Attendance performance vs. same time last month
+  - Expected payroll at month-end
+  - EWA transactions to date
+- **Recent Activity** section showing:
+  - New employee additions
+  - Recent attendance exceptions
+  - Latest EWA requests
+- **Quick Action** buttons for common tasks
+
+### 3. Employee Management
+- **Employee List View**:
+  - Horizontal tabs to filter Active/Inactive employees
+  - Data table with columns for:
+    - Employee Number
+    - Name
+    - Department
+    - Contact information (limited)
+    - Action buttons (View Profile, Edit)
+  - Search and filter functionality
+  - Pagination controls
+  
+- **Employee Import**:
+  - CSV/XLSX upload functionality to bulk update employee data
+  - Template download option
+  - Validation and error reporting
+  
+- **Employee Detail View**:
+  - Personal information section
+  - Employment details (department, position, start date)
+  - Payroll information
+  - Attendance history
+  - EWA transaction history
+  - Documents section
+
+### 4. Attendance Tracking
+- **Attendance Dashboard**:
+  - Overview of all employees and their attendance status
+  - Daily, weekly, monthly views
+  - Attendance anomalies highlighted
+  - Clear distinction between clock-in and clock-out events
+  
+- **Self-Log System** with two options:
+  - **OTP Code System**: 
+    - Manager can search for a specific employee and send OTP
+    - Manager enters the OTP to verify and check employee in/out
+    - OTP codes are time-limited for security
+  - **QR Code System**: 
+    - Dynamic QR code that refreshes every 3 seconds
+    - When scanned, opens a unique page for employee to enter ID
+    - Clear options for both clock-in AND clock-out functionality
+    - Confirmation screen after successful clock-in/out
+  
+- **Manager Attendance Controls**:
+  - Ability to manually clock in/out employees with reason codes
+  - Override capabilities for corrections
+  - Bulk actions for teams or departments
+  
+- **Attendance Reports**:
+  - Exportable reports in various formats
+  - Filtering by date range, department, etc.
+  - Visualization of trends
+  - Detailed clock-in/out logs with timestamps
+
+### 5. Payroll Management
+- **Payroll Dashboard**:
+  - List of all employees with:
+    - Hourly rate
+    - Hours worked month-to-date
+    - Automatic calculation of gross pay
+    - EWA deductions
+    - Net pay calculation in Kenyan Shillings (KES)
+  
+- **Bulk Payroll Processing**:
+  - Button to process payroll for the entire organization
+  - Automatic generation of XLSX spreadsheet for finance
+  - Preview before export
+  
+- **Individual Payroll Records**:
+  - Historical payroll data
+  - EWA deductions clearly listed
+  - Tax calculations and other deductions
+  - Final net pay amount
+
+### 6. Earned Wage Access (EWA)
+- **EWA Dashboard**:
+  - Tabbed interface for Pending, Approved, and Disbursed requests
+  - Request details including amount, date, employee info
+  
+- **Employer Wallet**:
+  - Wallet balance display
+  - Top-up functionality
+  - Transaction history
+  - Clear explanation: transactions are free when wallet has funds; when empty, Jahazii advances funds
+  
+- **Request Processing**:
+  - Approve/Reject functionality with reason
+  - Batch processing options
+  - Automated notifications
+
+### 7. Self-Log Feature
+- **Supervisor View**:
+  - QR code generation that refreshes every 3 seconds
+  - Live log of employees checking in/out
+  - Manual override capabilities
+  
+- **Employee View**:
+  - Simple interface for scanning QR or entering SMS code
+  - Confirmation of successful clock in/out
+  - History of recent clock events
+
+## Design Requirements
+- **Follow the Jahazii brand identity**:
+  - Use colors from the provided Tailwind config (jahazii object)
+  - Utilize animation classes provided in the config
+  - Implement the font styles defined in the config
+  
+- **UI Components**:
+  - Use glass-effect cards with `shadow-glass` or `shadow-glass-dark`
+  - Implement proper responsive behavior for all screen sizes
+  - Use provided keyframe animations for transitions and interactions
+
+## Data Structure Considerations
+- Employee records should include all necessary fields for payroll calculation
+- Attendance records should be timestamped and geo-tagged when possible
+- EWA transactions should maintain a complete audit trail
+- All financial calculations should handle decimal precision properly
+
+## Export Functionality
+- All exports (especially payroll) should be in XLSX format
+- Include proper headers and formatting in exports
+- Ensure exports are compliant with common accounting software
+
+## Accessibility and Performance
+- Ensure the application is accessible to all users
+- Optimize performance, especially for data-heavy pages
+- Implement proper loading states and error handling
+
+## Special Considerations
+- All financial values should be displayed in Kenyan Shillings (KES)
+- EWA deductions must be reflected in payroll calculations and exports
+- The system should support multiple departments and organizational structures
+- Security must be a priority, especially for financial and personal data

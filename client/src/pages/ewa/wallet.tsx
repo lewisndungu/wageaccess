@@ -103,7 +103,7 @@ export default function WalletPage() {
       cell: ({ row }) => {
         const type = row.original.type;
         return (
-          <span className="capitalize">{type.replace("_", " ")}</span>
+          <span className="capitalize">{type && typeof type === 'string' ? type.replace("_", " ") : type}</span>
         );
       },
     },
@@ -113,7 +113,7 @@ export default function WalletPage() {
       cell: ({ row }) => {
         const status = row.original.status;
         return (
-          <span className="capitalize">{status}</span>
+          <span className="capitalize">{status || 'unknown'}</span>
         );
       },
     },

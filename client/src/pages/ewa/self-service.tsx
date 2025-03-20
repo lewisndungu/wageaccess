@@ -78,10 +78,10 @@ export default function SelfServicePage() {
                     </AvatarFallback>
                   )}
                 </Avatar>
-                <h2 className="text-xl font-bold">{employeeData.name}</h2>
-                <p className="text-sm text-muted-foreground">{employeeData.position}</p>
+                <h2 className="text-xl font-bold">{employeeData?.name || 'Employee'}</h2>
+                <p className="text-sm text-muted-foreground">{employeeData?.position || 'Position'}</p>
                 <div className="mt-2">
-                  <Badge variant="secondary">{employeeData.department}</Badge>
+                  <Badge variant="secondary">{employeeData?.department || 'Department'}</Badge>
                 </div>
                 <div className="mt-6 w-full">
                   <nav className="space-y-2">
@@ -131,19 +131,19 @@ export default function SelfServicePage() {
               <div className="space-y-3">
                 <div className="flex justify-between">
                   <span className="text-sm text-muted-foreground">Employee ID:</span>
-                  <span className="text-sm font-medium">{employeeData.employeeNumber}</span>
+                  <span className="text-sm font-medium">{employeeData?.employeeNumber || 'N/A'}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-sm text-muted-foreground">Join Date:</span>
-                  <span className="text-sm font-medium">{formatDate(employeeData.joinDate)}</span>
+                  <span className="text-sm font-medium">{employeeData?.joinDate ? formatDate(employeeData.joinDate) : 'N/A'}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-sm text-muted-foreground">Base Salary:</span>
-                  <span className="text-sm font-medium">{formatKES(employeeData.baseSalary)}</span>
+                  <span className="text-sm font-medium">{employeeData?.baseSalary ? formatKES(employeeData.baseSalary) : 'N/A'}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-sm text-muted-foreground">Next Payroll:</span>
-                  <span className="text-sm font-medium">{formatDate(employeeData.nextPayrollDate)}</span>
+                  <span className="text-sm font-medium">{employeeData?.nextPayrollDate ? formatDate(employeeData.nextPayrollDate) : 'N/A'}</span>
                 </div>
               </div>
             </CardContent>
@@ -155,7 +155,7 @@ export default function SelfServicePage() {
             </CardHeader>
             <CardContent className="pt-2">
               <div className="flex items-center justify-between">
-                <span className="text-2xl font-bold">{formatKES(employeeData.availableForEwa)}</span>
+                <span className="text-2xl font-bold">{employeeData?.availableForEwa ? formatKES(employeeData.availableForEwa) : formatKES(0)}</span>
                 <div className="flex items-center text-green-600 text-xs">
                   <ArrowUpRight className="h-3 w-3 mr-1" />
                   Updated today
@@ -179,11 +179,11 @@ export default function SelfServicePage() {
         </div>
         
         <div className="lg:col-span-3">
-          {activeTab === 'dashboard' && (
+          {activeTab === 'dashboard' && employeeData?.id && (
             <EmployeeEWADashboard employeeId={employeeData.id} />
           )}
           
-          {activeTab === 'history' && (
+          {activeTab === 'history' && employeeData?.id && (
             <EmployeeRequestHistory employeeId={employeeData.id} />
           )}
           

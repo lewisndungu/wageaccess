@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -38,10 +38,13 @@ export function EWAWallet({ employeeId, isEmployer = false }: EWAWalletProps) {
   const [receiverName, setReceiverName] = useState('');
   
   // Fetch wallet data
-  const { data: wallet, isLoading, refetch } = useQuery<WalletData>({
+  const { data, isLoading, refetch } = useQuery<WalletData>({
     queryKey: ['/api/wallet', employeeId],
-    initialData: walletData,
+    initialData: walletData as WalletData,
   });
+  
+  // Create a typed reference to wallet data
+  const wallet = data as WalletData;
   
   // Handle transfer
   const handleTransfer = async () => {

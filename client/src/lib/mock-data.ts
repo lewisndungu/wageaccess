@@ -350,20 +350,21 @@ export const ewaRequests = [
 // Wallet data
 export const walletData = {
   balance: 350000,
+  pendingBalance: 25000,
   transactions: [
     {
       id: 1,
       date: "2023-07-01T09:15:00",
       amount: 100000,
-      type: "topup",
+      type: "deposit",
       description: "Monthly wallet top-up",
       status: "completed"
     },
     {
       id: 2,
       date: "2023-07-05T14:30:00",
-      amount: -25000,
-      type: "ewa_disbursement",
+      amount: 25000,
+      type: "withdrawal",
       description: "EWA disbursement - Peter Ndegwa",
       status: "completed"
     },
@@ -371,17 +372,25 @@ export const walletData = {
       id: 3,
       date: "2023-07-08T11:45:00",
       amount: 50000,
-      type: "topup",
+      type: "deposit",
       description: "Additional funds for EWA requests",
       status: "completed"
     },
     {
       id: 4,
       date: "2023-07-10T16:20:00",
-      amount: -10000,
-      type: "ewa_disbursement",
+      amount: 10000,
+      type: "ewa",
       description: "EWA disbursement - Lucy Njeri",
       status: "completed"
+    },
+    {
+      id: 5,
+      date: "2023-07-15T13:45:00",
+      amount: 5000,
+      type: "transfer",
+      description: "Transfer to James Mwangi",
+      status: "pending"
     }
   ]
 };

@@ -30,17 +30,21 @@ interface EWARequest {
 export default function EWAPage() {
   const [activeTab, setActiveTab] = useState("pending");
   
-  const { data: requests, refetch } = useQuery<EWARequest[]>({
+  const { data, refetch } = useQuery<EWARequest[]>({
     queryKey: ['/api/ewa/requests', { status: activeTab }],
-    initialData: ewaRequests,
+    initialData: ewaRequests as unknown as EWARequest[],
   });
+  
+  // Create a typed reference to EWA data
+  const requests = data as EWARequest[];
   
   const { data: walletData } = useQuery({
     queryKey: ['/api/wallet'],
     initialData: { balance: 350000 },
   });
   
-  const filteredRequests = requests.filter(req => {
+  // Use type guards for filtering
+  const filteredRequests = requests.filter((req): req is EWARequest => {
     if (activeTab === "all") return true;
     return req.status === activeTab;
   });
@@ -176,9 +180,16 @@ export default function EWAPage() {
             <CardTitle className="text-sm font-medium text-muted-foreground">Pending Requests</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{requests.filter(r => r.status === "pending").length}</div>
+            {/* Use the filter with explicit type guard */}
+            <div className="text-2xl font-bold">
+              {requests.filter((r): r is EWARequest => r.status === "pending").length}
+            </div>
             <div className="text-sm text-muted-foreground mt-1">
-              {formatCurrency(requests.filter(r => r.status === "pending").reduce((sum, r) => sum + r.amount, 0))} pending approval
+              {formatCurrency(
+                requests
+                  .filter((r): r is EWARequest => r.status === "pending")
+                  .reduce((sum, r) => sum + r.amount, 0)
+              )} pending approval
             </div>
           </CardContent>
         </Card>
@@ -188,9 +199,15 @@ export default function EWAPage() {
             <CardTitle className="text-sm font-medium text-muted-foreground">Disbursed This Month</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{formatCurrency(requests.filter(r => r.status === "disbursed").reduce((sum, r) => sum + r.amount, 0))}</div>
+            <div className="text-2xl font-bold">
+              {formatCurrency(
+                requests
+                  .filter((r): r is EWARequest => r.status === "disbursed")
+                  .reduce((sum, r) => sum + r.amount, 0)
+              )}
+            </div>
             <div className="text-sm text-muted-foreground mt-1">
-              {requests.filter(r => r.status === "disbursed").length} transactions
+              {requests.filter((r): r is EWARequest => r.status === "disbursed").length} transactions
             </div>
           </CardContent>
         </Card>
@@ -239,7 +256,7 @@ export default function EWAPage() {
             <TabsContent value="pending" className="mt-0">
               {filteredRequests.length > 0 ? (
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-                  {filteredRequests.map(request => (
+                  {filteredRequests.map((request: EWARequest) => (
                     <EWARequestCard 
                       key={request.id} 
                       request={request} 
@@ -261,7 +278,7 @@ export default function EWAPage() {
             <TabsContent value="approved" className="mt-0">
               {filteredRequests.length > 0 ? (
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-                  {filteredRequests.map(request => (
+                  {filteredRequests.map((request: EWARequest) => (
                     <EWARequestCard 
                       key={request.id} 
                       request={request}

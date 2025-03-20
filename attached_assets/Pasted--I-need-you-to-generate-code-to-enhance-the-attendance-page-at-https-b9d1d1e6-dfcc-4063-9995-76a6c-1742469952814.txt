@@ -1,0 +1,75 @@
+
+I need you to generate code to enhance the attendance page at https://b9d1d1e6-dfcc-4063-9995-76a6c0c42e10-00-3p3aiw3msfnvd.janeway.replit.dev/attendance, focusing specifically on two key modules:
+1. Attendance Dashboard Enhancement
+Create a React component that implements a comprehensive attendance overview dashboard with:
+
+A tabbed interface for switching between Daily, Weekly, and Monthly views
+Status cards showing attendance metrics:
+
+Total employees present today
+On-time vs late arrivals
+Average check-in time
+Attendance rate compared to previous period (with trend indicators)
+
+
+A filterable data table of employees with columns for:
+
+Employee name/ID
+Department
+Check-in time
+Check-out time (if applicable)
+Status indicator (Present, Absent, Late, Left Early)
+Total hours worked
+
+
+Visual charts showing:
+
+Department-wise attendance percentages
+Attendance trends over time (line chart)
+Peak check-in hours (bar chart)
+
+
+Search and filter functionality to find specific employees or departments
+Export options for attendance reports
+
+The dashboard should use the existing design language with glass-effect cards and Jahazii's color scheme.
+2. Manager Attendance Controls
+Implement a manager control panel component that enables:
+
+Manual attendance management section with:
+
+Employee search/selection functionality
+Date/time selection for manual entries
+Dropdown for attendance status (Present, Absent, Late, etc.)
+Required reason field for manual entries
+Submit and cancel buttons
+
+
+Bulk attendance actions:
+
+Department selection dropdown
+Multi-select employee interface
+Bulk status assignment
+Reason field for bulk actions
+Confirmation dialog before submission
+
+
+Attendance correction tools:
+
+Searchable list of recent attendance records
+Edit functionality with change tracking
+Approval workflow for corrections
+Audit log of all manual changes
+
+
+Real-time shift tracker:
+
+Visual display of currently checked-in employees
+Time elapsed since check-in
+Expected check-out times
+Break status indicators
+Department grouping options
+
+
+
+Ensure all components are responsive, accessible, and seamlessly integrate with the existing UI. Use proper state management, loading indicators, and error handling throughout. The components should follow the glass-card aesthetic seen elsewhere in the application and maintain Jahazii's brand colors.

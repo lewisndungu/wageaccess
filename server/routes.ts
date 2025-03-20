@@ -1,0 +1,460 @@
+import type { Express, Request, Response } from "express";
+import { createServer, type Server } from "http";
+import { storage } from "./storage";
+import { z } from "zod";
+import { insertUserSchema, insertEmployeeSchema, insertAttendanceSchema, insertPayrollSchema, insertEwaRequestSchema } from "@shared/schema";
+
+// Helper to validate request body
+function validateBody<T extends z.ZodType>(schema: T) {
+  return (req: Request, res: Response, next: Function) => {
+    try {
+      req.body = schema.parse(req.body);
+      next();
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Validation error", errors: error.errors });
+      }
+      return res.status(500).json({ message: "Internal server error" });
+    }
+  };
+}
+
+export async function registerRoutes(app: Express): Promise<Server> {
+  // Auth routes
+  app.post("/api/auth/login", async (req, res) => {
+    const { username, password } = req.body;
+    
+    if (!username || !password) {
+      return res.status(400).json({ message: "Username and password are required" });
+    }
+    
+    const user = await storage.getUserByUsername(username);
+    
+    if (!user || user.password !== password) {
+      return res.status(401).json({ message: "Invalid username or password" });
+    }
+    
+    const { password: _, ...userWithoutPassword } = user;
+    return res.status(200).json({ user: userWithoutPassword });
+  });
+  
+  // User routes
+  app.get("/api/users/current", async (req, res) => {
+    // In a real app, get user from session
+    const user = await storage.getUserByUsername("hrmanager");
+    
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+    
+    const { password: _, ...userWithoutPassword } = user;
+    return res.status(200).json(userWithoutPassword);
+  });
+  
+  // Department routes
+  app.get("/api/departments", async (_req, res) => {
+    const departments = await storage.getAllDepartments();
+    return res.status(200).json(departments);
+  });
+  
+  // Employee routes
+  app.get("/api/employees", async (_req, res) => {
+    const employees = await storage.getAllEmployees();
+    return res.status(200).json(employees);
+  });
+  
+  app.get("/api/employees/active", async (_req, res) => {
+    const employees = await storage.getAllActiveEmployees();
+    return res.status(200).json(employees);
+  });
+  
+  app.get("/api/employees/inactive", async (_req, res) => {
+    const employees = await storage.getAllInactiveEmployees();
+    return res.status(200).json(employees);
+  });
+  
+  app.get("/api/employees/:id", async (req, res) => {
+    const id = parseInt(req.params.id);
+    
+    if (isNaN(id)) {
+      return res.status(400).json({ message: "Invalid employee ID" });
+    }
+    
+    const employee = await storage.getEmployeeWithDetails(id);
+    
+    if (!employee) {
+      return res.status(404).json({ message: "Employee not found" });
+    }
+    
+    return res.status(200).json(employee);
+  });
+  
+  app.post("/api/employees", validateBody(insertEmployeeSchema), async (req, res) => {
+    try {
+      const employee = await storage.createEmployee(req.body);
+      return res.status(201).json(employee);
+    } catch (error) {
+      return res.status(500).json({ message: "Failed to create employee" });
+    }
+  });
+  
+  app.patch("/api/employees/:id", async (req, res) => {
+    const id = parseInt(req.params.id);
+    
+    if (isNaN(id)) {
+      return res.status(400).json({ message: "Invalid employee ID" });
+    }
+    
+    const employee = await storage.updateEmployee(id, req.body);
+    
+    if (!employee) {
+      return res.status(404).json({ message: "Employee not found" });
+    }
+    
+    return res.status(200).json(employee);
+  });
+  
+  // Attendance routes
+  app.get("/api/attendance", async (req, res) => {
+    const date = req.query.date ? new Date(req.query.date as string) : new Date();
+    const attendanceRecords = await storage.getAttendanceForDate(date);
+    return res.status(200).json(attendanceRecords);
+  });
+  
+  app.get("/api/attendance/employee/:id", async (req, res) => {
+    const id = parseInt(req.params.id);
+    
+    if (isNaN(id)) {
+      return res.status(400).json({ message: "Invalid employee ID" });
+    }
+    
+    const attendanceRecords = await storage.getAttendanceForEmployee(id);
+    return res.status(200).json(attendanceRecords);
+  });
+  
+  app.post("/api/attendance", validateBody(insertAttendanceSchema), async (req, res) => {
+    try {
+      const attendance = await storage.createAttendance(req.body);
+      return res.status(201).json(attendance);
+    } catch (error) {
+      return res.status(500).json({ message: "Failed to create attendance record" });
+    }
+  });
+  
+  app.post("/api/attendance/otp", async (req, res) => {
+    const { employeeId } = req.body;
+    
+    if (!employeeId) {
+      return res.status(400).json({ message: "Employee ID is required" });
+    }
+    
+    const employee = await storage.getEmployee(employeeId);
+    
+    if (!employee) {
+      return res.status(404).json({ message: "Employee not found" });
+    }
+    
+    // Generate 6-digit OTP
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    const expiresAt = new Date();
+    expiresAt.setMinutes(expiresAt.getMinutes() + 15); // Expires in 15 minutes
+    
+    await storage.createOtpCode({
+      employeeId,
+      code: otp,
+      expiresAt,
+      used: false
+    });
+    
+    return res.status(200).json({ otp });
+  });
+  
+  app.post("/api/attendance/verify-otp", async (req, res) => {
+    const { code, action } = req.body;
+    
+    if (!code || !action) {
+      return res.status(400).json({ message: "OTP code and action are required" });
+    }
+    
+    const otpCode = await storage.getOtpCode(code);
+    
+    if (!otpCode) {
+      return res.status(404).json({ message: "Invalid OTP code" });
+    }
+    
+    if (otpCode.used) {
+      return res.status(400).json({ message: "OTP code has already been used" });
+    }
+    
+    if (new Date() > otpCode.expiresAt) {
+      return res.status(400).json({ message: "OTP code has expired" });
+    }
+    
+    // Mark OTP as used
+    await storage.updateOtpCode(otpCode.id, { used: true });
+    
+    // Create attendance record
+    const now = new Date();
+    const attendance = await storage.createAttendance({
+      employeeId: otpCode.employeeId,
+      date: now,
+      status: 'present',
+      ...(action === 'clockIn' ? { clockInTime: now, clockOutTime: null } : { clockOutTime: now, clockInTime: null }),
+      geoLocation: null,
+      approvedBy: null,
+      notes: `Self-logged via OTP: ${action}`
+    });
+    
+    return res.status(200).json({ success: true, attendance });
+  });
+  
+  // Payroll routes
+  app.get("/api/payroll", async (req, res) => {
+    if (req.query.startDate && req.query.endDate) {
+      const startDate = new Date(req.query.startDate as string);
+      const endDate = new Date(req.query.endDate as string);
+      const payrollRecords = await storage.getPayrollForPeriod(startDate, endDate);
+      return res.status(200).json(payrollRecords);
+    } else {
+      // Return current month's payroll by default
+      const now = new Date();
+      const startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+      const endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+      const payrollRecords = await storage.getPayrollForPeriod(startDate, endDate);
+      return res.status(200).json(payrollRecords);
+    }
+  });
+  
+  app.get("/api/payroll/employee/:id", async (req, res) => {
+    const id = parseInt(req.params.id);
+    
+    if (isNaN(id)) {
+      return res.status(400).json({ message: "Invalid employee ID" });
+    }
+    
+    const payrollRecords = await storage.getPayrollForEmployee(id);
+    return res.status(200).json(payrollRecords);
+  });
+  
+  app.post("/api/payroll", validateBody(insertPayrollSchema), async (req, res) => {
+    try {
+      const payroll = await storage.createPayroll(req.body);
+      return res.status(201).json(payroll);
+    } catch (error) {
+      return res.status(500).json({ message: "Failed to create payroll record" });
+    }
+  });
+  
+  app.patch("/api/payroll/:id", async (req, res) => {
+    const id = parseInt(req.params.id);
+    
+    if (isNaN(id)) {
+      return res.status(400).json({ message: "Invalid payroll ID" });
+    }
+    
+    const payroll = await storage.updatePayroll(id, req.body);
+    
+    if (!payroll) {
+      return res.status(404).json({ message: "Payroll record not found" });
+    }
+    
+    return res.status(200).json(payroll);
+  });
+  
+  // EWA routes
+  app.get("/api/ewa/requests", async (req, res) => {
+    const status = req.query.status as string;
+    
+    let ewaRequests;
+    switch (status) {
+      case 'pending':
+        ewaRequests = await storage.getPendingEwaRequests();
+        break;
+      case 'approved':
+        ewaRequests = await storage.getApprovedEwaRequests();
+        break;
+      case 'disbursed':
+        ewaRequests = await storage.getDisbursedEwaRequests();
+        break;
+      default:
+        // Return all EWA requests
+        ewaRequests = [
+          ...(await storage.getPendingEwaRequests()),
+          ...(await storage.getApprovedEwaRequests()),
+          ...(await storage.getDisbursedEwaRequests())
+        ];
+    }
+    
+    return res.status(200).json(ewaRequests);
+  });
+  
+  app.get("/api/ewa/requests/employee/:id", async (req, res) => {
+    const id = parseInt(req.params.id);
+    
+    if (isNaN(id)) {
+      return res.status(400).json({ message: "Invalid employee ID" });
+    }
+    
+    const ewaRequests = await storage.getEwaRequestsForEmployee(id);
+    return res.status(200).json(ewaRequests);
+  });
+  
+  app.post("/api/ewa/requests", validateBody(insertEwaRequestSchema), async (req, res) => {
+    try {
+      const ewaRequest = await storage.createEwaRequest(req.body);
+      return res.status(201).json(ewaRequest);
+    } catch (error) {
+      return res.status(500).json({ message: "Failed to create EWA request" });
+    }
+  });
+  
+  app.patch("/api/ewa/requests/:id", async (req, res) => {
+    const id = parseInt(req.params.id);
+    
+    if (isNaN(id)) {
+      return res.status(400).json({ message: "Invalid EWA request ID" });
+    }
+    
+    const ewaRequest = await storage.updateEwaRequest(id, req.body);
+    
+    if (!ewaRequest) {
+      return res.status(404).json({ message: "EWA request not found" });
+    }
+    
+    return res.status(200).json(ewaRequest);
+  });
+  
+  // Wallet routes
+  app.get("/api/wallet", async (_req, res) => {
+    const wallet = await storage.getWallet();
+    
+    if (!wallet) {
+      return res.status(404).json({ message: "Wallet not found" });
+    }
+    
+    return res.status(200).json(wallet);
+  });
+  
+  app.get("/api/wallet/transactions", async (_req, res) => {
+    const transactions = await storage.getWalletTransactions();
+    return res.status(200).json(transactions);
+  });
+  
+  app.post("/api/wallet/topup", async (req, res) => {
+    const { amount } = req.body;
+    
+    if (!amount || isNaN(parseFloat(amount))) {
+      return res.status(400).json({ message: "Valid amount is required" });
+    }
+    
+    const wallet = await storage.getWallet();
+    
+    if (!wallet) {
+      return res.status(404).json({ message: "Wallet not found" });
+    }
+    
+    const parsedAmount = parseFloat(amount);
+    const updatedWallet = await storage.updateWallet(wallet.id, {
+      balance: wallet.balance + parsedAmount
+    });
+    
+    await storage.createWalletTransaction({
+      walletId: wallet.id,
+      amount: parsedAmount,
+      transactionType: 'topup',
+      description: 'Wallet top-up',
+      referenceId: `TOP-${Date.now()}`,
+      status: 'completed'
+    });
+    
+    return res.status(200).json(updatedWallet);
+  });
+  
+  // Statistics for dashboard
+  app.get("/api/statistics/dashboard", async (_req, res) => {
+    const employees = await storage.getAllEmployees();
+    const activeEmployees = await storage.getAllActiveEmployees();
+    const inactiveEmployees = await storage.getAllInactiveEmployees();
+    
+    // Get attendance for current month
+    const now = new Date();
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+    
+    // In a real app, these would be calculated from actual records
+    // For now, we'll return mock statistics
+    return res.status(200).json({
+      employeeCount: {
+        total: employees.length,
+        active: activeEmployees.length,
+        inactive: inactiveEmployees.length,
+        change: "+3.2%"
+      },
+      attendance: {
+        rate: "93.5%",
+        change: "+1.5%"
+      },
+      payroll: {
+        expected: "KES 4.2M",
+        change: "+2.8%"
+      },
+      ewa: {
+        total: "KES 890K",
+        pending: 38,
+        change: "+12.3%"
+      }
+    });
+  });
+  
+  app.get("/api/activities", async (_req, res) => {
+    // In a real app, these would be actual activities from a database
+    // For now, we'll return mock activities
+    const activities = [
+      {
+        id: 1,
+        type: "employee",
+        title: "New Employee Added",
+        description: "John Kamau (ID: EMP-1928) has been added to the IT Department",
+        time: "10 min ago",
+        icon: "user-add-line"
+      },
+      {
+        id: 2,
+        type: "ewa",
+        title: "New EWA Request",
+        description: "Mary Wambui (Sales) requested KES 15,000 early wage access",
+        time: "30 min ago",
+        icon: "bank-card-line"
+      },
+      {
+        id: 3,
+        type: "attendance",
+        title: "Attendance Anomaly",
+        description: "5 employees in Marketing department haven't clocked in today",
+        time: "1 hour ago",
+        icon: "time-line"
+      },
+      {
+        id: 4,
+        type: "payroll",
+        title: "Payroll Processed",
+        description: "Payroll for IT Department (24 employees) has been processed",
+        time: "2 hours ago",
+        icon: "money-dollar-box-line"
+      },
+      {
+        id: 5,
+        type: "self-log",
+        title: "Self-Log QR Generated",
+        description: "Tom Mugo (Supervisor) generated QR code for warehouse team",
+        time: "3 hours ago",
+        icon: "login-box-line"
+      }
+    ];
+    
+    return res.status(200).json(activities);
+  });
+
+  const httpServer = createServer(app);
+  return httpServer;
+}

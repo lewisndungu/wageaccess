@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { Link } from "wouter";
+import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { MetricCard } from "@/components/dashboard/MetricCard";
 import { QuickActions, useQuickActions } from "@/components/dashboard/QuickActions";
@@ -104,7 +104,7 @@ export default function Dashboard() {
         <section className="lg:col-span-2 animate-slide-in-right" style={{ animationDelay: "0.2s" }}>
           <div className="flex justify-between items-center mb-4">
             <h2 className="text-lg font-semibold">Recent Activity</h2>
-            <Link href="/activities">
+            <Link to="/activities">
               <Button variant="link" className="text-primary hover:text-primary/80">View All</Button>
             </Link>
           </div>
@@ -121,7 +121,7 @@ export default function Dashboard() {
               <Filter className="h-4 w-4 mr-1" />
               <span>Filter</span>
             </Button>
-            <Link href="/employees/new">
+            <Link to="/employees/new">
               <Button size="sm" className="flex items-center">
                 <UserPlus className="h-4 w-4 mr-1" />
                 <span>Add Employee</span>

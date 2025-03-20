@@ -1,5 +1,5 @@
 import { Card, CardContent } from "@/components/ui/card";
-import { useLocation } from "wouter";
+import { useNavigate } from "react-router-dom";
 import { FileBarChart, Clock, CreditCard, UserPlus, ChevronRight } from "lucide-react";
 import { ReactNode } from "react";
 
@@ -43,29 +43,29 @@ export function QuickActions({ actions }: QuickActionsProps) {
 }
 
 export function useQuickActions() {
-  const [, setLocation] = useLocation();
+  const navigate = useNavigate();
   
   const defaultActions: ActionItem[] = [
     {
       title: "Generate Payroll Report",
       icon: <FileBarChart className="h-5 w-5" />,
-      handler: () => setLocation("/payroll"),
+      handler: () => navigate("/payroll"),
       isPrimary: true
     },
     {
       title: "Process Bulk Attendance",
       icon: <Clock className="h-5 w-5" />,
-      handler: () => setLocation("/attendance")
+      handler: () => navigate("/attendance")
     },
     {
       title: "Review EWA Requests",
       icon: <CreditCard className="h-5 w-5" />,
-      handler: () => setLocation("/ewa")
+      handler: () => navigate("/ewa")
     },
     {
       title: "Add New Employee",
       icon: <UserPlus className="h-5 w-5" />,
-      handler: () => setLocation("/employees/new")
+      handler: () => navigate("/employees/new")
     }
   ];
   

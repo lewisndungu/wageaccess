@@ -4,7 +4,11 @@ import { useUser } from "@/context/UserContext";
 import { useJahaziiTheme } from "@/hooks/use-theme";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { SearchIcon, MenuIcon, BellIcon, User } from "lucide-react";
+import { 
+  SearchIcon, MenuIcon, BellIcon, User, LayoutDashboard, 
+  Users, Clock, DollarSign, CreditCard, LogIn, UserCog, 
+  HelpCircle, BadgeDollarSign, ArrowRight
+} from "lucide-react";
 
 interface SidebarLinkProps {
   to: string;
@@ -21,7 +25,7 @@ const SidebarLink = ({ to, icon, label, active }: SidebarLinkProps) => (
         ? "text-white bg-primary hover:bg-primary/90" 
         : "text-gray-800 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800"}`}
   >
-    <i className={`ri-${icon} text-xl mr-3`}></i>
+    <span className="text-xl mr-3">{icon}</span>
     <span>{label}</span>
   </Link>
 );

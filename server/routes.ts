@@ -195,9 +195,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
             ...(location ? { geoLocation: JSON.stringify(location) } : {})
           });
         } else if (action === 'clockOut' && todayRecord.clockInTime && !todayRecord.clockOutTime) {
-          // Calculate hours worked
+          // Calculate hours worked as a reference for payroll calculations
           const clockIn = new Date(todayRecord.clockInTime);
           const hoursWorked = (now.getTime() - clockIn.getTime()) / (1000 * 60 * 60);
+          console.log(`Employee ${employeeId} worked ${hoursWorked.toFixed(2)} hours`);
           
           attendance = await storage.updateAttendance(todayRecord.id, {
             clockOutTime: now,

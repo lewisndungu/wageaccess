@@ -80,7 +80,6 @@ export function ClockInOut({ onSuccess }: ClockInOutProps) {
           toast({
             title: "Sync Warning",
             description: `Having trouble syncing an attendance record. Will retry later.`,
-            variant: "warning",
           });
         }
       }
@@ -108,13 +107,13 @@ export function ClockInOut({ onSuccess }: ClockInOutProps) {
     }
 
     setIsProcessing(true);
-    let locationData = null;
+    let locationData: {lat: number, lng: number} | null = null;
 
     try {
       // Get current location if enabled
       if (useGeoLocation && navigator.geolocation) {
         try {
-          locationData = await new Promise<{lat: number, lng: number}>((resolve, reject) => {
+          locationData = await new Promise<{lat: number, lng: number} | null>((resolve, reject) => {
             navigator.geolocation.getCurrentPosition(
               (position) => {
                 const locationData = {
@@ -157,7 +156,7 @@ export function ClockInOut({ onSuccess }: ClockInOutProps) {
         employeeId: parseInt(employeeId),
         action: isClockingIn ? 'clockIn' : 'clockOut',
         timestamp: timestamp,
-        location: locationData as {lat: number, lng: number} | null
+        location: locationData
       };
 
       try {
@@ -183,7 +182,7 @@ export function ClockInOut({ onSuccess }: ClockInOutProps) {
           employeeId: parseInt(employeeId),
           action: isClockingIn ? 'clockIn' : 'clockOut',
           timestamp: timestamp,
-          location: locationData as {lat: number, lng: number} | null,
+          location: locationData,
           retryCount: 0
         }]);
         

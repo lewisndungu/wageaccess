@@ -156,7 +156,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     return res.status(200).json(attendanceRecords);
   });
   
-  // Clock In/Out endpoint
+  // Clock In/Out endpoint with enhanced status detection
   app.post("/api/attendance/clock", async (req, res) => {
     try {
       const { employeeId, action, timestamp, location } = req.body;
@@ -184,24 +184,47 @@ export async function registerRoutes(app: Express): Promise<Server> {
                recordDate.getDate() === today.getDate();
       });
       
+      // Define standard work schedule (configurable in a real app)
+      const scheduledStartTimeMinutes = 9 * 60; // 9:00 AM in minutes since midnight
+      const lateWindowMinutes = 15; // 15 minute grace period
+      
+      // Calculate current time in minutes since midnight for comparison
+      const currentTimeMinutes = now.getHours() * 60 + now.getMinutes();
+      
+      // Determine attendance status based on clock-in time
+      const determineAttendanceStatus = (clockInTime: Date): string => {
+        const clockInMinutes = clockInTime.getHours() * 60 + clockInTime.getMinutes();
+        
+        if (clockInMinutes <= scheduledStartTimeMinutes + lateWindowMinutes) {
+          return 'present'; // Within grace period (9:00 AM - 9:15 AM)
+        } else {
+          return 'late'; // After grace period (after 9:15 AM)
+        }
+      };
+      
       let attendance;
       
       if (todayRecord) {
         // Update existing record
         if (action === 'clockIn' && !todayRecord.clockInTime) {
+          // Determine status based on clock-in time
+          const status = determineAttendanceStatus(now);
+          
           attendance = await storage.updateAttendance(todayRecord.id, {
             clockInTime: now,
-            status: 'present',
+            status: status,
+            hoursWorked: 0, // Will be updated on clock-out
             ...(location ? { geoLocation: JSON.stringify(location) } : {})
           });
         } else if (action === 'clockOut' && todayRecord.clockInTime && !todayRecord.clockOutTime) {
-          // Calculate hours worked as a reference for payroll calculations
+          // Calculate hours worked for payroll calculations
           const clockIn = new Date(todayRecord.clockInTime);
           const hoursWorked = (now.getTime() - clockIn.getTime()) / (1000 * 60 * 60);
           console.log(`Employee ${employeeId} worked ${hoursWorked.toFixed(2)} hours`);
           
           attendance = await storage.updateAttendance(todayRecord.id, {
             clockOutTime: now,
+            hoursWorked: parseFloat(hoursWorked.toFixed(2)),
             ...(location ? { geoLocation: JSON.stringify(location) } : {})
           });
         } else {
@@ -213,12 +236,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       } else if (action === 'clockIn') {
         // Create new attendance record for clock in
+        const status = determineAttendanceStatus(now);
+        
         attendance = await storage.createAttendance({
           employeeId,
           date: today,
           clockInTime: now,
           clockOutTime: null,
-          status: 'present',
+          status: status,
+          hoursWorked: 0, // Will be updated on clock-out
           geoLocation: location ? JSON.stringify(location) : null,
           approvedBy: null,
           notes: `Self-logged via app: ${action}`

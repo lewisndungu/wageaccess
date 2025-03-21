@@ -121,6 +121,70 @@ export async function registerRoutes(app: Express): Promise<Server> {
     return res.status(200).json(attendanceRecords);
   });
   
+  // Automatic absence detection - mark employees who haven't clocked in as absent
+  app.post("/api/attendance/process-absences", async (req, res) => {
+    try {
+      const { date } = req.body;
+      const targetDate = date ? new Date(date) : new Date();
+      
+      // Normalize the date to start of day
+      const normalizedDate = new Date(
+        targetDate.getFullYear(),
+        targetDate.getMonth(),
+        targetDate.getDate()
+      );
+      
+      // 1. Get all active employees
+      const activeEmployees = await storage.getAllActiveEmployees();
+      
+      // 2. Get all attendance records for the specified date
+      const attendanceRecords = await storage.getAttendanceForDate(normalizedDate);
+      
+      // 3. Find employees without attendance records for today
+      const presentEmployeeIds = new Set(attendanceRecords.map(record => record.employeeId));
+      const absentEmployees = activeEmployees.filter(emp => !presentEmployeeIds.has(emp.id));
+      
+      // 4. Create absence records for these employees
+      const cutoffTime = new Date(
+        normalizedDate.getFullYear(),
+        normalizedDate.getMonth(),
+        normalizedDate.getDate(),
+        17, 0, 0 // 5:00 PM - End of workday
+      );
+      
+      const absenceRecords = [];
+      
+      for (const employee of absentEmployees) {
+        // Create attendance record with 'absent' status
+        const absenceRecord = await storage.createAttendance({
+          employeeId: employee.id,
+          date: normalizedDate,
+          clockInTime: null,
+          clockOutTime: null,
+          status: 'absent',
+          hoursWorked: "0", // No hours worked for absences
+          geoLocation: null,
+          approvedBy: null,
+          notes: 'Automatically marked as absent'
+        });
+        
+        absenceRecords.push(absenceRecord);
+      }
+      
+      return res.status(200).json({ 
+        processed: absentEmployees.length,
+        message: `Processed ${absentEmployees.length} absences for ${normalizedDate.toDateString()}`,
+        absenceRecords
+      });
+    } catch (error) {
+      console.error("Error processing absences:", error);
+      return res.status(500).json({ 
+        message: "Failed to process absences",
+        error: error instanceof Error ? error.message : "Unknown error"
+      });
+    }
+  });
+  
   // Recent attendance events for real-time updates
   app.get("/api/attendance/recent-events", async (_req, res) => {
     const date = new Date();
@@ -213,7 +277,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           attendance = await storage.updateAttendance(todayRecord.id, {
             clockInTime: now,
             status: status,
-            hoursWorked: 0, // Will be updated on clock-out
+            hoursWorked: "0", // Will be updated on clock-out
             ...(location ? { geoLocation: JSON.stringify(location) } : {})
           });
         } else if (action === 'clockOut' && todayRecord.clockInTime && !todayRecord.clockOutTime) {
@@ -224,7 +288,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           
           attendance = await storage.updateAttendance(todayRecord.id, {
             clockOutTime: now,
-            hoursWorked: parseFloat(hoursWorked.toFixed(2)),
+            hoursWorked: hoursWorked.toFixed(2),
             ...(location ? { geoLocation: JSON.stringify(location) } : {})
           });
         } else {
@@ -324,13 +388,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
     // Mark OTP as used
     await storage.updateOtpCode(otpCode.id, { used: true });
     
-    // Create attendance record
+    // Create attendance record with status based on time
     const now = new Date();
+    
+    // Define standard work schedule (configurable in a real app)
+    const scheduledStartTimeMinutes = 9 * 60; // 9:00 AM in minutes since midnight
+    const lateWindowMinutes = 15; // 15 minute grace period
+    
+    // Determine attendance status based on clock-in time
+    let status = 'present';
+    if (action === 'clockIn') {
+      const clockInMinutes = now.getHours() * 60 + now.getMinutes();
+      if (clockInMinutes > scheduledStartTimeMinutes + lateWindowMinutes) {
+        status = 'late';
+      }
+    }
+    
     const attendance = await storage.createAttendance({
       employeeId: otpCode.employeeId,
       date: now,
-      status: 'present',
+      status: status,
       ...(action === 'clockIn' ? { clockInTime: now, clockOutTime: null } : { clockOutTime: now, clockInTime: null }),
+      hoursWorked: 0, // Will be updated on clock-out if needed
       geoLocation: null,
       approvedBy: null,
       notes: `Self-logged via OTP: ${action}`

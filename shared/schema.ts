@@ -46,6 +46,7 @@ export const attendance = pgTable("attendance", {
   clockOutTime: timestamp("clock_out_time"),
   date: timestamp("date").defaultNow(),
   status: text("status").notNull(), // present, absent, late, leave
+  hoursWorked: decimal("hours_worked", { precision: 10, scale: 2 }).default("0"),
   geoLocation: json("geo_location"),
   approvedBy: integer("approved_by"),
   notes: text("notes"),

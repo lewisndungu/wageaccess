@@ -10,13 +10,26 @@ import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Upload, Search, Filter, UserPlus } from "lucide-react";
 
+// Define type to match the EmployeeTable component's expected props
+interface Employee {
+  id: number;
+  employeeNumber: string;
+  name: string;
+  department: string;
+  position: string;
+  contact: string;
+  email: string;
+  status: "present" | "absent" | "late";
+  profileImage?: string;
+}
+
 export default function EmployeesPage() {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState("list");
   
   const { data: employeeData, isLoading } = useQuery({
     queryKey: ['/api/employees/active'],
-    initialData: employees
+    initialData: employees as unknown as Employee[]
   });
 
   return (

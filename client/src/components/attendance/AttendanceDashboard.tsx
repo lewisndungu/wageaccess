@@ -131,6 +131,60 @@ export function AttendanceDashboard() {
   const attendanceRate = calculateAttendanceRate(records);
   const previousRate = calculatePreviousAttendanceRate();
   
+  // Function to calculate lateness statistics
+  function calculateLatenessStats(records: AttendanceRecord[]) {
+    const lateRecords = records.filter(r => r.status === 'late');
+    
+    if (lateRecords.length === 0) {
+      return {
+        avgLateness: '0 min',
+        maxLateness: '0 min',
+        latenessRate: '0%'
+      };
+    }
+    
+    // Calculate average lateness in minutes
+    const sumLateMinutes = lateRecords.reduce((sum, record) => {
+      if (!record.clockInTime) return sum;
+      
+      const clockIn = new Date(record.clockInTime);
+      const scheduledStartTime = new Date(clockIn);
+      // Set scheduled start time to 9:00 AM
+      scheduledStartTime.setHours(9, 0, 0, 0);
+      
+      // Calculate minutes late
+      const minutesLate = Math.floor((clockIn.getTime() - scheduledStartTime.getTime()) / (1000 * 60));
+      return sum + minutesLate;
+    }, 0);
+    
+    const avgLateness = Math.round(sumLateMinutes / lateRecords.length);
+    
+    // Find maximum lateness
+    let maxLateness = 0;
+    lateRecords.forEach(record => {
+      if (!record.clockInTime) return;
+      
+      const clockIn = new Date(record.clockInTime);
+      const scheduledStartTime = new Date(clockIn);
+      scheduledStartTime.setHours(9, 0, 0, 0);
+      
+      const minutesLate = Math.floor((clockIn.getTime() - scheduledStartTime.getTime()) / (1000 * 60));
+      maxLateness = Math.max(maxLateness, minutesLate);
+    });
+    
+    // Calculate lateness rate
+    const latenessRate = Math.round((lateRecords.length / records.length) * 100);
+    
+    return {
+      avgLateness: `${avgLateness} min`,
+      maxLateness: `${maxLateness} min`,
+      latenessRate: `${latenessRate}%`
+    };
+  }
+  
+  // Calculate lateness statistics
+  const latenessStats = calculateLatenessStats(records);
+  
   // Calculate metrics based on the records
   const metrics = {
     totalEmployees: employeeList.length,
@@ -141,6 +195,9 @@ export function AttendanceDashboard() {
     attendanceRate: attendanceRate,
     previousRate: previousRate,
     rateChange: calculateRateChange(attendanceRate, previousRate),
+    avgLateness: latenessStats.avgLateness,
+    maxLateness: latenessStats.maxLateness,
+    latenessRate: latenessStats.latenessRate
   };
 
   // Generate department attendance data
@@ -248,11 +305,19 @@ export function AttendanceDashboard() {
     return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
   }
 
-  // Function to calculate attendance rate
+  // Function to calculate attendance rate with more detailed breakdown
   function calculateAttendanceRate(records: AttendanceRecord[]): number {
     if (records.length === 0) return 0;
-    const presentCount = records.filter(r => r.status === 'present' || r.status === 'late').length;
-    return Math.round((presentCount / records.length) * 100);
+    
+    const presentCount = records.filter(r => r.status === 'present').length;
+    const lateCount = records.filter(r => r.status === 'late').length;
+    const absentCount = records.filter(r => r.status === 'absent').length;
+    
+    // Consider both present and late as "in attendance" but possibly weight them differently
+    // Late employees are still present, just not on time
+    const effectivePresent = presentCount + (lateCount * 0.8); // Late counts as 80% of present
+    
+    return Math.round((effectivePresent / records.length) * 100);
   }
 
   // Function to calculate previous attendance rate (mock)
@@ -366,7 +431,7 @@ export function AttendanceDashboard() {
   return (
     <div className="space-y-6">
       {/* Status Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
         <Card className="shadow-glass dark:shadow-glass-dark">
           <CardContent className="p-6">
             <div className="flex justify-between">
@@ -410,6 +475,24 @@ export function AttendanceDashboard() {
               </div>
               <div className="h-12 w-12 rounded-full bg-blue-100 flex items-center justify-center">
                 <Clock className="h-6 w-6 text-blue-600" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="shadow-glass dark:shadow-glass-dark">
+          <CardContent className="p-6">
+            <div className="flex justify-between">
+              <div>
+                <p className="text-muted-foreground text-sm">Lateness Stats</p>
+                <h3 className="text-2xl font-bold">{metrics.avgLateness}</h3>
+                <div className="flex items-center text-xs text-muted-foreground">
+                  <Timer className="h-3 w-3 mr-1" />
+                  <span>max: {metrics.maxLateness}</span>
+                </div>
+              </div>
+              <div className="h-12 w-12 rounded-full bg-orange-100 flex items-center justify-center">
+                <Timer className="h-6 w-6 text-orange-600" />
               </div>
             </div>
           </CardContent>

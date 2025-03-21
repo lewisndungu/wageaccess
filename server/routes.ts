@@ -308,7 +308,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           clockInTime: now,
           clockOutTime: null,
           status: status,
-          hoursWorked: 0, // Will be updated on clock-out
+          hoursWorked: "0", // Will be updated on clock-out
           geoLocation: location ? JSON.stringify(location) : null,
           approvedBy: null,
           notes: `Self-logged via app: ${action}`
@@ -409,7 +409,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       date: now,
       status: status,
       ...(action === 'clockIn' ? { clockInTime: now, clockOutTime: null } : { clockOutTime: now, clockInTime: null }),
-      hoursWorked: 0, // Will be updated on clock-out if needed
+      hoursWorked: "0", // Will be updated on clock-out if needed
       geoLocation: null,
       approvedBy: null,
       notes: `Self-logged via OTP: ${action}`

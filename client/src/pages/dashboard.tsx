@@ -146,8 +146,8 @@ export default function Dashboard() {
       </div>
       
       {/* Employee Overview */}
-      <section className="animate-slide-in-left space-y-12 mt-24 mb-12" style={{ animationDelay: "0.3s" }}>
-        <div className="flex justify-between items-center mb-5">
+      <section className="animate-slide-in-left mt-24 mb-16 pt-8" style={{ animationDelay: "0.3s" }}>
+        <div className="flex flex-col md:flex-row md:justify-between md:items-center gap-4 mb-8">
           <div>
             <h2 className="text-xl font-semibold mb-1.5">Employee Overview</h2>
             <p className="text-sm text-muted-foreground">Complete list of active employees</p>
@@ -166,9 +166,7 @@ export default function Dashboard() {
           </div>
         </div>
         
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-100 dark:border-gray-800 overflow-hidden p-4">
-          <EmployeeTable data={employeeData} />
-        </div>
+        <EmployeeTable data={employeeData} />
       </section>
     </div>
   );

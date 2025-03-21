@@ -133,7 +133,7 @@ export function EmployeeTable({ data, isLoading }: EmployeeTableProps) {
   //  : data.filter(employee => !employee.isActive);
 
   return (
-    <Card className="bg-white dark:bg-gray-800 rounded-xl shadow-glass dark:shadow-glass-dark overflow-hidden">
+    <Card className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-800 overflow-hidden">
       <Tabs defaultValue="active" onValueChange={setActiveTab}>
         <div className="border-b border-gray-200 dark:border-gray-700 px-4">
           <TabsList className="bg-transparent border-b-0">
@@ -151,7 +151,7 @@ export function EmployeeTable({ data, isLoading }: EmployeeTableProps) {
             </TabsTrigger>
           </TabsList>
         </div>
-        <TabsContent value="active" className="pt-0 pb-0">
+        <TabsContent value="active" className="p-4">
           <DataTable 
             columns={columns} 
             data={filteredData} 
@@ -159,7 +159,7 @@ export function EmployeeTable({ data, isLoading }: EmployeeTableProps) {
             onRowClick={handleViewProfile}
           />
         </TabsContent>
-        <TabsContent value="inactive" className="pt-0 pb-0">
+        <TabsContent value="inactive" className="p-4">
           <DataTable 
             columns={columns} 
             data={filteredData} 

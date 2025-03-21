@@ -52,14 +52,14 @@ export default function Dashboard() {
   const { defaultActions } = useQuickActions();
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-16">
       {/* Key Metrics Section */}
-      <section className="animate-slide-in-left" style={{ animationDelay: "0.1s" }}>
+      <section className="animate-slide-in-left space-y-8" style={{ animationDelay: "0.1s" }}>
         <div className="mb-6">
           <h2 className="text-xl font-semibold mb-1.5">Key Metrics</h2>
           <p className="text-sm text-muted-foreground">Overview of your organization's performance</p>
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
           <MetricCard
             title="Total Employees"
             value={stats.employeeCount.total.toString()}
@@ -120,7 +120,7 @@ export default function Dashboard() {
       </section>
       
       {/* Actions and Recent Activity Section */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         {/* Quick Actions */}
         <section className="lg:col-span-1 animate-slide-in-left" style={{ animationDelay: "0.2s" }}>
           <div className="mb-5">
@@ -146,7 +146,7 @@ export default function Dashboard() {
       </div>
       
       {/* Employee Overview */}
-      <section className="animate-slide-in-left space-y-8 mt-12" style={{ animationDelay: "0.3s" }}>
+      <section className="animate-slide-in-left space-y-12 mt-24 mb-12" style={{ animationDelay: "0.3s" }}>
         <div className="flex justify-between items-center mb-5">
           <div>
             <h2 className="text-xl font-semibold mb-1.5">Employee Overview</h2>

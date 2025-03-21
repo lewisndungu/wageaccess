@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Link } from "wouter";
+import { Link } from "react-router-dom";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -123,7 +123,7 @@ export default function WalletPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div className="flex items-center">
-          <Link href="/ewa">
+          <Link to="/ewa">
             <Button variant="ghost" className="mr-2">
               <ChevronLeft className="h-4 w-4 mr-1" />
               Back to EWA
@@ -248,7 +248,7 @@ export default function WalletPage() {
                   EWA transactions are free when your wallet has sufficient funds. When your wallet is empty, Jahazii will advance funds to your employees.
                 </p>
                 <p>
-                  <Link href="/ewa">
+                  <Link to="/ewa">
                     <span className="text-primary hover:underline">View pending EWA requests →</span>
                   </Link>
                 </p>

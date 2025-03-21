@@ -1,15 +1,16 @@
 import { useUser } from "@/context/UserContext";
 import { useEffect } from "react";
-import { useLocation } from "wouter";
+import { useNavigate, useLocation } from "react-router-dom";
 
 export function useAuth(requiredRole?: string | string[]) {
   const { user, isLoading } = useUser();
-  const [, setLocation] = useLocation();
+  const navigate = useNavigate();
+  const location = useLocation();
 
   useEffect(() => {
     if (!isLoading && !user) {
       // Redirect to login if user is not logged in
-      setLocation("/");
+      navigate("/");
       return;
     }
 
@@ -18,10 +19,10 @@ export function useAuth(requiredRole?: string | string[]) {
       
       if (!roles.includes(user.role)) {
         // Redirect to dashboard if user doesn't have required role
-        setLocation("/dashboard");
+        navigate("/dashboard");
       }
     }
-  }, [user, isLoading, requiredRole, setLocation]);
+  }, [user, isLoading, requiredRole, navigate, location]);
 
   return {
     user,

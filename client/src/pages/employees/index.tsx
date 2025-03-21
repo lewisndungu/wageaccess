@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { useLocation } from "wouter";
+import { useNavigate } from "react-router-dom";
 import { EmployeeTable } from "@/components/dashboard/EmployeeTable";
 import { employees } from "@/lib/mock-data";
 import { Button } from "@/components/ui/button";
@@ -11,7 +11,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Upload, Search, Filter, UserPlus } from "lucide-react";
 
 export default function EmployeesPage() {
-  const [, setLocation] = useLocation();
+  const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState("list");
   
   const { data: employeeData, isLoading } = useQuery({
@@ -33,7 +33,7 @@ export default function EmployeesPage() {
             Import
           </Button>
           <Button 
-            onClick={() => setLocation("/employees/new")}
+            onClick={() => navigate("/employees/new")}
             className="flex items-center"
           >
             <UserPlus className="mr-2 h-4 w-4" />

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { DataTable } from "@/components/ui/data-table";
-import { useLocation } from "wouter";
+import { useNavigate } from "react-router-dom";
 import { ColumnDef } from "@tanstack/react-table";
 import { User } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -27,11 +27,11 @@ interface EmployeeTableProps {
 }
 
 export function EmployeeTable({ data, isLoading }: EmployeeTableProps) {
-  const [, setLocation] = useLocation();
+  const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState("active");
   
   const handleViewProfile = (employee: Employee) => {
-    setLocation(`/employees/${employee.id}`);
+    navigate(`/employees/${employee.id}`);
   };
   
   const columns: ColumnDef<Employee>[] = [

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useParams } from "wouter";
+import { useParams, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { employees, formatCurrency, formatDate } from "@/lib/mock-data";
 import { ChevronLeft, DownloadIcon, User, Phone, Mail, MapPin, Calendar, DollarSign, Briefcase, BadgeCheck } from "lucide-react";
@@ -39,7 +39,8 @@ interface EWARequest {
 
 export default function EmployeeDetailPage() {
   const params = useParams<{ id: string }>();
-  const employeeId = parseInt(params.id);
+  const employeeId = parseInt(params.id || "0");
+  const navigate = useNavigate();
   
   const { data: employee, isLoading } = useQuery({
     queryKey: [`/api/employees/${employeeId}`],
@@ -267,7 +268,7 @@ export default function EmployeeDetailPage() {
   return (
     <div className="space-y-6">
       <div className="flex items-center">
-        <Button variant="ghost" className="mr-2">
+        <Button variant="ghost" className="mr-2" onClick={() => navigate("/employees")}>
           <ChevronLeft className="h-4 w-4 mr-1" />
           Back
         </Button>

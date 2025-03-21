@@ -1,4 +1,4 @@
-import { useParams } from "wouter";
+import { useParams, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { payrollRecords, formatCurrency, formatDate } from "@/lib/mock-data";
 import { Badge } from "@/components/ui/badge";
@@ -11,7 +11,8 @@ import { Separator } from "@/components/ui/separator";
 
 export default function PayrollDetailPage() {
   const params = useParams<{ id: string }>();
-  const payrollId = parseInt(params.id);
+  const payrollId = parseInt(params.id || "0");
+  const navigate = useNavigate();
   
   const { data: payroll, isLoading } = useQuery({
     queryKey: [`/api/payroll/${payrollId}`],
@@ -53,7 +54,7 @@ export default function PayrollDetailPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div className="flex items-center">
-          <Button variant="ghost" className="mr-2">
+          <Button variant="ghost" className="mr-2" onClick={() => navigate("/payroll")}>
             <ChevronLeft className="h-4 w-4 mr-1" />
             Back
           </Button>

@@ -226,7 +226,9 @@ export default function ProcessPayrollPage() {
         return (
           <div className="flex items-center">
             {status === 'complete' && (
-              <CheckCircle className="h-5 w-5 text-green-500 mr-2" />
+              <div className="rounded-full p-1 bg-green-100 dark:bg-green-950/50 mr-2">
+                <CheckCircle className="h-4 w-4 text-green-600" />
+              </div>
             )}
             {status === 'warning' && (
               <AlertTriangle className="h-5 w-5 text-amber-500 mr-2" />
@@ -1497,8 +1499,8 @@ export default function ProcessPayrollPage() {
             {/* Status Overview Strip - Quick at-a-glance visual status */}
             <div className="mt-6 grid grid-cols-1 md:grid-cols-4 gap-4">
               <div className="flex items-center gap-3 bg-card rounded-md border p-3">
-                <div className="bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 rounded-full p-2">
-                  <CheckCircle className="h-5 w-5" />
+                <div className="rounded-full p-2 bg-green-100 dark:bg-green-950/50">
+                  <CheckCircle className="h-5 w-5 text-green-600" />
                 </div>
                 <div>
                   <div className="text-sm font-medium">Complete</div>
@@ -1512,8 +1514,8 @@ export default function ProcessPayrollPage() {
               </div>
               
               <div className="flex items-center gap-3 bg-card rounded-md border p-3">
-                <div className="bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 rounded-full p-2">
-                  <AlertTriangle className="h-5 w-5" />
+                <div className="rounded-full p-2 bg-amber-100 dark:bg-amber-950/50">
+                  <AlertTriangle className="h-5 w-5 text-amber-600" />
                 </div>
                 <div>
                   <div className="text-sm font-medium">Warnings</div>
@@ -1527,8 +1529,8 @@ export default function ProcessPayrollPage() {
               </div>
               
               <div className="flex items-center gap-3 bg-card rounded-md border p-3">
-                <div className="bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 rounded-full p-2">
-                  <XCircle className="h-5 w-5" />
+                <div className="rounded-full p-2 bg-red-100 dark:bg-red-950/50">
+                  <XCircle className="h-5 w-5 text-red-600" />
                 </div>
                 <div>
                   <div className="text-sm font-medium">Errors</div>
@@ -1542,8 +1544,8 @@ export default function ProcessPayrollPage() {
               </div>
               
               <div className="flex items-center gap-3 bg-card rounded-md border p-3">
-                <div className="bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded-full p-2">
-                  <Clock className="h-5 w-5" />
+                <div className="rounded-full p-2 bg-blue-100 dark:bg-blue-950/50">
+                  <Clock className="h-5 w-5 text-blue-600" />
                 </div>
                 <div>
                   <div className="text-sm font-medium">Avg. Hours</div>

@@ -31,7 +31,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { toast } from "@/hooks/use-toast";
 import { useQuery } from "@tanstack/react-query";
-import { employees, departments, formatCurrency } from "@/lib/mock-data";
+import { employees, departments, formatCurrency, formatDate } from "@/lib/mock-data";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 
 import {
@@ -176,7 +176,7 @@ export default function ProcessPayrollPage() {
         return employees.filter(emp => emp.department === selectedDepartment);
       }
     },
-    initialData: [],
+    initialData: employees, // Use mock data as initial data
   });
   
   // Calculate eligible employees count

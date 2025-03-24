@@ -48,6 +48,8 @@ export default function WalletPage() {
     initialData: walletData.transactions as WalletTransaction[],
   });
   
+  const [fundingSource, setFundingSource] = useState<'employer' | 'jahazii'>('employer');
+  
   const handleTopUp = async () => {
     if (!topUpAmount || isNaN(parseFloat(topUpAmount)) || parseFloat(topUpAmount) <= 0) {
       toast({
@@ -61,14 +63,17 @@ export default function WalletPage() {
     setIsProcessing(true);
     
     try {
-      await apiRequest('POST', '/api/wallet/topup', { amount: parseFloat(topUpAmount) });
+      await apiRequest('POST', '/api/wallet/topup', { 
+        amount: parseFloat(topUpAmount),
+        fundingSource
+      });
       
       queryClient.invalidateQueries({ queryKey: ['/api/wallet'] });
       queryClient.invalidateQueries({ queryKey: ['/api/wallet/transactions'] });
       
       toast({
         title: "Top-up successful",
-        description: `Successfully added ${formatCurrency(parseFloat(topUpAmount))} to your wallet.`,
+        description: `Successfully added ${formatCurrency(parseFloat(topUpAmount))} to ${fundingSource === 'employer' ? 'employer' : 'Jahazii'} balance.`,
       });
       
       setIsTopUpDialogOpen(false);
@@ -181,7 +186,7 @@ export default function WalletPage() {
               <DialogHeader>
                 <DialogTitle>Top Up Wallet</DialogTitle>
                 <DialogDescription>
-                  Add funds to your employer wallet for EWA disbursements.
+                  Add funds to your {fundingSource === 'employer' ? 'employer' : 'Jahazii'} wallet for EWA disbursements.
                 </DialogDescription>
               </DialogHeader>
               <div className="space-y-4 py-4">
@@ -201,6 +206,24 @@ export default function WalletPage() {
                     />
                   </div>
                 </div>
+                <div className="space-y-2">
+                  <Label htmlFor="fundingSource">Funding Source</Label>
+                  <select
+                    id="fundingSource"
+                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                    value={fundingSource}
+                    onChange={(e) => setFundingSource(e.target.value as 'employer' | 'jahazii')}
+                  >
+                    <option value="employer">Employer Funds</option>
+                    <option value="jahazii">Jahazii Funds</option>
+                  </select>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    {fundingSource === 'employer' 
+                      ? 'Funds will be added to the employer balance for early wage access.' 
+                      : 'Funds will be added to the Jahazii balance for additional funding beyond employee caps.'}
+                  </p>
+                </div>
+                
                 <div className="space-y-2">
                   <Label htmlFor="method">Payment Method</Label>
                   <select
@@ -419,6 +442,24 @@ export default function WalletPage() {
               <CardDescription>Add funds to your wallet</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="quick-fundingSource">Funding Source</Label>
+                <select
+                  id="quick-fundingSource"
+                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                  value={fundingSource}
+                  onChange={(e) => setFundingSource(e.target.value as 'employer' | 'jahazii')}
+                >
+                  <option value="employer">Employer Funds</option>
+                  <option value="jahazii">Jahazii Funds</option>
+                </select>
+                <p className="text-xs text-muted-foreground">
+                  {fundingSource === 'employer' 
+                    ? <span className="text-blue-600 font-medium">Employer balance: {formatCurrency(wallet.employerBalance)}</span>
+                    : <span className="text-teal-600 font-medium">Jahazii balance: {formatCurrency(wallet.jahaziiBalance)}</span>}
+                </p>
+              </div>
+              
               <div className="grid grid-cols-2 gap-2">
                 <Button variant="outline" onClick={() => setTopUpAmount("10000")}>KES 10,000</Button>
                 <Button variant="outline" onClick={() => setTopUpAmount("25000")}>KES 25,000</Button>

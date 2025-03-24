@@ -432,8 +432,11 @@ export const userProfile = {
 };
 
 // Format functions
-export const formatCurrency = (amount: number) => {
-  return `KES ${amount.toLocaleString('en-US')}`;
+export const formatCurrency = (amount: number | undefined | null) => {
+  if (amount === undefined || amount === null) {
+    return 'KES 0';
+  }
+  return `KES ${Number(amount).toLocaleString('en-US')}`;
 };
 
 export const formatDate = (dateString: string) => {

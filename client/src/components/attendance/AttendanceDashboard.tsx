@@ -695,10 +695,15 @@ export function AttendanceDashboard() {
                   </CardHeader>
                   <CardContent>
                     <div className="h-80">
-                      <ResponsiveContainer width="100%" height="100%">
+                      <Chart
+                        config={{
+                          count: {
+                            label: "Check-ins",
+                            color: "#3B82F6"
+                          }
+                        }}
+                      >
                         <BarChart
-                          width={500}
-                          height={300}
                           data={timeDistributionData}
                           margin={{
                             top: 5,
@@ -708,13 +713,13 @@ export function AttendanceDashboard() {
                           }}
                         >
                           <CartesianGrid strokeDasharray="3 3" />
-                          <XAxis dataKey="hour" />
-                          <YAxis />
-                          <Tooltip />
-                          <Legend />
-                          <Bar dataKey="count" fill="#3B82F6" name="Check-ins" />
+                          <ChartXAxis dataKey="hour" />
+                          <ChartYAxis />
+                          <ChartTooltip />
+                          <ChartLegend />
+                          <ChartBar dataKey="count" fill="#3B82F6" name="Check-ins" />
                         </BarChart>
-                      </ResponsiveContainer>
+                      </Chart>
                     </div>
                   </CardContent>
                 </Card>
@@ -727,35 +732,44 @@ export function AttendanceDashboard() {
                   </CardHeader>
                   <CardContent>
                     <div className="h-80 flex items-center justify-center">
-                      <ResponsiveContainer width="100%" height="100%">
-                        <PieChart width={400} height={300}>
-                          <Pie
+                      <Chart
+                        config={{
+                          present: {
+                            label: "Present",
+                            color: "#10B981"
+                          },
+                          late: {
+                            label: "Late",
+                            color: "#F59E0B"
+                          },
+                          absent: {
+                            label: "Absent", 
+                            color: "#EF4444"
+                          }
+                        }}
+                      >
+                        <PieChart>
+                          <ChartPie
                             data={[
-                              { name: 'Present', value: metrics.present, color: '#10B981' },
-                              { name: 'Late', value: metrics.late, color: '#F59E0B' },
-                              { name: 'Absent', value: metrics.absent, color: '#EF4444' },
+                              { name: 'Present', value: metrics.present, key: "present" },
+                              { name: 'Late', value: metrics.late, key: "late" },
+                              { name: 'Absent', value: metrics.absent, key: "absent" },
                             ]}
                             cx="50%"
                             cy="50%"
                             labelLine={false}
                             outerRadius={80}
-                            fill="#8884d8"
                             dataKey="value"
                             nameKey="name"
-                            label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
-                          >
-                            {[
-                              { name: 'Present', value: metrics.present, color: '#10B981' },
-                              { name: 'Late', value: metrics.late, color: '#F59E0B' },
-                              { name: 'Absent', value: metrics.absent, color: '#EF4444' },
-                            ].map((entry, index) => (
-                              <Cell key={`cell-${index}`} fill={entry.color} />
-                            ))}
-                          </Pie>
-                          <Tooltip />
-                          <Legend />
+                            colorKey="key"
+                            label={({ name, percent }: {name: string, percent: number}) => 
+                              `${name}: ${(percent * 100).toFixed(0)}%`
+                            }
+                          />
+                          <ChartTooltip />
+                          <ChartLegend />
                         </PieChart>
-                      </ResponsiveContainer>
+                      </Chart>
                     </div>
                   </CardContent>
                 </Card>

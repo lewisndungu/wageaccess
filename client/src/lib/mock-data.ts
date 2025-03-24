@@ -349,47 +349,58 @@ export const ewaRequests = [
 
 // Wallet data
 export const walletData = {
-  balance: 350000,
-  pendingBalance: 25000,
+  employerBalance: 250000,
+  jahaziiBalance: 100000,
+  perEmployeeCap: 3000,
+  totalBalance: 350000,
+  activeEmployees: 45,
+  pendingRequests: 4,
+  pendingAmount: 25000,
+  employerFundsUtilization: 68, // percentage
   transactions: [
     {
       id: 1,
       date: "2023-07-01T09:15:00",
       amount: 100000,
-      type: "deposit",
-      description: "Monthly wallet top-up",
+      type: "employer_topup",
+      fundingSource: "employer",
+      description: "Monthly employer wallet top-up",
       status: "completed"
     },
     {
       id: 2,
       date: "2023-07-05T14:30:00",
-      amount: 25000,
-      type: "withdrawal",
-      description: "EWA disbursement - Peter Ndegwa",
+      amount: 2500,
+      type: "employer_disbursement",
+      fundingSource: "employer",
+      description: "EWA disbursement - Peter Ndegwa (Employer funds)",
       status: "completed"
     },
     {
       id: 3,
       date: "2023-07-08T11:45:00",
       amount: 50000,
-      type: "deposit",
-      description: "Additional funds for EWA requests",
+      type: "jahazii_topup",
+      fundingSource: "jahazii",
+      description: "Jahazii advance funding allocation",
       status: "completed"
     },
     {
       id: 4,
       date: "2023-07-10T16:20:00",
-      amount: 10000,
-      type: "ewa",
-      description: "EWA disbursement - Lucy Njeri",
+      amount: 5000,
+      type: "jahazii_disbursement",
+      fundingSource: "jahazii",
+      description: "EWA disbursement - Lucy Njeri (Jahazii funds)",
       status: "completed"
     },
     {
       id: 5,
       date: "2023-07-15T13:45:00",
-      amount: 5000,
-      type: "transfer",
-      description: "Transfer to James Mwangi",
+      amount: 2800,
+      type: "employer_disbursement",
+      fundingSource: "employer",
+      description: "EWA disbursement - James Mwangi (Employer funds)",
       status: "pending"
     }
   ]

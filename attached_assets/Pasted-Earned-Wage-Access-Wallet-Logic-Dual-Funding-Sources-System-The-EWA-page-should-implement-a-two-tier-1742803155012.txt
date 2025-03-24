@@ -1,0 +1,110 @@
+Earned Wage Access Wallet Logic
+Dual Funding Sources System
+The EWA page should implement a two-tiered wallet system that clearly distinguishes between employer-funded advances and Jahazii-funded advances.
+Employer Wallet Section
+
+Display Features:
+
+Current employer-funded wallet balance
+Per-employee cap (3,000 KES) clearly indicated
+Utilization metrics (e.g., "60% of allocated funds used")
+Number of employees currently eligible for employer-funded advances
+
+
+Top-up Interface:
+
+Simple form to add funds to the employer wallet
+Suggested funding amounts based on employee count
+Payment processing integration
+Transaction history of previous top-ups
+Receipt generation for accounting purposes
+
+
+Management Controls:
+
+Ability to adjust per-employee caps (up to 3,000 KES maximum)
+Options to prioritize specific departments or employee groups
+Auto-replenishment settings (optional)
+Set alerts for low balance thresholds
+
+
+
+Jahazii Advances Section
+
+Display Features:
+
+Available Jahazii advance funding
+Current utilization
+Terms of service specific to Jahazii-funded advances
+Cost structure (if applicable)
+Statistics on recent usage
+
+
+Administration Interface:
+
+Review of pending Jahazii-funded advance requests
+History of processed Jahazii advances
+Option to adjust terms or availability
+Analytics on Jahazii advance usage patterns
+
+
+
+Transaction Processing Flow
+
+Request Assessment:
+
+When an employee requests an advance, the system first checks employer wallet availability
+If the requested amount is within the employee's employer-funded limit (≤ 3,000 KES) and funds are available, it's processed from employer wallet
+If employer funds are insufficient or the request exceeds the employer cap, the system checks Jahazii advance eligibility
+
+
+Approval Interface:
+
+Clearly indicate which funding source will be used for each request
+Allow manual override of funding source if needed
+Batch process capabilities for multiple requests
+Different approval workflows based on funding source
+
+
+Dashboard Reporting:
+
+Separate metrics for employer-funded vs. Jahazii-funded advances
+Comparative usage statistics
+Cost savings analysis
+Projection of future needs based on current patterns
+
+
+
+Employee-Facing Elements
+
+Request Interface:
+
+Transparent display of available amount from employer funds (up to 3,000 KES)
+Clear indication of additional available amount from Jahazii advances
+Any different terms or conditions between the two funding sources
+Simplified application process that works for both funding types
+
+
+History View:
+
+Transaction history clearly indicating funding source for each advance
+Repayment tracking distinguished by advance type
+Available balance from each source
+
+
+
+Visual Design Considerations
+
+Color Coding:
+
+Use distinct but complementary colors to differentiate employer funds and Jahazii advances
+Consider using Jahazii's primary brand colors (blue and teal) for Jahazii advances
+Use secondary brand colors for employer funds
+
+
+Information Architecture:
+
+Clear visual separation between the two funding sources
+Progressive disclosure of details to avoid overwhelming users
+Contextual help elements explaining the dual-funding model
+Summary widgets showing combined availability and usage

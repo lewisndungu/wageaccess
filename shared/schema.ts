@@ -87,7 +87,9 @@ export const ewaRequests = pgTable("ewa_requests", {
 // Company wallet model
 export const wallet = pgTable("wallet", {
   id: serial("id").primaryKey(),
-  balance: decimal("balance", { precision: 10, scale: 2 }).notNull().default("0"),
+  employerBalance: decimal("employer_balance", { precision: 10, scale: 2 }).notNull().default("0"),
+  jahaziiBalance: decimal("jahazii_balance", { precision: 10, scale: 2 }).notNull().default("0"),
+  perEmployeeCap: decimal("per_employee_cap", { precision: 10, scale: 2 }).notNull().default("3000"),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
@@ -96,10 +98,11 @@ export const walletTransactions = pgTable("wallet_transactions", {
   id: serial("id").primaryKey(),
   walletId: integer("wallet_id").notNull(),
   amount: decimal("amount", { precision: 10, scale: 2 }).notNull(),
-  transactionType: text("transaction_type").notNull(), // topup, withdrawal, ewa_disbursement
+  transactionType: text("transaction_type").notNull(), // employer_topup, jahazii_topup, employer_disbursement, jahazii_disbursement
   description: text("description"),
   transactionDate: timestamp("transaction_date").defaultNow(),
   referenceId: text("reference_id"),
+  fundingSource: text("funding_source").notNull(), // employer, jahazii
   status: text("status").notNull().default("completed"), // pending, completed, failed
 });
 

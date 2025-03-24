@@ -649,7 +649,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
   
   app.post("/api/wallet/topup", async (req, res) => {
-    const { amount } = req.body;
+    const { amount, fundingSource = 'employer' } = req.body;
     
     if (!amount || isNaN(parseFloat(amount))) {
       return res.status(400).json({ message: "Valid amount is required" });
@@ -662,19 +662,36 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
     
     const parsedAmount = parseFloat(amount);
-    const currentBalance = parseFloat(wallet.balance?.toString() || "0");
-    const updatedWallet = await storage.updateWallet(wallet.id, {
-      balance: (currentBalance + parsedAmount).toString() // Convert to string for decimal type
-    });
+    
+    let updatedWallet;
+    
+    if (fundingSource === 'employer') {
+      const currentEmployerBalance = parseFloat(wallet.employerBalance?.toString() || "0");
+      updatedWallet = await storage.updateWallet(wallet.id, {
+        employerBalance: (currentEmployerBalance + parsedAmount).toString() // Convert to string for decimal type
+      });
+    } else {
+      const currentJahaziiBalance = parseFloat(wallet.jahaziiBalance?.toString() || "0");
+      updatedWallet = await storage.updateWallet(wallet.id, {
+        jahaziiBalance: (currentJahaziiBalance + parsedAmount).toString() // Convert to string for decimal type
+      });
+    }
     
     await storage.createWalletTransaction({
       walletId: wallet.id,
       amount: parsedAmount.toString(), // Convert to string for decimal type
-      transactionType: 'topup',
-      description: 'Wallet top-up',
+      transactionType: fundingSource === 'employer' ? 'employer_topup' : 'jahazii_topup',
+      description: `${fundingSource === 'employer' ? 'Employer' : 'Jahazii'} wallet top-up`,
       referenceId: `TOP-${Date.now()}`,
+      fundingSource,
       status: 'completed'
     });
+    
+    // Calculate total balance
+    updatedWallet.totalBalance = (
+      parseFloat(updatedWallet.employerBalance?.toString() || "0") + 
+      parseFloat(updatedWallet.jahaziiBalance?.toString() || "0")
+    ).toString();
     
     return res.status(200).json(updatedWallet);
   });

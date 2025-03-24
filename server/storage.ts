@@ -154,9 +154,11 @@ export class MemStorage implements IStorage {
       departmentId: 2
     });
     
-    // Create a wallet
+    // Create a wallet with dual funding sources
     this.createWallet({
-      balance: 500000,
+      employerBalance: 250000,
+      jahaziiBalance: 100000,
+      perEmployeeCap: 3000
     });
   }
 

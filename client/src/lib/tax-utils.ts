@@ -3,118 +3,91 @@
  * Based on Kenya Revenue Authority (KRA) tax rates and deductions
  */
 
-// PAYE (Pay As You Earn) Tax Rates for Kenya (2023)
-const PAYE_TAX_BANDS = [
-  { min: 0, max: 24000, rate: 0.10 },       // 10% on first KES 24,000
-  { min: 24001, max: 32333, rate: 0.25 },   // 25% on next KES 8,333
-  { min: 32334, max: 500000, rate: 0.30 },  // 30% on next KES 467,666
-  { min: 500001, max: 800000, rate: 0.325 }, // 32.5% on income over KES 500,000
-  { min: 800001, max: Infinity, rate: 0.35 }, // 35% on income over KES 800,000
+// Tax constants
+const PERSONAL_RELIEF = 2400; // Personal relief amount per month in KES
+const AHL_RATE = 0.015; // Affordable Housing Levy rate (1.5%)
+const SHIF_RATE = 0.0275; // Social Health Insurance Fund rate (2.75%)
+const NSSF_RATE = 0.06; // National Social Security Fund rate (6%)
+
+// PAYE (Pay As You Earn) Tax Bands
+const TAX_BANDS = [
+  { limit: 24_000, rate: 0.1 },    // 10% on first KES 24,000
+  { limit: 8_333, rate: 0.25 },    // 25% on next KES 8,333
+  { limit: 467_667, rate: 0.3 },   // 30% on next KES 467,667
+  { limit: 300_000, rate: 0.325 }, // 32.5% on next KES 300,000
+  { limit: Infinity, rate: 0.35 }, // 35% on the rest
 ];
-
-// Personal relief amount per month in KES (2023)
-const PERSONAL_RELIEF = 2400;
-
-// NHIF (National Hospital Insurance Fund) rates in KES (2023)
-const NHIF_RATES = [
-  { min: 0, max: 5999, amount: 150 },
-  { min: 6000, max: 7999, amount: 300 },
-  { min: 8000, max: 11999, amount: 400 },
-  { min: 12000, max: 14999, amount: 500 },
-  { min: 15000, max: 19999, amount: 600 },
-  { min: 20000, max: 24999, amount: 750 },
-  { min: 25000, max: 29999, amount: 850 },
-  { min: 30000, max: 34999, amount: 900 },
-  { min: 35000, max: 39999, amount: 950 },
-  { min: 40000, max: 44999, amount: 1000 },
-  { min: 45000, max: 49999, amount: 1100 },
-  { min: 50000, max: 59999, amount: 1200 },
-  { min: 60000, max: 69999, amount: 1300 },
-  { min: 70000, max: 79999, amount: 1400 },
-  { min: 80000, max: 89999, amount: 1500 },
-  { min: 90000, max: 99999, amount: 1600 },
-  { min: 100000, max: Infinity, amount: 1700 },
-];
-
-// NSSF (National Social Security Fund) rates in KES (2023)
-// Tier I - 6% of pensionable pay, up to KES 6,000 (Max contribution: KES 360)
-// Tier II - 6% of pensionable pay between KES 6,001 and KES 18,000 (Max contribution: KES 720)
-const NSSF_TIER_I_MAX = 6000;
-const NSSF_TIER_II_MAX = 18000;
-const NSSF_RATE = 0.06; // 6%
 
 /**
- * Calculate PAYE tax in Kenya
+ * Calculate Affordable Housing Levy (AHL)
  * @param grossIncome - Monthly gross income in KES
- * @returns PAYE tax amount in KES after personal relief
+ * @returns AHL amount in KES
  */
-export function calculatePAYE(grossIncome: number): number {
-  let taxableIncome = grossIncome;
-  let totalTax = 0;
-  
-  // Calculate tax for each band
-  for (const band of PAYE_TAX_BANDS) {
-    if (taxableIncome > band.min) {
-      const bandIncome = Math.min(taxableIncome, band.max) - band.min;
-      totalTax += bandIncome * band.rate;
-      
-      if (taxableIncome <= band.max) {
-        break;
-      }
-    }
-  }
-  
-  // Apply personal relief
-  totalTax = Math.max(0, totalTax - PERSONAL_RELIEF);
-  
-  return Math.round(totalTax);
+export function calculateAffordableHousingLevy(grossIncome: number): number {
+  return Math.round(grossIncome * AHL_RATE);
 }
 
 /**
- * Calculate NHIF contribution in Kenya
+ * Calculate Social Health Insurance Fund (SHIF) contribution
  * @param grossIncome - Monthly gross income in KES
- * @returns NHIF contribution amount in KES
+ * @returns SHIF contribution amount in KES
  */
-export function calculateNHIF(grossIncome: number): number {
-  for (const rate of NHIF_RATES) {
-    if (grossIncome >= rate.min && grossIncome <= rate.max) {
-      return rate.amount;
-    }
-  }
-  
-  // Default to highest rate if not found (should not happen)
-  return NHIF_RATES[NHIF_RATES.length - 1].amount;
+export function calculateSHIF(grossIncome: number): number {
+  return Math.round(grossIncome * SHIF_RATE);
 }
 
 /**
- * Calculate NSSF contribution in Kenya
+ * Calculate National Social Security Fund (NSSF) contribution
  * @param grossIncome - Monthly gross income in KES
  * @returns NSSF contribution amount in KES
  */
 export function calculateNSSF(grossIncome: number): number {
-  let nssfContribution = 0;
-  
-  // Tier I contribution (on income up to KES 6,000)
-  nssfContribution += Math.min(grossIncome, NSSF_TIER_I_MAX) * NSSF_RATE;
-  
-  // Tier II contribution (on income between KES 6,001 and KES 18,000)
-  if (grossIncome > NSSF_TIER_I_MAX) {
-    const tierIIIncome = Math.min(grossIncome, NSSF_TIER_II_MAX) - NSSF_TIER_I_MAX;
-    nssfContribution += tierIIIncome * NSSF_RATE;
+  if (grossIncome <= 0) {
+    return 0;
+  } else if (grossIncome <= 8000) {
+    return 480; // Minimum NSSF contribution
+  } else if (grossIncome <= 72000) {
+    return Math.round(NSSF_RATE * grossIncome);
+  } else {
+    return 4320; // Maximum NSSF contribution (72,000 * 6%)
   }
-  
-  return Math.round(nssfContribution);
 }
 
 /**
- * Calculate Housing Levy (Affordable Housing Fund) contribution in Kenya
+ * Calculate taxable income after deducting qualifying deductions
  * @param grossIncome - Monthly gross income in KES
- * @returns Housing Levy contribution amount in KES
+ * @param otherDeductions - Other qualifying deductions in KES
+ * @returns Taxable income amount in KES
  */
-export function calculateHousingLevy(grossIncome: number): number {
-  // Housing Levy is 1.5% of gross pay
-  const HOUSING_LEVY_RATE = 0.015;
-  return Math.round(grossIncome * HOUSING_LEVY_RATE);
+export function calculateTaxableIncome(grossIncome: number, otherDeductions = 0): number {
+  const ahl = calculateAffordableHousingLevy(grossIncome);
+  const shif = calculateSHIF(grossIncome);
+  const nssf = calculateNSSF(grossIncome);
+
+  return grossIncome - (ahl + shif + nssf + otherDeductions);
+}
+
+/**
+ * Calculate PAYE tax in Kenya
+ * @param taxableIncome - Monthly taxable income in KES
+ * @returns PAYE tax amount in KES after personal relief
+ */
+export function calculatePAYE(taxableIncome: number): number {
+  let remainingIncome = Math.max(0, taxableIncome); // Ensure non-negative
+  let totalTax = 0;
+
+  // Process each tax band
+  for (const band of TAX_BANDS) {
+    if (remainingIncome <= 0) break;
+    
+    const amountInBand = Math.min(remainingIncome, band.limit);
+    totalTax += amountInBand * band.rate;
+    remainingIncome -= amountInBand;
+  }
+
+  // Apply personal relief
+  const finalPAYE = Math.max(totalTax - PERSONAL_RELIEF, 0);
+  return Math.round(finalPAYE);
 }
 
 /**
@@ -125,26 +98,34 @@ export function calculateHousingLevy(grossIncome: number): number {
 export function calculateKenyanDeductions(grossIncome: number): {
   grossPay: number;
   paye: number;
-  nhif: number;
+  nhif: number; // renamed to nhif for backward compatibility
   nssf: number;
-  housingLevy: number;
+  housingLevy: number; // renamed to housingLevy for backward compatibility
   totalDeductions: number;
   netPay: number;
 } {
-  const paye = calculatePAYE(grossIncome);
-  const nhif = calculateNHIF(grossIncome);
+  // Calculate deductions
+  const ahl = calculateAffordableHousingLevy(grossIncome);
+  const shif = calculateSHIF(grossIncome);
   const nssf = calculateNSSF(grossIncome);
-  const housingLevy = calculateHousingLevy(grossIncome);
   
-  const totalDeductions = paye + nhif + nssf + housingLevy;
+  // Calculate taxable income
+  const taxableIncome = calculateTaxableIncome(grossIncome);
+  
+  // Calculate PAYE
+  const paye = calculatePAYE(taxableIncome);
+  
+  // Calculate total deductions and net income
+  const totalDeductions = ahl + shif + nssf + paye;
   const netPay = grossIncome - totalDeductions;
   
+  // Return deductions using the existing property names for compatibility
   return {
     grossPay: grossIncome,
     paye,
-    nhif,
+    nhif: shif, // SHIF is the successor to NHIF
     nssf,
-    housingLevy,
+    housingLevy: ahl, // AHL is the same as Housing Levy
     totalDeductions,
     netPay
   };

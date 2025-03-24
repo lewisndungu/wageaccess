@@ -9,7 +9,15 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { toast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useQuery } from "@tanstack/react-query";
-import { calculateKenyanDeductions, formatKES } from "@/lib/tax-utils";
+import { 
+  calculateKenyanDeductions, 
+  calculatePAYE, 
+  calculateSHIF, 
+  calculateNSSF, 
+  calculateAffordableHousingLevy,
+  calculateTaxableIncome,
+  formatKES 
+} from "@/lib/tax-utils";
 import { DollarSign, BarChart, Calendar, Briefcase, ChevronsUpDown, Calculator } from "lucide-react";
 import { employees } from "@/lib/mock-data";
 
@@ -232,7 +240,7 @@ export function PayrollCalculator({ onSave }: PayrollCalculatorProps) {
     return otherDeductions + ewaDeductions + loanDeductions;
   };
   
-  // Perform payroll calculation
+  // Perform payroll calculation using the updated algorithm
   const calculatePayroll = async () => {
     if (!selectedEmployee) {
       toast({
@@ -258,17 +266,31 @@ export function PayrollCalculator({ onSave }: PayrollCalculatorProps) {
       // Calculate gross pay
       const grossPay = calculateGrossPay();
       
-      // Calculate statutory deductions
-      const deductions = calculateKenyanDeductions(grossPay);
-      
-      // Apply custom deductions
-      const totalCustomDeductions = getTotalCustomDeductions();
-      const netPayAfterCustomDeductions = deductions.netPay - totalCustomDeductions;
-      
       // Try to get attendance data if not already loaded
       if (!attendanceData && !isLoadingAttendance) {
         await fetchAttendanceData();
       }
+      
+      // Direct calculation using updated tax calculation functions
+      // Calculate individual statutory deductions
+      const ahl = calculateAffordableHousingLevy(grossPay);
+      const shif = calculateSHIF(grossPay); 
+      const nssf = calculateNSSF(grossPay);
+      
+      // Calculate taxable income (gross minus qualifying deductions)
+      const taxableIncome = calculateTaxableIncome(grossPay);
+      
+      // Calculate PAYE
+      const paye = calculatePAYE(taxableIncome);
+      
+      // Calculate custom deductions
+      const totalCustomDeductions = getTotalCustomDeductions();
+      
+      // Calculate total statutory deductions
+      const totalStatutoryDeductions = ahl + shif + nssf + paye;
+      
+      // Calculate net pay
+      const netPayAfterDeductions = grossPay - totalStatutoryDeductions - totalCustomDeductions;
       
       // Get attendance metrics
       const attendanceMetrics = attendanceData ? {
@@ -285,11 +307,32 @@ export function PayrollCalculator({ onSave }: PayrollCalculatorProps) {
         totalWorkingDays: getWorkingDaysInPeriod(new Date(payPeriod.startDate), new Date(payPeriod.endDate))
       };
       
-      // Update result with combined data
-      setCalculationResults({
-        ...deductions,
-        netPay: netPayAfterCustomDeductions,
+      // Construct results object with same property names for compatibility
+      const results = {
+        grossPay: grossPay,
+        paye: paye,
+        nhif: shif, // SHIF is the replacement for NHIF
+        nssf: nssf,
+        housingLevy: ahl,
+        totalDeductions: totalStatutoryDeductions,
+        netPay: netPayAfterDeductions,
         ...attendanceMetrics
+      };
+      
+      // Update result with combined data
+      setCalculationResults(results);
+      
+      // Log detail of calculation for transparency
+      console.log('Payroll calculation details:', {
+        grossPay,
+        taxableIncome,
+        paye,
+        shif,
+        nssf,
+        ahl,
+        statutoryDeductions: totalStatutoryDeductions,
+        customDeductions: totalCustomDeductions,
+        netPay: netPayAfterDeductions
       });
       
     } catch (error) {
@@ -711,8 +754,9 @@ export function PayrollCalculator({ onSave }: PayrollCalculatorProps) {
                     <p className="font-medium">{formatKES(calculationResults.paye)}</p>
                   </div>
                   <div>
-                    <p className="text-sm text-muted-foreground">NHIF</p>
+                    <p className="text-sm text-muted-foreground">SHIF</p>
                     <p className="font-medium">{formatKES(calculationResults.nhif)}</p>
+                    <p className="text-xs text-muted-foreground">(Social Health Insurance Fund)</p>
                   </div>
                   <div>
                     <p className="text-sm text-muted-foreground">NSSF</p>

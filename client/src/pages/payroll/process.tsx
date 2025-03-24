@@ -1554,7 +1554,7 @@ export default function ProcessPayrollPage() {
                     Review and adjust individual employee calculations before finalizing
                   </CardDescription>
                 </div>
-                <div className="flex items-center space-x-2">
+                <div className="flex flex-col sm:flex-row items-center space-y-2 sm:space-y-0 sm:space-x-2">
                   <div className="relative w-full md:w-64">
                     <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
                     <Input
@@ -1573,11 +1573,38 @@ export default function ProcessPayrollPage() {
                       }}
                     />
                   </div>
+                  
+                  <Select
+                    value={(columnFilters.find(f => f.id === 'department')?.value as string) || 'all'}
+                    onValueChange={(value) => {
+                      setColumnFilters(prev => {
+                        const filtered = prev.filter(filter => filter.id !== 'department');
+                        if (value && value !== 'all') {
+                          return [...filtered, { id: 'department', value }];
+                        }
+                        return filtered;
+                      });
+                    }}
+                  >
+                    <SelectTrigger className="w-full sm:w-[180px]">
+                      <Building className="h-4 w-4 mr-2 opacity-70" />
+                      <SelectValue placeholder="All Departments" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Departments</SelectItem>
+                      {Array.from(new Set(payrollCalculations.map(emp => emp.department))).map((dept) => (
+                        <SelectItem key={dept} value={dept}>
+                          {dept}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                       <Button variant="outline" size="sm" className="h-9">
-                        <Filter className="h-3.5 w-3.5 mr-1" />
-                        View
+                        <Columns className="h-3.5 w-3.5 mr-1" />
+                        Columns
                         <ChevronDown className="h-3.5 w-3.5 ml-1 opacity-70" />
                       </Button>
                     </DropdownMenuTrigger>
@@ -1624,14 +1651,14 @@ export default function ProcessPayrollPage() {
                 </div>
               </div>
               
-              <div className="flex items-center justify-between mt-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between mt-4 gap-3">
                 <div>
                   <p className="text-sm text-muted-foreground">
                     Showing <span className="font-medium">{payrollCalculations.length}</span> employees 
                     with <span className="font-medium">{payrollCalculations.filter(e => e.status === 'warning' || e.status === 'error').length}</span> warnings/errors
                   </p>
                 </div>
-                <div className="flex space-x-2">
+                <div className="flex flex-wrap items-center gap-2">
                   <Button 
                     variant="outline" 
                     size="sm" 
@@ -1657,7 +1684,67 @@ export default function ProcessPayrollPage() {
                     <Users className="h-3.5 w-3.5 mr-1" />
                     Show All
                   </Button>
+                  
+                  <div className="flex items-center gap-1 bg-muted pl-2 pr-1 rounded h-9">
+                    <span className="text-xs text-muted-foreground">Page Size:</span>
+                    <Select
+                      defaultValue="25"
+                      onValueChange={(value) => {
+                        console.log(`Changed page size to ${value}`);
+                        // In a real implementation, this would update the page size in pagination state
+                      }}
+                    >
+                      <SelectTrigger className="border-0 h-7 w-16 focus:ring-0">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="10">10</SelectItem>
+                        <SelectItem value="25">25</SelectItem>
+                        <SelectItem value="50">50</SelectItem>
+                        <SelectItem value="100">100</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </div>
+              </div>
+              
+              {/* Pagination Controls - For handling large datasets */}
+              <div className="flex items-center justify-center space-x-2 py-4">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => console.log('First page')}
+                  disabled={true}
+                >
+                  <ChevronFirstIcon className="h-4 w-4" />
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => console.log('Previous page')}
+                  disabled={true}
+                >
+                  <ChevronLeftIcon className="h-4 w-4" />
+                </Button>
+                <span className="text-sm">
+                  Page <strong>1</strong> of <strong>{Math.ceil(payrollCalculations.length / 25)}</strong>
+                </span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => console.log('Next page')}
+                  disabled={payrollCalculations.length <= 25}
+                >
+                  <ChevronRightIcon className="h-4 w-4" />
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => console.log('Last page')}
+                  disabled={payrollCalculations.length <= 25}
+                >
+                  <ChevronLastIcon className="h-4 w-4" />
+                </Button>
               </div>
             </CardContent>
           </Card>

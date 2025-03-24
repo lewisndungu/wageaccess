@@ -580,7 +580,7 @@ export default function ProcessPayrollPage() {
     const totalEwaDeductions = calculations.reduce((sum, calc) => sum + calc.ewaDeductions, 0);
     
     // Group by department
-    const departments = [...new Set(calculations.map(calc => calc.department))];
+    const departments = Array.from(new Set(calculations.map(calc => calc.department)));
     const departmentSummary = departments.map(dept => {
       const deptEmployees = calculations.filter(calc => calc.department === dept);
       const deptTotal = deptEmployees.reduce((sum, calc) => sum + calc.netPay, 0);
@@ -1156,7 +1156,7 @@ export default function ProcessPayrollPage() {
               </CardHeader>
               <CardContent>
                 <div className="grid grid-cols-2 gap-4">
-                  <div className="bg-green-50 p-3 rounded-md border border-green-200 dark:bg-green-900/20 dark:border-green-900">
+                  <div className="bg-green-50 p-3 rounded-md border border-green-200 dark:bg-green-950/30 dark:border-green-950/50">
                     <h4 className="text-sm font-medium text-green-800 dark:text-green-300 flex items-center">
                       <CheckCircle className="h-4 w-4 mr-1 text-green-600" />
                       Ready to Process
@@ -2161,7 +2161,7 @@ export default function ProcessPayrollPage() {
               </div>
               
               {finalizationNote && (
-                <div className="bg-white dark:bg-gray-800 p-3 rounded border border-green-200 dark:border-green-800 mb-6">
+                <div className="bg-card p-3 rounded border border-green-200 dark:border-green-950/50 mb-6">
                   <p className="text-sm font-medium text-green-700 dark:text-green-300">Note</p>
                   <p className="text-sm">{finalizationNote}</p>
                 </div>

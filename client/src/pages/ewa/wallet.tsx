@@ -207,20 +207,25 @@ export default function WalletPage() {
                   </div>
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="fundingSource">Funding Source</Label>
-                  <select
-                    id="fundingSource"
-                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                    value={fundingSource}
-                    onChange={(e) => setFundingSource(e.target.value as 'employer' | 'jahazii')}
-                  >
-                    <option value="employer">Employer Funds</option>
-                    <option value="jahazii">Jahazii Funds</option>
-                  </select>
+                  <div className="flex items-center justify-between">
+                    <Label htmlFor="fundingSource">Funding Source</Label>
+                    <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
+                      Employer Funds Only
+                    </Badge>
+                  </div>
+                  <div className="relative">
+                    <Input
+                      id="fundingSource"
+                      value="Employer Funds"
+                      className="bg-gray-50"
+                      disabled
+                    />
+                    <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
+                      <Info className="h-4 w-4 text-muted-foreground" />
+                    </div>
+                  </div>
                   <p className="text-xs text-muted-foreground mt-1">
-                    {fundingSource === 'employer' 
-                      ? 'Funds will be added to the employer balance for early wage access.' 
-                      : 'Funds will be added to the Jahazii balance for additional funding beyond employee caps.'}
+                    Funds will be added to your employer balance for early wage access. Only Jahazii can top up the Jahazii balance.
                   </p>
                 </div>
                 
@@ -443,28 +448,72 @@ export default function WalletPage() {
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="quick-fundingSource">Funding Source</Label>
-                <select
-                  id="quick-fundingSource"
-                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                  value={fundingSource}
-                  onChange={(e) => setFundingSource(e.target.value as 'employer' | 'jahazii')}
-                >
-                  <option value="employer">Employer Funds</option>
-                  <option value="jahazii">Jahazii Funds</option>
-                </select>
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="quick-fundingSource">Funding Source</Label>
+                  <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
+                    Employer Funds Only
+                  </Badge>
+                </div>
+                <div className="relative">
+                  <Input
+                    id="quick-fundingSource"
+                    value="Employer Funds"
+                    className="bg-gray-50"
+                    disabled
+                  />
+                  <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
+                    <Info className="h-4 w-4 text-muted-foreground" />
+                  </div>
+                </div>
                 <p className="text-xs text-muted-foreground">
-                  {fundingSource === 'employer' 
-                    ? <span className="text-blue-600 font-medium">Employer balance: {formatCurrency(wallet.employerBalance)}</span>
-                    : <span className="text-teal-600 font-medium">Jahazii balance: {formatCurrency(wallet.jahaziiBalance)}</span>}
+                  <span className="text-blue-600 font-medium">Current employer balance: {formatCurrency(wallet.employerBalance)}</span>
+                  <span className="block mt-1">
+                    Only employer funds can be topped up. Jahazii funds are managed by Jahazii directly.
+                  </span>
                 </p>
               </div>
               
               <div className="grid grid-cols-2 gap-2">
-                <Button variant="outline" onClick={() => setTopUpAmount("10000")}>KES 10,000</Button>
-                <Button variant="outline" onClick={() => setTopUpAmount("25000")}>KES 25,000</Button>
-                <Button variant="outline" onClick={() => setTopUpAmount("50000")}>KES 50,000</Button>
-                <Button variant="outline" onClick={() => setTopUpAmount("100000")}>KES 100,000</Button>
+                <Button 
+                  variant="outline" 
+                  onClick={() => {
+                    setTopUpAmount("10000");
+                    setIsTopUpDialogOpen(true);
+                  }}
+                  className={fundingSource === 'employer' ? 'border-blue-200 hover:border-blue-300' : 'border-teal-200 hover:border-teal-300'}
+                >
+                  KES 10,000
+                </Button>
+                <Button 
+                  variant="outline" 
+                  onClick={() => {
+                    setTopUpAmount("25000");
+                    setIsTopUpDialogOpen(true);
+                  }}
+                  className={fundingSource === 'employer' ? 'border-blue-200 hover:border-blue-300' : 'border-teal-200 hover:border-teal-300'}
+                >
+                  KES 25,000
+                </Button>
+                <Button 
+                  variant="outline" 
+                  onClick={() => {
+                    setTopUpAmount("50000");
+                    setIsTopUpDialogOpen(true);
+                  }}
+                  className={fundingSource === 'employer' ? 'border-blue-200 hover:border-blue-300' : 'border-teal-200 hover:border-teal-300'}
+                >
+                  KES 50,000
+                </Button>
+                <Button 
+                  variant="outline" 
+                  onClick={() => {
+                    setTopUpAmount("100000");
+                    setIsTopUpDialogOpen(true);
+                  }}
+                  className={fundingSource === 'employer' ? 'border-blue-200 hover:border-blue-300' : 'border-teal-200 hover:border-teal-300'}
+                >
+                  KES 100,000
+                </Button>
               </div>
               
               <div className="space-y-2">

@@ -64,6 +64,12 @@ import {
   Circle,
   RefreshCw,
   Search,
+  Columns,
+  ActivitySquare,
+  ChevronLeft,
+  ChevronRight,
+  ChevronsLeft,
+  ChevronsRight,
 } from "lucide-react";
 import { 
   calculatePAYE, 
@@ -1716,7 +1722,7 @@ export default function ProcessPayrollPage() {
                   onClick={() => console.log('First page')}
                   disabled={true}
                 >
-                  <ChevronFirstIcon className="h-4 w-4" />
+                  <ChevronsLeft className="h-4 w-4" />
                 </Button>
                 <Button
                   variant="outline"
@@ -1724,7 +1730,7 @@ export default function ProcessPayrollPage() {
                   onClick={() => console.log('Previous page')}
                   disabled={true}
                 >
-                  <ChevronLeftIcon className="h-4 w-4" />
+                  <ChevronLeft className="h-4 w-4" />
                 </Button>
                 <span className="text-sm">
                   Page <strong>1</strong> of <strong>{Math.ceil(payrollCalculations.length / 25)}</strong>
@@ -1735,7 +1741,7 @@ export default function ProcessPayrollPage() {
                   onClick={() => console.log('Next page')}
                   disabled={payrollCalculations.length <= 25}
                 >
-                  <ChevronRightIcon className="h-4 w-4" />
+                  <ChevronRight className="h-4 w-4" />
                 </Button>
                 <Button
                   variant="outline"
@@ -1743,7 +1749,7 @@ export default function ProcessPayrollPage() {
                   onClick={() => console.log('Last page')}
                   disabled={payrollCalculations.length <= 25}
                 >
-                  <ChevronLastIcon className="h-4 w-4" />
+                  <ChevronsRight className="h-4 w-4" />
                 </Button>
               </div>
             </CardContent>

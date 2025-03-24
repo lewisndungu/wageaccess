@@ -810,17 +810,17 @@ export default function ProcessPayrollPage() {
         <div className="space-y-8">
           {/* Summary Preview Cards */}
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <Card className="bg-blue-50 border-blue-200 dark:bg-blue-900/20 dark:border-blue-800">
+            <Card>
               <CardContent className="pt-6">
                 <div className="flex flex-col space-y-1">
-                  <span className="text-xs font-medium text-blue-800 dark:text-blue-300">Pay Period</span>
+                  <span className="text-xs font-medium text-muted-foreground">Pay Period</span>
                   <div className="flex items-center">
-                    <CalendarDays className="h-4 w-4 mr-2 text-blue-600 dark:text-blue-400" />
-                    <span className="text-sm font-semibold text-blue-900 dark:text-blue-100">
+                    <CalendarDays className="h-4 w-4 mr-2 text-primary" />
+                    <span className="text-sm font-semibold">
                       {formatDate(payPeriod.startDate)} - {formatDate(payPeriod.endDate)}
                     </span>
                   </div>
-                  <span className="text-xs text-blue-700 dark:text-blue-400">
+                  <span className="text-xs text-muted-foreground">
                     {(() => {
                       const start = new Date(payPeriod.startDate);
                       const end = new Date(payPeriod.endDate);
@@ -832,45 +832,45 @@ export default function ProcessPayrollPage() {
               </CardContent>
             </Card>
             
-            <Card className="bg-emerald-50 border-emerald-200 dark:bg-emerald-900/20 dark:border-emerald-800">
+            <Card>
               <CardContent className="pt-6">
                 <div className="flex flex-col space-y-1">
-                  <span className="text-xs font-medium text-emerald-800 dark:text-emerald-300">Eligible Employees</span>
+                  <span className="text-xs font-medium text-muted-foreground">Eligible Employees</span>
                   <div className="flex items-center">
-                    <Users className="h-4 w-4 mr-2 text-emerald-600 dark:text-emerald-400" />
-                    <span className="text-lg font-bold text-emerald-900 dark:text-emerald-100">{eligibleEmployeeCount}</span>
+                    <Users className="h-4 w-4 mr-2 text-primary" />
+                    <span className="text-lg font-bold">{eligibleEmployeeCount}</span>
                   </div>
-                  <span className="text-xs text-emerald-700 dark:text-emerald-400">
+                  <span className="text-xs text-muted-foreground">
                     From {employeeData.length} total employees
                   </span>
                 </div>
               </CardContent>
             </Card>
             
-            <Card className="bg-amber-50 border-amber-200 dark:bg-amber-900/20 dark:border-amber-800">
+            <Card>
               <CardContent className="pt-6">
                 <div className="flex flex-col space-y-1">
-                  <span className="text-xs font-medium text-amber-800 dark:text-amber-300">Estimated Processing</span>
+                  <span className="text-xs font-medium text-muted-foreground">Estimated Processing</span>
                   <div className="flex items-center">
-                    <Clock className="h-4 w-4 mr-2 text-amber-600 dark:text-amber-400" />
-                    <span className="text-lg font-bold text-amber-900 dark:text-amber-100">~{Math.round(eligibleEmployeeCount * 0.5)} minutes</span>
+                    <Clock className="h-4 w-4 mr-2 text-primary" />
+                    <span className="text-lg font-bold">~{Math.round(eligibleEmployeeCount * 0.5)} minutes</span>
                   </div>
-                  <span className="text-xs text-amber-700 dark:text-amber-400">
+                  <span className="text-xs text-muted-foreground">
                     Based on employee count and complexity
                   </span>
                 </div>
               </CardContent>
             </Card>
             
-            <Card className="bg-purple-50 border-purple-200 dark:bg-purple-900/20 dark:border-purple-800">
+            <Card>
               <CardContent className="pt-6">
                 <div className="flex flex-col space-y-1">
-                  <span className="text-xs font-medium text-purple-800 dark:text-purple-300">Previous Payroll</span>
+                  <span className="text-xs font-medium text-muted-foreground">Previous Payroll</span>
                   <div className="flex items-center">
-                    <FileText className="h-4 w-4 mr-2 text-purple-600 dark:text-purple-400" />
-                    <span className="text-sm font-semibold text-purple-900 dark:text-purple-100">Feb 1 - Feb 28, 2025</span>
+                    <FileText className="h-4 w-4 mr-2 text-primary" />
+                    <span className="text-sm font-semibold">Feb 1 - Feb 28, 2025</span>
                   </div>
-                  <span className="text-xs text-purple-700 dark:text-purple-400">
+                  <span className="text-xs text-muted-foreground">
                     Last processed on March 1, 2025
                   </span>
                 </div>
@@ -929,15 +929,15 @@ export default function ProcessPayrollPage() {
                   </Button>
                 </div>
                 
-                <div className="mt-2 p-3 bg-blue-50 border border-blue-200 rounded-md dark:bg-blue-900/20 dark:border-blue-800">
-                  <h4 className="text-sm font-medium text-blue-700 dark:text-blue-300 flex items-center">
-                    <svg className="h-4 w-4 mr-1" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <div className="mt-2 p-3 bg-muted rounded-md border">
+                  <h4 className="text-sm font-medium flex items-center">
+                    <svg className="h-4 w-4 mr-1 text-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                       <circle cx="12" cy="12" r="10"></circle>
                       <path d="M12 8v4M12 16h.01"></path>
                     </svg>
                     Period Information
                   </h4>
-                  <p className="text-xs text-blue-600 dark:text-blue-400 mt-1">
+                  <p className="text-xs text-muted-foreground mt-1">
                     This pay period contains approximately {(() => {
                       const start = new Date(payPeriod.startDate);
                       const end = new Date(payPeriod.endDate);
@@ -1195,17 +1195,17 @@ export default function ProcessPayrollPage() {
         <div className="space-y-8">
           {/* Summary Cards - Status Overview */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <Card className="bg-blue-50 border-blue-200 dark:bg-blue-900/20 dark:border-blue-800">
+            <Card>
               <CardContent className="pt-6">
                 <div className="flex flex-col space-y-1">
-                  <span className="text-xs font-medium text-blue-800 dark:text-blue-300">Pay Period</span>
+                  <span className="text-xs font-medium text-muted-foreground">Pay Period</span>
                   <div className="flex items-center">
-                    <CalendarDays className="h-4 w-4 mr-2 text-blue-600 dark:text-blue-400" />
-                    <span className="text-sm font-semibold text-blue-900 dark:text-blue-100">
+                    <CalendarDays className="h-4 w-4 mr-2 text-primary" />
+                    <span className="text-sm font-semibold">
                       {formatDate(payPeriod.startDate)} - {formatDate(payPeriod.endDate)}
                     </span>
                   </div>
-                  <span className="text-xs text-blue-700 dark:text-blue-400">
+                  <span className="text-xs text-muted-foreground">
                     {(() => {
                       const start = new Date(payPeriod.startDate);
                       const end = new Date(payPeriod.endDate);
@@ -1217,39 +1217,39 @@ export default function ProcessPayrollPage() {
               </CardContent>
             </Card>
             
-            <Card className="bg-emerald-50 border-emerald-200 dark:bg-emerald-900/20 dark:border-emerald-800">
+            <Card>
               <CardContent className="pt-6">
                 <div className="flex flex-col space-y-1">
-                  <span className="text-xs font-medium text-emerald-800 dark:text-emerald-300">Processing Scope</span>
+                  <span className="text-xs font-medium text-muted-foreground">Processing Scope</span>
                   <div className="flex items-center">
-                    <Users className="h-4 w-4 mr-2 text-emerald-600 dark:text-emerald-400" />
-                    <span className="text-lg font-bold text-emerald-900 dark:text-emerald-100">{eligibleEmployeeCount} Employees</span>
+                    <Users className="h-4 w-4 mr-2 text-primary" />
+                    <span className="text-lg font-bold">{eligibleEmployeeCount} Employees</span>
                   </div>
-                  <span className="text-xs text-emerald-700 dark:text-emerald-400">
+                  <span className="text-xs text-muted-foreground">
                     {selectedDepartment === "all" ? "All departments" : `Department: ${selectedDepartment}`}
                   </span>
                 </div>
               </CardContent>
             </Card>
             
-            <Card className={validationIssues.length > 0 ? "bg-amber-50 border-amber-200 dark:bg-amber-900/20 dark:border-amber-800" : "bg-green-50 border-green-200 dark:bg-green-900/20 dark:border-green-800"}>
+            <Card>
               <CardContent className="pt-6">
                 <div className="flex flex-col space-y-1">
-                  <span className="text-xs font-medium text-amber-800 dark:text-amber-300">Validation Status</span>
+                  <span className="text-xs font-medium text-muted-foreground">Validation Status</span>
                   <div className="flex items-center">
                     {validationIssues.length > 0 ? (
                       <>
-                        <AlertTriangle className="h-4 w-4 mr-2 text-amber-600 dark:text-amber-400" />
-                        <span className="text-lg font-bold text-amber-900 dark:text-amber-100">{validationIssues.length} Issues</span>
+                        <AlertTriangle className="h-4 w-4 mr-2 text-amber-600" />
+                        <span className="text-lg font-bold">{validationIssues.length} Issues</span>
                       </>
                     ) : (
                       <>
-                        <CheckCircle className="h-4 w-4 mr-2 text-green-600 dark:text-green-400" />
-                        <span className="text-lg font-bold text-green-900 dark:text-green-100">Ready to Process</span>
+                        <CheckCircle className="h-4 w-4 mr-2 text-green-600" />
+                        <span className="text-lg font-bold">Ready to Process</span>
                       </>
                     )}
                   </div>
-                  <span className="text-xs text-amber-700 dark:text-amber-400">
+                  <span className="text-xs text-muted-foreground">
                     {validationIssues.length > 0 ? 'Review issues below' : 'All data validated successfully'}
                   </span>
                 </div>
@@ -2423,15 +2423,11 @@ export default function ProcessPayrollPage() {
                 <div className="flex-grow text-center md:text-left">
                   <h3 className="text-lg font-bold">{viewingEmployee.name}</h3>
                   <p className="text-sm text-muted-foreground">{viewingEmployee.position}</p>
-                  <p className="text-sm">
-                    <Badge variant={viewingEmployee.department === "Finance" ? "default" : 
-                                    viewingEmployee.department === "Marketing" ? "secondary" : 
-                                    viewingEmployee.department === "IT" ? "outline" : "destructive"}>
-                      {viewingEmployee.department}
-                    </Badge>
-                    <span className="mx-2">•</span>
-                    <span className="text-xs">ID: {viewingEmployee.employeeNumber}</span>
-                  </p>
+                  <div className="text-sm">
+                    <Badge variant="outline">{viewingEmployee.department}</Badge>
+                    <span className="mx-2 text-muted-foreground">•</span>
+                    <span className="text-xs text-muted-foreground">ID: {viewingEmployee.employeeNumber}</span>
+                  </div>
                 </div>
                 <div className="bg-card border rounded-md p-3 flex flex-col items-center">
                   <span className="text-xs text-muted-foreground">Hourly Rate</span>
@@ -2441,37 +2437,37 @@ export default function ProcessPayrollPage() {
               
               {/* Summary Cards */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <Card className="bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800">
+                <Card>
                   <CardContent className="pt-4">
-                    <div className="text-xs text-blue-800 dark:text-blue-300 font-medium">Gross Pay</div>
+                    <div className="text-xs text-muted-foreground font-medium">Gross Pay</div>
                     <div className="text-2xl font-bold">{formatKES(viewingEmployee.grossPay)}</div>
-                    <div className="text-xs text-blue-700 dark:text-blue-400 mt-1">
+                    <div className="text-xs text-muted-foreground mt-1">
                       {viewingEmployee.hoursWorked} hours × {formatKES(viewingEmployee.hourlyRate)}/hr
                       {viewingEmployee.overtimeHours > 0 && ` + ${viewingEmployee.overtimeHours} OT hrs`}
                     </div>
                   </CardContent>
                 </Card>
                 
-                <Card className="bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800">
+                <Card>
                   <CardContent className="pt-4">
-                    <div className="text-xs text-red-800 dark:text-red-300 font-medium">Total Deductions</div>
+                    <div className="text-xs text-muted-foreground font-medium">Total Deductions</div>
                     <div className="text-2xl font-bold">{formatKES(viewingEmployee.totalDeductions)}</div>
-                    <div className="text-xs text-red-700 dark:text-red-400 mt-1">
+                    <div className="text-xs text-muted-foreground mt-1">
                       {(viewingEmployee.totalDeductions / viewingEmployee.grossPay * 100).toFixed(1)}% of gross pay
                     </div>
                   </CardContent>
                 </Card>
                 
-                <Card className="bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-800">
+                <Card>
                   <CardContent className="pt-4">
-                    <div className="text-xs text-emerald-800 dark:text-emerald-300 font-medium">Net Pay</div>
+                    <div className="text-xs text-muted-foreground font-medium">Net Pay</div>
                     <div className="text-2xl font-bold">{formatKES(viewingEmployee.netPay)}</div>
                     {viewingEmployee.isEdited && viewingEmployee.originalNetPay && (
-                      <div className="text-xs text-emerald-700 dark:text-emerald-400 mt-1 flex items-center">
+                      <div className="text-xs text-muted-foreground mt-1 flex items-center">
                         <span>Original: {formatKES(viewingEmployee.originalNetPay)}</span>
                         <span className="ml-1">
                           {viewingEmployee.netPay > viewingEmployee.originalNetPay ? (
-                            <ArrowUp className="h-3 w-3 text-emerald-600" />
+                            <ArrowUp className="h-3 w-3 text-green-600" />
                           ) : (
                             <ArrowDown className="h-3 w-3 text-red-600" />
                           )}
@@ -2495,7 +2491,7 @@ export default function ProcessPayrollPage() {
                       </div>
                       <div className="w-full h-1.5 bg-muted rounded-full mt-1">
                         <div 
-                          className="h-1.5 bg-blue-500 rounded-full" 
+                          className="h-1.5 bg-primary rounded-full" 
                           style={{ width: `${(viewingEmployee.paye / viewingEmployee.totalDeductions) * 100}%` }}
                         ></div>
                       </div>
@@ -2508,7 +2504,7 @@ export default function ProcessPayrollPage() {
                       </div>
                       <div className="w-full h-1.5 bg-muted rounded-full mt-1">
                         <div 
-                          className="h-1.5 bg-green-500 rounded-full" 
+                          className="h-1.5 bg-primary/80 rounded-full" 
                           style={{ width: `${(viewingEmployee.nssf / viewingEmployee.totalDeductions) * 100}%` }}
                         ></div>
                       </div>
@@ -2521,7 +2517,7 @@ export default function ProcessPayrollPage() {
                       </div>
                       <div className="w-full h-1.5 bg-muted rounded-full mt-1">
                         <div 
-                          className="h-1.5 bg-purple-500 rounded-full" 
+                          className="h-1.5 bg-primary/70 rounded-full" 
                           style={{ width: `${(viewingEmployee.nhif / viewingEmployee.totalDeductions) * 100}%` }}
                         ></div>
                       </div>
@@ -2534,7 +2530,7 @@ export default function ProcessPayrollPage() {
                       </div>
                       <div className="w-full h-1.5 bg-muted rounded-full mt-1">
                         <div 
-                          className="h-1.5 bg-amber-500 rounded-full" 
+                          className="h-1.5 bg-primary/60 rounded-full" 
                           style={{ width: `${(viewingEmployee.housingLevy / viewingEmployee.totalDeductions) * 100}%` }}
                         ></div>
                       </div>
@@ -2547,7 +2543,7 @@ export default function ProcessPayrollPage() {
                       </div>
                       <div className="w-full h-1.5 bg-muted rounded-full mt-1">
                         <div 
-                          className="h-1.5 bg-red-500 rounded-full" 
+                          className="h-1.5 bg-primary/50 rounded-full" 
                           style={{ width: `${(viewingEmployee.ewaDeductions / viewingEmployee.totalDeductions) * 100}%` }}
                         ></div>
                       </div>
@@ -2561,7 +2557,7 @@ export default function ProcessPayrollPage() {
                         </div>
                         <div className="w-full h-1.5 bg-muted rounded-full mt-1">
                           <div 
-                            className="h-1.5 bg-orange-500 rounded-full" 
+                            className="h-1.5 bg-primary/40 rounded-full" 
                             style={{ width: `${(viewingEmployee.loanDeductions / viewingEmployee.totalDeductions) * 100}%` }}
                           ></div>
                         </div>
@@ -2576,7 +2572,7 @@ export default function ProcessPayrollPage() {
                         </div>
                         <div className="w-full h-1.5 bg-muted rounded-full mt-1">
                           <div 
-                            className="h-1.5 bg-gray-500 rounded-full" 
+                            className="h-1.5 bg-primary/30 rounded-full" 
                             style={{ width: `${(viewingEmployee.otherDeductions / viewingEmployee.totalDeductions) * 100}%` }}
                           ></div>
                         </div>
@@ -2621,11 +2617,7 @@ export default function ProcessPayrollPage() {
                     </dl>
                   </div>
                   
-                  <div className={`p-4 rounded-md ${
-                    viewingEmployee.status === 'complete' ? 'bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800' :
-                    viewingEmployee.status === 'warning' ? 'bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800' :
-                    'bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800'
-                  }`}>
+                  <div className="border p-4 rounded-md">
                     <h4 className="text-sm font-medium mb-2 flex items-center">
                       {viewingEmployee.status === 'complete' ? (
                         <CheckCircle className="h-4 w-4 mr-2 text-green-600" />
@@ -2638,11 +2630,7 @@ export default function ProcessPayrollPage() {
                     </h4>
                     
                     {viewingEmployee.statusReason && (
-                      <p className={`text-sm ${
-                        viewingEmployee.status === 'complete' ? 'text-green-700 dark:text-green-300' :
-                        viewingEmployee.status === 'warning' ? 'text-amber-700 dark:text-amber-300' :
-                        'text-red-700 dark:text-red-300'
-                      }`}>
+                      <p className="text-sm text-muted-foreground">
                         {viewingEmployee.statusReason}
                       </p>
                     )}

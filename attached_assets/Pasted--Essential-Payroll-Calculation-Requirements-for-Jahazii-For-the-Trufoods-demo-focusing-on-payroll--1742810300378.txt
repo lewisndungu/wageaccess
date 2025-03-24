@@ -1,0 +1,61 @@
+# Essential Payroll Calculation Requirements for Jahazii
+
+For the Trufoods demo focusing on payroll calculation, here are the core requirements:
+
+## 1. Input Data Requirements
+
+### Employee Base Information
+- **Hourly Rate**: Each employee's pay rate in KES
+- **Employment Type**: Full-time, part-time, or contract status
+- **Department**: For departmental payroll grouping
+- **Tax Information**: Basic tax identification for withholdings
+
+### Attendance Data
+- **Hours Worked**: Total hours from attendance records
+- **Regular vs. Overtime Hours**: Differentiation with appropriate rates
+- **Attendance Exceptions**: Absences, late arrivals with impact on pay
+- **Pay Period Definition**: Clear start/end dates (monthly as specified)
+
+## 2. Core Calculation Functions
+
+### Basic Pay Computation
+- **Gross Pay Formula**: Hourly rate × Hours worked
+- **Decimal Precision**: Proper handling of financial calculations
+- **Currency Formatting**: All values in Kenyan Shillings (KES)
+
+### Deductions Processing
+- **EWA Withdrawals**: Track and deduct advances taken during pay period
+- **Tax Calculations**: Basic Kenyan tax withholding
+- **Other Deductions**: Standard deductions like benefits or loans
+
+### Net Pay Determination
+- **Final Calculation**: Gross pay - All deductions = Net pay
+- **Payment Distribution**: How remaining funds will be disbursed
+
+## 3. Visualization & Reporting
+
+### Payroll Dashboard
+- **Employee Listing**: With hourly rate, hours worked, and calculated pay
+- **Summary View**: Total payroll amount by department
+- **Comparison Tools**: Current vs previous pay periods
+
+### Export Functionality
+- **XLSX Generation**: Complete payroll spreadsheet for finance
+- **Individual Pay Slips**: For each employee showing calculation breakdown
+- **Department Summaries**: Aggregated reports by team
+
+## 4. Demo-Specific Requirements
+
+### For Trufoods Thursday Demo
+- **Sample Data**: Realistic employee profiles with varying rates and hours
+- **EWA Impact Demonstration**: Clear before/after showing how advances affect final pay
+- **Interactive Calculations**: Ability to adjust hours or rates to show recalculation
+- **Export Preview**: Functioning XLSX export with proper formatting
+
+### Implementation Considerations
+- Financial calculations must handle decimal precision appropriately
+- Currency should be consistently formatted as KES
+- Payroll reports should be clearly organized and exportable
+- System must maintain historical payroll records for reference
+
+This payroll calculation module will serve as a critical demonstration of how the Jahazii system integrates attendance tracking with earned wage access while providing comprehensive payroll management capabilities.

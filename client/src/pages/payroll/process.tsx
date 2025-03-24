@@ -1272,9 +1272,9 @@ export default function ProcessPayrollPage() {
                 </CardHeader>
                 <CardContent className="space-y-4">
                   {validationIssues.length > 0 ? (
-                    <div className="border border-amber-200 bg-amber-50 dark:bg-amber-900/10 p-4 rounded-md">
-                      <h4 className="text-sm font-medium text-amber-800 dark:text-amber-300 flex items-center mb-3">
-                        <AlertTriangle className="h-4 w-4 mr-1" />
+                    <div className="border p-4 rounded-md">
+                      <h4 className="text-sm font-medium flex items-center mb-3">
+                        <AlertTriangle className="h-4 w-4 mr-1 text-amber-600" />
                         Validation Issues ({validationIssues.length})
                       </h4>
                       
@@ -1282,13 +1282,13 @@ export default function ProcessPayrollPage() {
                         {validationIssues.map((issue, index) => {
                           const employee = employeeData.find(emp => emp.id === issue.employeeId);
                           return (
-                            <div key={index} className="flex p-2 bg-white dark:bg-amber-900/20 rounded-md border border-amber-100 dark:border-amber-800/50">
+                            <div key={index} className="flex p-2 bg-card rounded-md border">
                               <div className="p-2 bg-amber-100 dark:bg-amber-800/40 rounded-full mr-3">
-                                <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-300" />
+                                <AlertTriangle className="h-4 w-4 text-amber-600" />
                               </div>
                               <div>
                                 <h5 className="font-medium text-sm">{employee?.name}</h5>
-                                <p className="text-xs text-amber-700 dark:text-amber-400">{issue.issue}</p>
+                                <p className="text-xs text-muted-foreground">{issue.issue}</p>
                                 <div className="mt-1 flex space-x-2">
                                   <Button variant="outline" size="sm" className="h-7 text-xs px-2 py-0">
                                     Fix Issue
@@ -1303,33 +1303,33 @@ export default function ProcessPayrollPage() {
                         })}
                       </div>
                       
-                      <div className="mt-4 pt-3 border-t border-amber-200 dark:border-amber-800/70">
-                        <p className="text-xs text-amber-700 dark:text-amber-400 flex items-center">
-                          <AlertTriangle className="h-3 w-3 mr-1" />
+                      <div className="mt-4 pt-3 border-t">
+                        <p className="text-xs text-muted-foreground flex items-center">
+                          <AlertTriangle className="h-3 w-3 mr-1 text-amber-600" />
                           These issues may affect payroll accuracy. Consider fixing them before proceeding.
                         </p>
                       </div>
                     </div>
                   ) : (
-                    <div className="border border-green-200 bg-green-50 dark:bg-green-900/10 p-5 rounded-md">
+                    <div className="border p-5 rounded-md">
                       <div className="flex justify-center">
                         <div className="rounded-full bg-green-100 dark:bg-green-800/40 p-3 mb-4">
                           <CheckCircle className="h-8 w-8 text-green-600 dark:text-green-300" />
                         </div>
                       </div>
-                      <h4 className="text-center text-green-800 dark:text-green-300 font-medium mb-2">All Employees Validated</h4>
-                      <p className="text-center text-sm text-green-700 dark:text-green-400">
+                      <h4 className="text-center font-medium mb-2">All Employees Validated</h4>
+                      <p className="text-center text-sm text-muted-foreground">
                         {eligibleEmployeeCount} employees are ready to have their payroll calculated.
                       </p>
                     </div>
                   )}
                   
-                  <div className="bg-blue-50 dark:bg-blue-900/10 p-4 rounded-md border border-blue-200 dark:border-blue-800/50">
-                    <h4 className="text-sm font-medium text-blue-800 dark:text-blue-300 mb-2 flex items-center">
-                      <FileText className="h-4 w-4 mr-1" />
+                  <div className="p-4 rounded-md border">
+                    <h4 className="text-sm font-medium mb-2 flex items-center">
+                      <FileText className="h-4 w-4 mr-1 text-primary" />
                       Processing Information
                     </h4>
-                    <ul className="text-sm space-y-1.5 text-blue-700 dark:text-blue-400">
+                    <ul className="text-sm space-y-1.5 text-muted-foreground">
                       <li className="flex items-center">
                         <Circle className="h-1.5 w-1.5 mr-2" />
                         {eligibleEmployeeCount} employees selected for calculation
@@ -1562,52 +1562,52 @@ export default function ProcessPayrollPage() {
           
           {/* Summary Cards */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <Card className="bg-blue-50 border-blue-200 dark:bg-blue-900/20 dark:border-blue-800">
+            <Card>
               <CardContent className="pt-6">
                 <div className="flex items-center justify-between mb-2">
-                  <span className="text-blue-800 dark:text-blue-300 text-sm font-medium">Total Gross Pay</span>
-                  <DollarSign className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                  <span className="text-sm font-medium">Total Gross Pay</span>
+                  <DollarSign className="h-4 w-4 text-primary" />
                 </div>
                 <div className="flex flex-col space-y-1">
-                  <span className="text-2xl font-bold text-blue-900 dark:text-blue-100">{formatKES(payrollSummary.totalGrossPay)}</span>
-                  <span className="text-xs text-blue-700 dark:text-blue-400">
+                  <span className="text-2xl font-bold">{formatKES(payrollSummary.totalGrossPay)}</span>
+                  <span className="text-xs text-muted-foreground">
                     Before deductions and taxes
                   </span>
                 </div>
               </CardContent>
             </Card>
             
-            <Card className="bg-emerald-50 border-emerald-200 dark:bg-emerald-900/20 dark:border-emerald-800">
+            <Card>
               <CardContent className="pt-6">
                 <div className="flex items-center justify-between mb-2">
-                  <span className="text-emerald-800 dark:text-emerald-300 text-sm font-medium">Total Net Pay</span>
-                  <DollarSign className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                  <span className="text-sm font-medium">Total Net Pay</span>
+                  <DollarSign className="h-4 w-4 text-primary" />
                 </div>
                 <div className="flex flex-col space-y-1">
-                  <span className="text-2xl font-bold text-emerald-900 dark:text-emerald-100">{formatKES(payrollSummary.totalNetPay)}</span>
-                  <span className={`text-xs ${payrollSummary.previousPeriodComparison >= 0 ? 'text-emerald-700 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
+                  <span className="text-2xl font-bold">{formatKES(payrollSummary.totalNetPay)}</span>
+                  <span className={`text-xs text-muted-foreground`}>
                     {payrollSummary.previousPeriodComparison >= 0 ? '↑' : '↓'} {Math.abs(payrollSummary.previousPeriodComparison).toFixed(1)}% from previous
                   </span>
                 </div>
               </CardContent>
             </Card>
             
-            <Card className="bg-amber-50 border-amber-200 dark:bg-amber-900/20 dark:border-amber-800">
+            <Card>
               <CardContent className="pt-6">
                 <div className="flex items-center justify-between mb-2">
-                  <span className="text-amber-800 dark:text-amber-300 text-sm font-medium">EWA Withdrawals</span>
-                  <DollarSign className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+                  <span className="text-sm font-medium">EWA Withdrawals</span>
+                  <DollarSign className="h-4 w-4 text-primary" />
                 </div>
                 <div className="flex flex-col space-y-1">
-                  <span className="text-2xl font-bold text-amber-900 dark:text-amber-100">{formatKES(payrollSummary.totalEwaDeductions)}</span>
+                  <span className="text-2xl font-bold">{formatKES(payrollSummary.totalEwaDeductions)}</span>
                   <div className="flex items-center space-x-1">
                     <div className="w-[50px] bg-muted rounded-full h-1.5">
                       <div 
-                        className="bg-amber-500 dark:bg-amber-600 h-1.5 rounded-full" 
+                        className="bg-primary h-1.5 rounded-full" 
                         style={{ width: `${(payrollSummary.totalEwaDeductions / payrollSummary.totalGrossPay * 100)}%` }}
                       ></div>
                     </div>
-                    <span className="text-xs text-amber-700 dark:text-amber-400">
+                    <span className="text-xs text-muted-foreground">
                       {(payrollSummary.totalEwaDeductions / payrollSummary.totalGrossPay * 100).toFixed(1)}% of gross
                     </span>
                   </div>
@@ -1615,18 +1615,18 @@ export default function ProcessPayrollPage() {
               </CardContent>
             </Card>
             
-            <Card className="bg-purple-50 border-purple-200 dark:bg-purple-900/20 dark:border-purple-800">
+            <Card>
               <CardContent className="pt-6">
                 <div className="flex items-center justify-between mb-2">
-                  <span className="text-purple-800 dark:text-purple-300 text-sm font-medium">Employees</span>
-                  <Users className="h-4 w-4 text-purple-600 dark:text-purple-400" />
+                  <span className="text-sm font-medium">Employees</span>
+                  <Users className="h-4 w-4 text-primary" />
                 </div>
                 <div className="flex flex-col space-y-1">
                   <div className="flex items-baseline">
-                    <span className="text-2xl font-bold text-purple-900 dark:text-purple-100">{payrollSummary.employeeCount}</span>
-                    <span className="text-sm ml-1 text-purple-600 dark:text-purple-400">processed</span>
+                    <span className="text-2xl font-bold">{payrollSummary.employeeCount}</span>
+                    <span className="text-sm ml-1 text-muted-foreground">processed</span>
                   </div>
-                  <span className="text-xs text-purple-700 dark:text-purple-400">
+                  <span className="text-xs text-muted-foreground">
                     {payrollCalculations.filter(calc => calc.status === 'complete').length} complete, {
                       payrollCalculations.filter(calc => calc.status !== 'complete').length} with issues
                   </span>

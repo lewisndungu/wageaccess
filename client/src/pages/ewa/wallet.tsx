@@ -336,16 +336,23 @@ export default function WalletPage() {
                         <div>
                           <p className="text-sm text-muted-foreground">Funding Source</p>
                           <div className="mt-2">
-                            <div className="w-full bg-gray-200 rounded-full h-2.5">
+                            <div className="w-full bg-gray-200 rounded-full h-2.5 overflow-hidden flex">
                               <div 
-                                className="bg-blue-600 h-2.5 rounded-full" 
+                                className="bg-blue-600 h-2.5" 
                                 style={{ width: `${Math.min(100, wallet.employerFundsUtilization)}%` }}
+                              ></div>
+                              <div 
+                                className="bg-teal-600 h-2.5" 
+                                style={{ width: `${Math.max(0, 100 - Math.min(100, wallet.employerFundsUtilization))}%` }}
                               ></div>
                             </div>
                             <div className="flex justify-between mt-1">
-                              <span className="text-xs text-muted-foreground">Employer</span>
-                              <span className="text-xs text-muted-foreground">Jahazii</span>
+                              <span className="text-xs text-blue-700 font-medium">{wallet.employerFundsUtilization}% Employer</span>
+                              <span className="text-xs text-teal-700 font-medium">{100 - Math.min(100, wallet.employerFundsUtilization)}% Jahazii</span>
                             </div>
+                            <p className="text-xs text-muted-foreground mt-1">
+                              Current ratio of employer to Jahazii funding
+                            </p>
                           </div>
                         </div>
                       </div>
@@ -359,7 +366,8 @@ export default function WalletPage() {
                 <p className="mb-1">
                   <span className="font-medium text-foreground">Dual Funding System: </span>
                   Each employee can access up to {formatCurrency(wallet.perEmployeeCap)} from employer funds. When employer funds are 
-                  depleted or exceed the cap, Jahazii provides additional funding with a small processing fee.
+                  depleted or exceed the cap, Jahazii provides additional funding with a small processing fee. Employers can only top up
+                  their own wallet balance, while Jahazii manages their balance separately.
                 </p>
                 <p className="mb-1">
                   <span className="font-medium text-foreground">Cap Management: </span>
@@ -568,9 +576,16 @@ export default function WalletPage() {
                 <div className="flex items-center">
                   <span className="font-medium">Employer First, Jahazii Backup</span>
                 </div>
-                <p className="text-xs text-muted-foreground">
-                  Employer funds are used first, up to the per-employee cap
-                </p>
+                <div className="mt-2">
+                  <div className="flex items-center gap-2 mb-1">
+                    <div className="w-4 h-4 rounded-sm bg-blue-500"></div>
+                    <span className="text-xs">Employer funds (used first, max {formatCurrency(wallet.perEmployeeCap)} per employee)</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="w-4 h-4 rounded-sm bg-teal-500"></div>
+                    <span className="text-xs">Jahazii funds (used when employer funds depleted or exceed cap)</span>
+                  </div>
+                </div>
               </div>
               
               <div className="space-y-1">

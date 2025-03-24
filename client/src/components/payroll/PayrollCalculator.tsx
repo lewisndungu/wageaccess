@@ -86,7 +86,7 @@ export function PayrollCalculator({ onSave }: PayrollCalculatorProps) {
   });
   
   // Fetch EWA withdrawals
-  const { data: ewaWithdrawals } = useQuery({
+  const { data: ewaWithdrawals, isLoading: isLoadingEwa } = useQuery({
     queryKey: ['/api/ewa/withdrawals', employeeId, payPeriod.startDate, payPeriod.endDate],
     queryFn: async () => {
       if (!employeeId) return [];
@@ -96,6 +96,22 @@ export function PayrollCalculator({ onSave }: PayrollCalculatorProps) {
         );
       } catch (error) {
         console.error("Error fetching EWA withdrawals:", error);
+        return [];
+      }
+    },
+    enabled: !!employeeId,
+    initialData: [],
+  });
+  
+  // Fetch employee loans
+  const { data: employeeLoans, isLoading: isLoadingLoans } = useQuery({
+    queryKey: ['/api/loans', employeeId],
+    queryFn: async () => {
+      if (!employeeId) return [];
+      try {
+        return await apiRequest('GET', `/api/loans?employeeId=${employeeId}&active=true`);
+      } catch (error) {
+        console.error("Error fetching employee loans:", error);
         return [];
       }
     },
@@ -115,6 +131,19 @@ export function PayrollCalculator({ onSave }: PayrollCalculatorProps) {
       setEwaDeductions(0);
     }
   }, [ewaWithdrawals]);
+  
+  // Calculate total loan deductions
+  useEffect(() => {
+    if (employeeLoans && employeeLoans.length > 0) {
+      const totalLoans = employeeLoans.reduce((total, loan) => {
+        return total + Number(loan.monthlyPayment || 0);
+      }, 0);
+      
+      setLoanDeductions(totalLoans);
+    } else {
+      setLoanDeductions(0);
+    }
+  }, [employeeLoans]);
   
   // Get selected employee
   const selectedEmployee = employeeId
@@ -531,6 +560,68 @@ export function PayrollCalculator({ onSave }: PayrollCalculatorProps) {
                 <div>
                   <p className="text-muted-foreground">Overtime Hours</p>
                   <p className="font-medium">{attendanceData.overtimeHours.toFixed(1)}</p>
+                </div>
+              </div>
+            </div>
+          )}
+          
+          {/* EWA Deductions Card */}
+          {ewaWithdrawals && ewaWithdrawals.length > 0 && (
+            <div className="border p-3 rounded-md bg-amber-50 dark:bg-amber-950/30">
+              <h3 className="text-sm font-medium flex items-center mb-2">
+                <svg className="mr-2 h-4 w-4 text-amber-600 dark:text-amber-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
+                </svg>
+                EWA Deductions
+              </h3>
+              <div className="space-y-2">
+                <div className="flex justify-between pb-2 border-b border-amber-200 dark:border-amber-800">
+                  <span className="text-sm font-medium">Date</span>
+                  <span className="text-sm font-medium">Amount</span>
+                </div>
+                {ewaWithdrawals.map((withdrawal: any, index: number) => (
+                  <div key={index} className="flex justify-between text-sm">
+                    <span>{new Date(withdrawal.requestDate).toLocaleDateString()}</span>
+                    <span className="font-medium">
+                      KES {Number(withdrawal.amount).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}
+                    </span>
+                  </div>
+                ))}
+                <div className="flex justify-between pt-2 border-t border-amber-200 dark:border-amber-800 font-medium">
+                  <span>Total EWA Deduction</span>
+                  <span>KES {ewaDeductions.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>
+                </div>
+              </div>
+            </div>
+          )}
+          
+          {/* Loan Deductions Card */}
+          {employeeLoans && employeeLoans.length > 0 && (
+            <div className="border p-3 rounded-md bg-purple-50 dark:bg-purple-950/30">
+              <h3 className="text-sm font-medium flex items-center mb-2">
+                <svg className="mr-2 h-4 w-4 text-purple-600 dark:text-purple-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="2" y="6" width="20" height="12" rx="2" />
+                  <circle cx="12" cy="12" r="2" />
+                  <path d="M6 12h.01M18 12h.01" />
+                </svg>
+                Loan Deductions
+              </h3>
+              <div className="space-y-2">
+                <div className="flex justify-between pb-2 border-b border-purple-200 dark:border-purple-800">
+                  <span className="text-sm font-medium">Loan Type</span>
+                  <span className="text-sm font-medium">Monthly Payment</span>
+                </div>
+                {employeeLoans.map((loan: any, index: number) => (
+                  <div key={index} className="flex justify-between text-sm">
+                    <span>{loan.type || "Standard Loan"}</span>
+                    <span className="font-medium">
+                      KES {Number(loan.monthlyPayment).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}
+                    </span>
+                  </div>
+                ))}
+                <div className="flex justify-between pt-2 border-t border-purple-200 dark:border-purple-800 font-medium">
+                  <span>Total Loan Deduction</span>
+                  <span>KES {loanDeductions.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>
                 </div>
               </div>
             </div>

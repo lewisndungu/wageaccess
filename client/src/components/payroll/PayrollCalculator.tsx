@@ -138,11 +138,11 @@ export function PayrollCalculator({ onSave }: PayrollCalculatorProps) {
         }
       } catch (error) {
         console.error("Error fetching employee details:", error);
-        // Fall back to mock data
-        const mockSalary = 50000 + (parseInt(employeeId) * 10000);
-        setBasicSalary(mockSalary);
-        setAllowances(mockSalary * 0.15); // 15% of basic salary as allowances
-        setHourlyRate(Math.round(mockSalary / 176)); // 176 work hours per month
+        toast({
+          title: "Error",
+          description: "Failed to fetch employee details. Please try again.",
+          variant: "destructive"
+        });
       }
     }
     

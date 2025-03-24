@@ -19,6 +19,7 @@ interface WalletTransaction {
   date: string;
   amount: number;
   type: string;
+  fundingSource: "employer" | "jahazii";
   description: string;
   status: string;
 }
@@ -30,7 +31,16 @@ export default function WalletPage() {
   
   const { data: wallet, refetch: refetchWallet } = useQuery({
     queryKey: ['/api/wallet'],
-    initialData: { balance: walletData.balance },
+    initialData: { 
+      employerBalance: walletData.employerBalance,
+      jahaziiBalance: walletData.jahaziiBalance,
+      totalBalance: walletData.totalBalance,
+      perEmployeeCap: walletData.perEmployeeCap,
+      activeEmployees: walletData.activeEmployees,
+      pendingRequests: walletData.pendingRequests,
+      pendingAmount: walletData.pendingAmount,
+      employerFundsUtilization: walletData.employerFundsUtilization
+    },
   });
   
   const { data: transactions } = useQuery<WalletTransaction[]>({
@@ -98,12 +108,26 @@ export default function WalletPage() {
       },
     },
     {
+      accessorKey: "fundingSource",
+      header: "Source",
+      cell: ({ row }) => {
+        const source = row.original.fundingSource;
+        return (
+          <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${
+            source === 'employer' ? 'bg-blue-100 text-blue-800' : 'bg-teal-100 text-teal-800'
+          }`}>
+            {source === 'employer' ? 'Employer' : 'Jahazii'}
+          </span>
+        );
+      },
+    },
+    {
       accessorKey: "type",
       header: "Type",
       cell: ({ row }) => {
         const type = row.original.type;
         return (
-          <span className="capitalize">{type && typeof type === 'string' ? type.replace("_", " ") : type}</span>
+          <span className="capitalize">{type && typeof type === 'string' ? type.replace(/_/g, " ") : type}</span>
         );
       },
     },
@@ -112,8 +136,18 @@ export default function WalletPage() {
       header: "Status",
       cell: ({ row }) => {
         const status = row.original.status;
+        const getStatusClass = (status: string) => {
+          switch (status.toLowerCase()) {
+            case 'completed': return 'bg-green-100 text-green-800';
+            case 'pending': return 'bg-yellow-100 text-yellow-800';
+            case 'failed': return 'bg-red-100 text-red-800';
+            default: return 'bg-gray-100 text-gray-800';
+          }
+        };
         return (
-          <span className="capitalize">{status || 'unknown'}</span>
+          <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${getStatusClass(status)}`}>
+            {status || 'unknown'}
+          </span>
         );
       },
     },
@@ -200,10 +234,53 @@ export default function WalletPage() {
               <CardDescription>Manage your employer wallet for earned wage access</CardDescription>
             </CardHeader>
             <CardContent className="p-6">
-              <div className="flex flex-col md:flex-row md:items-center justify-between">
-                <div className="mb-4 md:mb-0">
-                  <p className="text-sm text-muted-foreground">Current Balance</p>
-                  <p className="text-4xl font-bold">{formatCurrency(wallet.balance)}</p>
+              <div className="space-y-6">
+                <div className="flex flex-col md:flex-row md:items-center justify-between">
+                  <div className="mb-4 md:mb-0">
+                    <p className="text-sm text-muted-foreground">Total Balance</p>
+                    <p className="text-4xl font-bold">{formatCurrency(wallet.totalBalance)}</p>
+                    <div className="mt-2 flex items-center">
+                      <span className="text-sm text-muted-foreground">
+                        Per Employee Cap: {formatCurrency(wallet.perEmployeeCap)}
+                      </span>
+                    </div>
+                  </div>
+                  
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <Card className="shadow-sm bg-muted/40">
+                      <CardContent className="p-4">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="text-sm text-muted-foreground">Employer Funds</p>
+                            <p className="text-lg font-semibold">{formatCurrency(wallet.employerBalance)}</p>
+                            <p className="text-xs text-muted-foreground mt-1">Utilization: {wallet.employerFundsUtilization}%</p>
+                          </div>
+                          <div className="p-2 bg-blue-100 rounded-full">
+                            <svg className="w-5 h-5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                            </svg>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                    
+                    <Card className="shadow-sm bg-muted/40">
+                      <CardContent className="p-4">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="text-sm text-muted-foreground">Jahazii Funds</p>
+                            <p className="text-lg font-semibold">{formatCurrency(wallet.jahaziiBalance)}</p>
+                            <p className="text-xs text-muted-foreground mt-1">{wallet.activeEmployees} active employees</p>
+                          </div>
+                          <div className="p-2 bg-teal-100 rounded-full">
+                            <svg className="w-5 h-5 text-teal-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"></path>
+                            </svg>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </div>
                 </div>
                 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -211,12 +288,13 @@ export default function WalletPage() {
                     <CardContent className="p-4">
                       <div className="flex items-center justify-between">
                         <div>
-                          <p className="text-sm text-muted-foreground">Disbursed (MTD)</p>
-                          <p className="text-lg font-semibold">{formatCurrency(45000)}</p>
+                          <p className="text-sm text-muted-foreground">Pending Requests</p>
+                          <p className="text-lg font-semibold">{wallet.pendingRequests}</p>
+                          <p className="text-xs text-muted-foreground mt-1">{formatCurrency(wallet.pendingAmount)}</p>
                         </div>
-                        <div className="p-2 bg-orange-100 rounded-full">
-                          <svg className="w-5 h-5 text-orange-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                        <div className="p-2 bg-yellow-100 rounded-full">
+                          <svg className="w-5 h-5 text-yellow-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
                           </svg>
                         </div>
                       </div>
@@ -227,13 +305,19 @@ export default function WalletPage() {
                     <CardContent className="p-4">
                       <div className="flex items-center justify-between">
                         <div>
-                          <p className="text-sm text-muted-foreground">Pending Requests</p>
-                          <p className="text-lg font-semibold">{formatCurrency(30000)}</p>
-                        </div>
-                        <div className="p-2 bg-blue-100 rounded-full">
-                          <svg className="w-5 h-5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-                          </svg>
+                          <p className="text-sm text-muted-foreground">Funding Source</p>
+                          <div className="mt-2">
+                            <div className="w-full bg-gray-200 rounded-full h-2.5">
+                              <div 
+                                className="bg-blue-600 h-2.5 rounded-full" 
+                                style={{ width: `${Math.min(100, wallet.employerFundsUtilization)}%` }}
+                              ></div>
+                            </div>
+                            <div className="flex justify-between mt-1">
+                              <span className="text-xs text-muted-foreground">Employer</span>
+                              <span className="text-xs text-muted-foreground">Jahazii</span>
+                            </div>
+                          </div>
                         </div>
                       </div>
                     </CardContent>
@@ -244,8 +328,13 @@ export default function WalletPage() {
             <CardFooter className="bg-muted/30 px-6 py-4 border-t">
               <div className="text-sm text-muted-foreground">
                 <p className="mb-1">
-                  <span className="font-medium text-foreground">How it works: </span>
-                  EWA transactions are free when your wallet has sufficient funds. When your wallet is empty, Jahazii will advance funds to your employees.
+                  <span className="font-medium text-foreground">Dual Funding System: </span>
+                  Each employee can access up to {formatCurrency(wallet.perEmployeeCap)} from employer funds. When employer funds are 
+                  depleted or exceed the cap, Jahazii provides additional funding with a small processing fee.
+                </p>
+                <p className="mb-1">
+                  <span className="font-medium text-foreground">Cap Management: </span>
+                  The per-employee cap applies to the total outstanding advances per employee at any given time.
                 </p>
                 <p>
                   <Link to="/ewa">
@@ -273,6 +362,8 @@ export default function WalletPage() {
               <Tabs defaultValue="all">
                 <TabsList className="mb-4">
                   <TabsTrigger value="all">All Transactions</TabsTrigger>
+                  <TabsTrigger value="employer">Employer Funds</TabsTrigger>
+                  <TabsTrigger value="jahazii">Jahazii Funds</TabsTrigger>
                   <TabsTrigger value="topup">Top-ups</TabsTrigger>
                   <TabsTrigger value="ewa">EWA Disbursements</TabsTrigger>
                 </TabsList>
@@ -281,17 +372,39 @@ export default function WalletPage() {
                   <DataTable columns={columns} data={transactions} />
                 </TabsContent>
                 
+                <TabsContent value="employer" className="mt-0">
+                  <DataTable 
+                    columns={columns} 
+                    data={transactions.filter((t: WalletTransaction) => 
+                      t.fundingSource === 'employer'
+                    )} 
+                  />
+                </TabsContent>
+                
+                <TabsContent value="jahazii" className="mt-0">
+                  <DataTable 
+                    columns={columns} 
+                    data={transactions.filter((t: WalletTransaction) => 
+                      t.fundingSource === 'jahazii'
+                    )} 
+                  />
+                </TabsContent>
+                
                 <TabsContent value="topup" className="mt-0">
                   <DataTable 
                     columns={columns} 
-                    data={transactions.filter(t => t.type === 'topup')} 
+                    data={transactions.filter((t: WalletTransaction) => 
+                      t.type === 'employer_topup' || t.type === 'jahazii_topup'
+                    )} 
                   />
                 </TabsContent>
                 
                 <TabsContent value="ewa" className="mt-0">
                   <DataTable 
                     columns={columns} 
-                    data={transactions.filter(t => t.type === 'ewa_disbursement')} 
+                    data={transactions.filter((t: WalletTransaction) => 
+                      t.type === 'employer_disbursement' || t.type === 'jahazii_disbursement'
+                    )} 
                   />
                 </TabsContent>
               </Tabs>
@@ -336,7 +449,7 @@ export default function WalletPage() {
           
           <Card className="shadow-glass dark:shadow-glass-dark">
             <CardHeader>
-              <CardTitle>Wallet Information</CardTitle>
+              <CardTitle>Wallet Settings</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-1">
@@ -350,8 +463,23 @@ export default function WalletPage() {
               </div>
               
               <div className="space-y-1">
-                <p className="text-sm text-muted-foreground">Created On</p>
-                <p className="font-medium">January 15, 2023</p>
+                <p className="text-sm text-muted-foreground">Per-Employee Cap</p>
+                <div className="flex items-center justify-between">
+                  <p className="font-medium">{formatCurrency(wallet.perEmployeeCap)}</p>
+                  <Button variant="ghost" size="sm" className="h-8 px-2 text-xs">
+                    <span className="mr-1">Edit</span>
+                  </Button>
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <p className="text-sm text-muted-foreground">Funding Priority</p>
+                <div className="flex items-center">
+                  <span className="font-medium">Employer First, Jahazii Backup</span>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Employer funds are used first, up to the per-employee cap
+                </p>
               </div>
               
               <div className="space-y-1">
@@ -363,7 +491,7 @@ export default function WalletPage() {
               </div>
             </CardContent>
             <CardFooter className="border-t px-6 py-4">
-              <Button variant="outline" className="w-full">View Wallet Settings</Button>
+              <Button variant="outline" className="w-full">Manage Wallet Settings</Button>
             </CardFooter>
           </Card>
           

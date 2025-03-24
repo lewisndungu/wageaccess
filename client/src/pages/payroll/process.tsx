@@ -42,6 +42,7 @@ import {
   FileSpreadsheet,
   FileText,
   Filter,
+  FilterX,
   CheckCircle,
   XCircle,
   Clock,
@@ -1382,43 +1383,101 @@ export default function ProcessPayrollPage() {
       
       {currentStage === STAGES.REVIEW && (
         <div className="space-y-8">
+          {/* Header and Status Summary */}
+          <div className="bg-gradient-to-r from-blue-500/10 to-blue-600/5 border border-blue-100 dark:border-blue-900/50 rounded-lg p-6">
+            <div className="flex flex-col md:flex-row justify-between items-center space-y-4 md:space-y-0">
+              <div>
+                <h2 className="text-xl font-bold flex items-center">
+                  <CheckCircle className="h-5 w-5 mr-2 text-green-500" />
+                  Payroll Calculation Complete
+                </h2>
+                <p className="text-muted-foreground mt-1">
+                  Review the payroll data before finalizing for the period {formatDate(payPeriod.startDate)} - {formatDate(payPeriod.endDate)}
+                </p>
+              </div>
+              <div className="flex space-x-2">
+                <Button variant="outline" size="sm">
+                  <FileSpreadsheet className="h-4 w-4 mr-2" />
+                  Export Preview
+                </Button>
+                <Button variant="outline" size="sm">
+                  <RefreshCw className="h-4 w-4 mr-2" />
+                  Recalculate
+                </Button>
+              </div>
+            </div>
+          </div>
+          
           {/* Summary Cards */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <Card>
+            <Card className="bg-blue-50 border-blue-200 dark:bg-blue-900/20 dark:border-blue-800">
               <CardContent className="pt-6">
-                <div className="flex flex-col space-y-1.5">
-                  <span className="text-muted-foreground text-sm">Total Gross Pay</span>
-                  <span className="text-2xl font-bold">{formatKES(payrollSummary.totalGrossPay)}</span>
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-blue-800 dark:text-blue-300 text-sm font-medium">Total Gross Pay</span>
+                  <DollarSign className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                </div>
+                <div className="flex flex-col space-y-1">
+                  <span className="text-2xl font-bold text-blue-900 dark:text-blue-100">{formatKES(payrollSummary.totalGrossPay)}</span>
+                  <span className="text-xs text-blue-700 dark:text-blue-400">
+                    Before deductions and taxes
+                  </span>
                 </div>
               </CardContent>
             </Card>
-            <Card>
+            
+            <Card className="bg-emerald-50 border-emerald-200 dark:bg-emerald-900/20 dark:border-emerald-800">
               <CardContent className="pt-6">
-                <div className="flex flex-col space-y-1.5">
-                  <span className="text-muted-foreground text-sm">Total Net Pay</span>
-                  <span className="text-2xl font-bold">{formatKES(payrollSummary.totalNetPay)}</span>
-                  <span className={`text-xs ${payrollSummary.previousPeriodComparison >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-emerald-800 dark:text-emerald-300 text-sm font-medium">Total Net Pay</span>
+                  <DollarSign className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                </div>
+                <div className="flex flex-col space-y-1">
+                  <span className="text-2xl font-bold text-emerald-900 dark:text-emerald-100">{formatKES(payrollSummary.totalNetPay)}</span>
+                  <span className={`text-xs ${payrollSummary.previousPeriodComparison >= 0 ? 'text-emerald-700 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
                     {payrollSummary.previousPeriodComparison >= 0 ? '↑' : '↓'} {Math.abs(payrollSummary.previousPeriodComparison).toFixed(1)}% from previous
                   </span>
                 </div>
               </CardContent>
             </Card>
-            <Card>
+            
+            <Card className="bg-amber-50 border-amber-200 dark:bg-amber-900/20 dark:border-amber-800">
               <CardContent className="pt-6">
-                <div className="flex flex-col space-y-1.5">
-                  <span className="text-muted-foreground text-sm">Total EWA Withdrawals</span>
-                  <span className="text-2xl font-bold">{formatKES(payrollSummary.totalEwaDeductions)}</span>
-                  <span className="text-xs text-muted-foreground">
-                    {(payrollSummary.totalEwaDeductions / payrollSummary.totalGrossPay * 100).toFixed(1)}% of gross pay
-                  </span>
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-amber-800 dark:text-amber-300 text-sm font-medium">EWA Withdrawals</span>
+                  <DollarSign className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+                </div>
+                <div className="flex flex-col space-y-1">
+                  <span className="text-2xl font-bold text-amber-900 dark:text-amber-100">{formatKES(payrollSummary.totalEwaDeductions)}</span>
+                  <div className="flex items-center space-x-1">
+                    <div className="w-[50px] bg-muted rounded-full h-1.5">
+                      <div 
+                        className="bg-amber-500 dark:bg-amber-600 h-1.5 rounded-full" 
+                        style={{ width: `${(payrollSummary.totalEwaDeductions / payrollSummary.totalGrossPay * 100)}%` }}
+                      ></div>
+                    </div>
+                    <span className="text-xs text-amber-700 dark:text-amber-400">
+                      {(payrollSummary.totalEwaDeductions / payrollSummary.totalGrossPay * 100).toFixed(1)}% of gross
+                    </span>
+                  </div>
                 </div>
               </CardContent>
             </Card>
-            <Card>
+            
+            <Card className="bg-purple-50 border-purple-200 dark:bg-purple-900/20 dark:border-purple-800">
               <CardContent className="pt-6">
-                <div className="flex flex-col space-y-1.5">
-                  <span className="text-muted-foreground text-sm">Employees Processed</span>
-                  <span className="text-2xl font-bold">{payrollSummary.employeeCount}</span>
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-purple-800 dark:text-purple-300 text-sm font-medium">Employees</span>
+                  <Users className="h-4 w-4 text-purple-600 dark:text-purple-400" />
+                </div>
+                <div className="flex flex-col space-y-1">
+                  <div className="flex items-baseline">
+                    <span className="text-2xl font-bold text-purple-900 dark:text-purple-100">{payrollSummary.employeeCount}</span>
+                    <span className="text-sm ml-1 text-purple-600 dark:text-purple-400">processed</span>
+                  </div>
+                  <span className="text-xs text-purple-700 dark:text-purple-400">
+                    {payrollCalculations.filter(calc => calc.status === 'complete').length} complete, {
+                      payrollCalculations.filter(calc => calc.status !== 'complete').length} with issues
+                  </span>
                 </div>
               </CardContent>
             </Card>
@@ -1426,30 +1485,44 @@ export default function ProcessPayrollPage() {
           
           {/* Department Breakdown */}
           <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center">
+            <CardHeader className="pb-2">
+              <CardTitle className="flex items-center text-base">
                 <Building className="mr-2 h-5 w-5" />
                 Department Breakdown
               </CardTitle>
               <CardDescription>
-                Payroll distribution across departments
+                Payroll distribution by department
               </CardDescription>
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
-                {payrollSummary.departmentSummary.map((dept) => (
+                {payrollSummary.departmentSummary.map((dept, index) => (
                   <div key={dept.department} className="space-y-1">
-                    <div className="flex justify-between items-center">
-                      <span className="font-medium">{dept.department}</span>
-                      <span>{formatKES(dept.totalAmount)}</span>
-                    </div>
-                    <div className="flex justify-between text-xs text-muted-foreground">
-                      <span>{dept.employeeCount} employees</span>
-                      <span>{dept.percentageOfTotal.toFixed(1)}% of total</span>
+                    <div className="flex justify-between text-sm">
+                      <span className="flex items-center">
+                        <div className={`w-2 h-2 rounded-full mr-2 ${
+                          index === 0 ? "bg-blue-500" :
+                          index === 1 ? "bg-green-500" :
+                          index === 2 ? "bg-purple-500" :
+                          index === 3 ? "bg-yellow-500" :
+                          index === 4 ? "bg-red-500" : "bg-orange-500"
+                        }`}></div>
+                        {dept.department}
+                      </span>
+                      <div className="flex space-x-4">
+                        <span className="text-muted-foreground text-xs">{dept.employeeCount} employees</span>
+                        <span className="font-medium">{formatKES(dept.totalAmount)}</span>
+                      </div>
                     </div>
                     <div className="w-full bg-muted rounded-full h-2">
                       <div 
-                        className="bg-primary h-2 rounded-full" 
+                        className={`${
+                          index === 0 ? "bg-blue-500" :
+                          index === 1 ? "bg-green-500" :
+                          index === 2 ? "bg-purple-500" :
+                          index === 3 ? "bg-yellow-500" :
+                          index === 4 ? "bg-red-500" : "bg-orange-500"
+                        } h-2 rounded-full`}
                         style={{ width: `${dept.percentageOfTotal}%` }}
                       ></div>
                     </div>
@@ -1461,26 +1534,120 @@ export default function ProcessPayrollPage() {
           
           {/* Employee-Level Review Table */}
           <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center">
-                <BarChart className="mr-2 h-5 w-5" />
-                Employee Payroll Details
-              </CardTitle>
-              <CardDescription>
-                Review and adjust individual employee payroll calculations
-              </CardDescription>
+            <CardHeader className="pb-3">
+              <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                <div>
+                  <CardTitle className="flex items-center text-base">
+                    <Users className="mr-2 h-5 w-5" />
+                    Employee Payroll Details
+                  </CardTitle>
+                  <CardDescription>
+                    Review and adjust individual employee calculations before finalizing
+                  </CardDescription>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <div className="relative w-full md:w-64">
+                    <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      placeholder="Search employees..."
+                      className="pl-8 w-full"
+                      value={(columnFilters.find(f => f.id === 'name')?.value as string) || ''}
+                      onChange={(e) => {
+                        const value = e.target.value;
+                        setColumnFilters(prev => {
+                          const filtered = prev.filter(filter => filter.id !== 'name');
+                          if (value) {
+                            return [...filtered, { id: 'name', value }];
+                          }
+                          return filtered;
+                        });
+                      }}
+                    />
+                  </div>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="outline" size="sm" className="h-9">
+                        <Filter className="h-3.5 w-3.5 mr-1" />
+                        View
+                        <ChevronDown className="h-3.5 w-3.5 ml-1 opacity-70" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="w-48">
+                      <DropdownMenuLabel>Toggle Columns</DropdownMenuLabel>
+                      <DropdownMenuSeparator />
+                      {columns
+                        .filter(column => column.accessorKey !== 'id' && column.id !== "actions")
+                        .map(column => (
+                          <DropdownMenuCheckboxItem
+                            key={column.id}
+                            checked={columnVisibility[column.id as string]}
+                            onCheckedChange={(value) =>
+                              setColumnVisibility(prev => ({
+                                ...prev,
+                                [column.id as string]: value,
+                              }))
+                            }
+                          >
+                            {column.header as string}
+                          </DropdownMenuCheckboxItem>
+                        ))}
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem onClick={() => {
+                        setColumnFilters([]);
+                      }}>
+                        <FilterX className="h-3.5 w-3.5 mr-2" />
+                        Clear Filters
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </div>
+              </div>
             </CardHeader>
             <CardContent>
-              <DataTable
-                columns={columns}
-                data={payrollCalculations}
-                sorting={sorting}
-                setSorting={setSorting}
-                columnFilters={columnFilters}
-                setColumnFilters={setColumnFilters}
-                columnVisibility={columnVisibility}
-                setColumnVisibility={setColumnVisibility}
-              />
+              <div className="rounded-md border">
+                <DataTable
+                  columns={columns}
+                  data={payrollCalculations}
+                  searchColumn="name"
+                  onRowClick={(employee) => handleViewDetails(employee as EmployeePayrollCalculation)}
+                />
+              </div>
+              
+              <div className="flex items-center justify-between mt-4">
+                <div>
+                  <p className="text-sm text-muted-foreground">
+                    Showing <span className="font-medium">{payrollCalculations.length}</span> employees 
+                    with <span className="font-medium">{payrollCalculations.filter(e => e.status === 'warning' || e.status === 'error').length}</span> warnings/errors
+                  </p>
+                </div>
+                <div className="flex space-x-2">
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    onClick={() => {
+                      // Filter to show only employees with warnings or errors
+                      const hasIssues = payrollCalculations.filter(emp => emp.status !== 'complete');
+                      if (hasIssues.length > 0) {
+                        setColumnFilters(prev => {
+                          const filtered = prev.filter(filter => filter.id !== 'status');
+                          return [...filtered, { id: 'status', value: ['warning', 'error'] }];
+                        });
+                      }
+                    }}
+                  >
+                    <AlertTriangle className="h-3.5 w-3.5 mr-1 text-amber-500" />
+                    Show Issues Only
+                  </Button>
+                  <Button 
+                    variant="outline" 
+                    size="sm"
+                    onClick={() => setColumnFilters([])}
+                  >
+                    <Users className="h-3.5 w-3.5 mr-1" />
+                    Show All
+                  </Button>
+                </div>
+              </div>
             </CardContent>
           </Card>
           

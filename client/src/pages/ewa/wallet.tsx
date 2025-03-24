@@ -45,7 +45,7 @@ export default function WalletPage() {
   
   const { data: transactions } = useQuery<WalletTransaction[]>({
     queryKey: ['/api/wallet/transactions'],
-    initialData: walletData.transactions,
+    initialData: walletData.transactions as WalletTransaction[],
   });
   
   const handleTopUp = async () => {

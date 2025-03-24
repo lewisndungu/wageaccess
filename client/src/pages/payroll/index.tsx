@@ -150,7 +150,7 @@ export default function PayrollPage() {
             <Download className="mr-2 h-4 w-4" />
             Export
           </Button>
-          <Button onClick={() => setIsProcessingDialogOpen(true)} className="flex items-center">
+          <Button onClick={() => navigate('/payroll/process')} className="flex items-center">
             <FileSpreadsheet className="mr-2 h-4 w-4" />
             Process Payroll
           </Button>
@@ -316,6 +316,14 @@ export default function PayrollPage() {
               <CardTitle>Quick Actions</CardTitle>
             </CardHeader>
             <CardContent className="space-y-2">
+              <Button 
+                variant="outline" 
+                className="w-full justify-start"
+                onClick={() => navigate('/payroll/process')}
+              >
+                <FileSpreadsheet className="mr-2 h-4 w-4" />
+                Process New Payroll
+              </Button>
               <Button variant="outline" className="w-full justify-start">
                 <FileSpreadsheet className="mr-2 h-4 w-4" />
                 Export Payroll Sheet

@@ -1,0 +1,97 @@
+# Process Payroll Page - User Workflow & Interface Requirements
+
+## Page Purpose
+The Process Payroll page is a dedicated operational interface where HR professionals/employers execute the complete payroll processing workflow from calculation to finalization and export.
+
+## User Workflow Steps
+
+### Step 1: Initial Setup
+- **Pay Period Selection**
+  - Clear date range selector (e.g., "March 1-31, 2025")
+  - Option to select standard periods (Current Month, Previous Month)
+  - Visual confirmation of selected period
+
+- **Processing Scope**
+  - Options to process All Employees or filter by Department
+  - Employee count indicator showing how many records will be processed
+  - Option to exclude specific employees if needed
+
+### Step 2: Payroll Calculation
+- **Prominent "Calculate Payroll" Button**
+  - Clear loading state during calculation
+  - Progress indicator for large employee sets
+  
+- **Pre-Calculation Validation**
+  - System checks for missing attendance records
+  - Verification of all hourly rates and employee details
+  - Warning for any employees with incomplete data
+
+### Step 3: Review & Adjustments
+- **Summary Results Display**
+  - Total amount to be paid in KES
+  - Breakdown by department
+  - Comparison with previous pay period (% change)
+
+- **Employee-Level Review Table**
+  - Sortable list of all employees with calculated amounts
+  - Clear columns showing:
+    * Employee details (ID, name, department)
+    * Hours worked (regular and overtime)
+    * Gross pay calculation
+    * EWA withdrawals during period
+    * Other deductions (taxes, benefits)
+    * Final net pay
+  
+- **Adjustment Controls**
+  - Ability to edit individual employee calculations
+  - Manual override option with reason field
+  - Recalculation button to update after changes
+
+### Step 4: Finalization & Export
+- **Preview Option**
+  - Generate preview of payroll reports without finalizing
+  - Quick scan view of how exports will appear
+  
+- **Finalize Payroll Button**
+  - Clear confirmation dialog explaining implications
+  - Option to add notes for the payroll period
+  - Success confirmation after processing
+  
+- **Export Controls**
+  - XLSX export for finance department
+  - Individual pay slip generation
+  - Department summary reports
+  - Option to email outputs to specified recipients
+
+## Key Interface Elements
+
+### Action Panel
+- **Process Status Tracker**
+  - Visual steps indicator (Setup → Calculate → Review → Finalize)
+  - Clear indication of current stage
+  - Ability to navigate between completed stages
+
+- **Action Buttons**
+  - Color-coded by importance (primary: Calculate/Finalize)
+  - Logical positioning following the workflow
+  - Confirmation for critical actions
+
+### Data Visualization
+- **Summary Cards**
+  - Total payroll amount prominently displayed
+  - EWA impact visualization (amount and percentage of total)
+  - Employee coverage statistics
+
+- **Validation Indicators**
+  - Color-coded status for each employee record
+  - Warning icons for records requiring attention
+  - Success indicators for verified calculations
+
+## Specific Features for Trufoods Demo
+- Fully functional calculation based on actual attendance data
+- Clear demonstration of how EWA withdrawals affect final pay
+- Working export functionality generating professional XLSX files
+- Department breakdown showing labor costs across the organization
+- Ability to make quick adjustments and see recalculation in real-time
+
+This page should feel like a powerful yet intuitive control center for payroll operations, allowing HR/employers to confidently process payments while clearly understanding all calculations and deductions.

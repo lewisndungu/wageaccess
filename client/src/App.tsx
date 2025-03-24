@@ -14,6 +14,7 @@ import AttendancePage from "@/pages/attendance/index";
 import SelfLogPage from "@/pages/attendance/self-log";
 import PayrollPage from "@/pages/payroll/index";
 import PayrollDetailPage from "@/pages/payroll/detail";
+import ProcessPayrollPage from "@/pages/payroll/process";
 import EWAPage from "@/pages/ewa/index";
 import WalletPage from "@/pages/ewa/wallet";
 import EWAAnalyticsPage from "@/pages/ewa/analytics";
@@ -86,6 +87,7 @@ function AppRoutes() {
       <Route path="/attendance" element={<AttendancePage />} />
       <Route path="/attendance/self-log" element={<SelfLogPage />} />
       <Route path="/payroll" element={<PayrollPage />} />
+      <Route path="/payroll/process" element={<ProcessPayrollPage />} />
       <Route path="/payroll/:id" element={<PayrollDetailPage />} />
       <Route path="/ewa" element={<EWAPage />} />
       <Route path="/ewa/wallet" element={<WalletPage />} />

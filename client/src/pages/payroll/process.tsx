@@ -10,6 +10,15 @@ import { Badge } from "@/components/ui/badge";
 import { DataTable } from "@/components/ui/data-table";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Switch } from "@/components/ui/switch";
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { 
   ColumnDef, 
   ColumnFiltersState,
@@ -1576,7 +1585,7 @@ export default function ProcessPayrollPage() {
                       <DropdownMenuLabel>Toggle Columns</DropdownMenuLabel>
                       <DropdownMenuSeparator />
                       {columns
-                        .filter(column => column.accessorKey !== 'id' && column.id !== "actions")
+                        .filter(column => column.id !== 'id' && column.id !== "actions")
                         .map(column => (
                           <DropdownMenuCheckboxItem
                             key={column.id}
@@ -1588,7 +1597,7 @@ export default function ProcessPayrollPage() {
                               }))
                             }
                           >
-                            {column.header as string}
+                            {typeof column.header === 'string' ? column.header : column.id}
                           </DropdownMenuCheckboxItem>
                         ))}
                       <DropdownMenuSeparator />
@@ -1605,12 +1614,14 @@ export default function ProcessPayrollPage() {
             </CardHeader>
             <CardContent>
               <div className="rounded-md border">
-                <DataTable
-                  columns={columns}
-                  data={payrollCalculations}
-                  searchColumn="name"
-                  onRowClick={(employee) => handleViewDetails(employee as EmployeePayrollCalculation)}
-                />
+                <div className="overflow-hidden">
+                  <DataTable
+                    columns={columns}
+                    data={payrollCalculations}
+                    searchColumn="name"
+                    onRowClick={(employee) => handleViewDetails(employee as EmployeePayrollCalculation)}
+                  />
+                </div>
               </div>
               
               <div className="flex items-center justify-between mt-4">

@@ -8,6 +8,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { DataTable } from "@/components/ui/data-table";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Switch } from "@/components/ui/switch";
 import { 
   ColumnDef, 
   ColumnFiltersState,
@@ -51,6 +53,7 @@ import {
   AlertTriangle,
   Circle,
   RefreshCw,
+  Search,
 } from "lucide-react";
 import { 
   calculatePAYE, 
@@ -737,6 +740,76 @@ export default function ProcessPayrollPage() {
       {/* Stage Content */}
       {currentStage === STAGES.SETUP && (
         <div className="space-y-8">
+          {/* Summary Preview Cards */}
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <Card className="bg-blue-50 border-blue-200 dark:bg-blue-900/20 dark:border-blue-800">
+              <CardContent className="pt-6">
+                <div className="flex flex-col space-y-1">
+                  <span className="text-xs font-medium text-blue-800 dark:text-blue-300">Pay Period</span>
+                  <div className="flex items-center">
+                    <CalendarDays className="h-4 w-4 mr-2 text-blue-600 dark:text-blue-400" />
+                    <span className="text-sm font-semibold text-blue-900 dark:text-blue-100">
+                      {formatDate(payPeriod.startDate)} - {formatDate(payPeriod.endDate)}
+                    </span>
+                  </div>
+                  <span className="text-xs text-blue-700 dark:text-blue-400">
+                    {(() => {
+                      const start = new Date(payPeriod.startDate);
+                      const end = new Date(payPeriod.endDate);
+                      const days = Math.round((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
+                      return `${days} days period`;
+                    })()}
+                  </span>
+                </div>
+              </CardContent>
+            </Card>
+            
+            <Card className="bg-emerald-50 border-emerald-200 dark:bg-emerald-900/20 dark:border-emerald-800">
+              <CardContent className="pt-6">
+                <div className="flex flex-col space-y-1">
+                  <span className="text-xs font-medium text-emerald-800 dark:text-emerald-300">Eligible Employees</span>
+                  <div className="flex items-center">
+                    <Users className="h-4 w-4 mr-2 text-emerald-600 dark:text-emerald-400" />
+                    <span className="text-lg font-bold text-emerald-900 dark:text-emerald-100">{eligibleEmployeeCount}</span>
+                  </div>
+                  <span className="text-xs text-emerald-700 dark:text-emerald-400">
+                    From {employeeData.length} total employees
+                  </span>
+                </div>
+              </CardContent>
+            </Card>
+            
+            <Card className="bg-amber-50 border-amber-200 dark:bg-amber-900/20 dark:border-amber-800">
+              <CardContent className="pt-6">
+                <div className="flex flex-col space-y-1">
+                  <span className="text-xs font-medium text-amber-800 dark:text-amber-300">Estimated Processing</span>
+                  <div className="flex items-center">
+                    <Clock className="h-4 w-4 mr-2 text-amber-600 dark:text-amber-400" />
+                    <span className="text-lg font-bold text-amber-900 dark:text-amber-100">~{Math.round(eligibleEmployeeCount * 0.5)} minutes</span>
+                  </div>
+                  <span className="text-xs text-amber-700 dark:text-amber-400">
+                    Based on employee count and complexity
+                  </span>
+                </div>
+              </CardContent>
+            </Card>
+            
+            <Card className="bg-purple-50 border-purple-200 dark:bg-purple-900/20 dark:border-purple-800">
+              <CardContent className="pt-6">
+                <div className="flex flex-col space-y-1">
+                  <span className="text-xs font-medium text-purple-800 dark:text-purple-300">Previous Payroll</span>
+                  <div className="flex items-center">
+                    <FileText className="h-4 w-4 mr-2 text-purple-600 dark:text-purple-400" />
+                    <span className="text-sm font-semibold text-purple-900 dark:text-purple-100">Feb 1 - Feb 28, 2025</span>
+                  </div>
+                  <span className="text-xs text-purple-700 dark:text-purple-400">
+                    Last processed on March 1, 2025
+                  </span>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+          
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
             {/* Pay Period Selection */}
             <Card>
@@ -752,7 +825,7 @@ export default function ProcessPayrollPage() {
               <CardContent className="space-y-4">
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <Label htmlFor="start-date">Start Date</Label>
+                    <Label htmlFor="start-date">Start Date <span className="text-xs text-muted-foreground">(YYYY-MM-DD)</span></Label>
                     <Input
                       id="start-date"
                       type="date"
@@ -761,7 +834,7 @@ export default function ProcessPayrollPage() {
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="end-date">End Date</Label>
+                    <Label htmlFor="end-date">End Date <span className="text-xs text-muted-foreground">(YYYY-MM-DD)</span></Label>
                     <Input
                       id="end-date"
                       type="date"
@@ -775,15 +848,40 @@ export default function ProcessPayrollPage() {
                   <Button 
                     variant="outline" 
                     onClick={() => handlePeriodSelection('current')}
+                    title="March 1 - March 31, 2025"
                   >
                     Current Month
                   </Button>
                   <Button 
                     variant="outline" 
                     onClick={() => handlePeriodSelection('previous')}
+                    title="February 1 - February 28, 2025"
                   >
                     Previous Month
                   </Button>
+                </div>
+                
+                <div className="mt-2 p-3 bg-blue-50 border border-blue-200 rounded-md dark:bg-blue-900/20 dark:border-blue-800">
+                  <h4 className="text-sm font-medium text-blue-700 dark:text-blue-300 flex items-center">
+                    <svg className="h-4 w-4 mr-1" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <circle cx="12" cy="12" r="10"></circle>
+                      <path d="M12 8v4M12 16h.01"></path>
+                    </svg>
+                    Period Information
+                  </h4>
+                  <p className="text-xs text-blue-600 dark:text-blue-400 mt-1">
+                    This pay period contains approximately {(() => {
+                      const start = new Date(payPeriod.startDate);
+                      const end = new Date(payPeriod.endDate);
+                      // Count only weekdays (Monday-Friday)
+                      let workdays = 0;
+                      for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+                        const day = d.getDay();
+                        if (day !== 0 && day !== 6) workdays++;
+                      }
+                      return workdays;
+                    })()} working days.
+                  </p>
                 </div>
               </CardContent>
             </Card>
@@ -800,41 +898,77 @@ export default function ProcessPayrollPage() {
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="department">Department Filter</Label>
-                  <Select 
-                    value={selectedDepartment} 
-                    onValueChange={setSelectedDepartment}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select department" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All Departments</SelectItem>
-                      {departmentData.map((dept: any) => (
-                        <SelectItem key={dept.id} value={dept.name}>
-                          {dept.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                
-                <div className="mt-4">
-                  <div className="flex justify-between items-center mb-2">
-                    <h4 className="text-sm font-medium">Employees ({eligibleEmployeeCount})</h4>
-                    {excludedEmployees.length > 0 && (
-                      <Button 
-                        variant="ghost" 
-                        size="sm"
-                        onClick={() => setExcludedEmployees([])}
-                      >
-                        Clear Exclusions
-                      </Button>
-                    )}
+                {/* Search and Department Filter */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="department">Department Filter</Label>
+                    <Select 
+                      value={selectedDepartment} 
+                      onValueChange={setSelectedDepartment}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select department" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Departments ({employeeData.length})</SelectItem>
+                        {departmentData.map((dept: any) => {
+                          const deptEmployeeCount = employees.filter(emp => emp.department === dept.name).length;
+                          return (
+                            <SelectItem key={dept.id} value={dept.name}>
+                              {dept.name} ({deptEmployeeCount})
+                            </SelectItem>
+                          );
+                        })}
+                      </SelectContent>
+                    </Select>
                   </div>
                   
-                  <div className="border rounded-md h-[200px] overflow-y-auto p-2">
+                  <div className="space-y-2">
+                    <Label htmlFor="employee-search">Search Employee</Label>
+                    <div className="relative">
+                      <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+                      <Input 
+                        id="employee-search" 
+                        placeholder="Name or ID" 
+                        className="pl-8"
+                      />
+                    </div>
+                  </div>
+                </div>
+                
+                {/* Employee Selection */}
+                <div className="mt-4">
+                  <div className="flex justify-between items-center mb-2">
+                    <div className="flex items-center space-x-2">
+                      <h4 className="text-sm font-medium">Employees ({eligibleEmployeeCount})</h4>
+                      <Badge variant="outline" className="text-xs">
+                        {excludedEmployees.length} excluded
+                      </Badge>
+                    </div>
+                    
+                    <div className="flex space-x-2">
+                      <Button 
+                        variant="outline" 
+                        size="sm"
+                        onClick={() => setExcludedEmployees([])}
+                        className="text-xs h-7"
+                        disabled={excludedEmployees.length === 0}
+                      >
+                        Select All
+                      </Button>
+                      <Button 
+                        variant="outline" 
+                        size="sm"
+                        onClick={() => setExcludedEmployees(employeeData.map(emp => emp.id))}
+                        className="text-xs h-7"
+                        disabled={excludedEmployees.length === employeeData.length}
+                      >
+                        Deselect All
+                      </Button>
+                    </div>
+                  </div>
+                  
+                  <div className="border rounded-md h-[280px] overflow-y-auto p-2 bg-card/20">
                     {isLoadingEmployees ? (
                       <div className="flex justify-center items-center h-full">
                         <div className="flex items-center">
@@ -846,13 +980,29 @@ export default function ProcessPayrollPage() {
                         </div>
                       </div>
                     ) : employeeData.length === 0 ? (
-                      <div className="flex justify-center items-center h-full text-muted-foreground">
-                        No employees found
+                      <div className="flex flex-col justify-center items-center h-full text-center p-4">
+                        <Users className="h-10 w-10 text-muted-foreground mb-2 opacity-20" />
+                        <h3 className="font-medium text-muted-foreground">No employees found</h3>
+                        <p className="text-xs text-muted-foreground/70 mt-1 max-w-[250px]">
+                          There are no employees in the selected department or matching your search criteria.
+                        </p>
+                        <Button 
+                          variant="link" 
+                          size="sm" 
+                          className="mt-2"
+                        >
+                          Add New Employee
+                        </Button>
                       </div>
                     ) : (
-                      <div className="space-y-2">
+                      <div className="space-y-1">
                         {employeeData.map((employee: any) => (
-                          <div key={employee.id} className="flex items-center space-x-2">
+                          <div 
+                            key={employee.id} 
+                            className={`flex items-center space-x-2 p-2 rounded-md ${
+                              !excludedEmployees.includes(employee.id) ? 'bg-blue-50 dark:bg-blue-900/20' : ''
+                            }`}
+                          >
                             <Checkbox 
                               id={`exclude-${employee.id}`}
                               checked={!excludedEmployees.includes(employee.id)}
@@ -860,31 +1010,115 @@ export default function ProcessPayrollPage() {
                                 toggleEmployeeExclusion(employee.id);
                               }}
                             />
+                            <Avatar className="h-6 w-6">
+                              <AvatarFallback className="text-xs">
+                                {employee.name.split(' ').map((n: string) => n[0]).join('')}
+                              </AvatarFallback>
+                            </Avatar>
                             <label
                               htmlFor={`exclude-${employee.id}`}
-                              className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                              className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 flex-1"
                             >
-                              {employee.name} - {employee.position}
+                              {employee.name}
+                              <span className="text-xs text-muted-foreground ml-1">
+                                ({employee.employeeNumber})
+                              </span>
                             </label>
+                            <Badge variant="outline" className="text-xs">
+                              {employee.department}
+                            </Badge>
                           </div>
                         ))}
                       </div>
                     )}
+                  </div>
+                  
+                  {/* Employee selection helper text */}
+                  <div className="mt-2">
+                    <p className="text-xs text-muted-foreground">
+                      Selecting an employee will include them in payroll calculations. Employees missing
+                      attendance records or with incomplete profiles may trigger validation warnings in the next step.
+                    </p>
                   </div>
                 </div>
               </CardContent>
             </Card>
           </div>
           
-          <div className="flex justify-end">
-            <Button 
-              size="lg"
-              onClick={() => setCurrentStage(STAGES.CALCULATE)}
-              disabled={eligibleEmployeeCount === 0}
-            >
-              <Calculator className="mr-2 h-5 w-5" />
-              Proceed to Calculation
-            </Button>
+          {/* Additional Options and Action Buttons */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-sm">Payroll Options</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <Label htmlFor="include-ewa" className="flex items-center">
+                      <span>Include EWA Deductions</span>
+                      <span className="ml-1 text-xs text-blue-600">(?)</span>
+                    </Label>
+                    <Switch id="include-ewa" defaultChecked={true} />
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <Label htmlFor="auto-tax" className="flex items-center">
+                      <span>Auto-Calculate Taxes</span>
+                    </Label>
+                    <Switch id="auto-tax" defaultChecked={true} />
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <Label htmlFor="save-template">
+                      <span>Save as Template</span>
+                    </Label>
+                    <Switch id="save-template" />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+            
+            <Card className="md:col-span-2">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-sm">Validation Status</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="bg-green-50 p-3 rounded-md border border-green-200 dark:bg-green-900/20 dark:border-green-900">
+                    <h4 className="text-sm font-medium text-green-800 dark:text-green-300 flex items-center">
+                      <CheckCircle className="h-4 w-4 mr-1 text-green-600" />
+                      Ready to Process
+                    </h4>
+                    <p className="text-xs text-green-700 dark:text-green-400 mt-1">
+                      {eligibleEmployeeCount} employees selected for processing
+                    </p>
+                  </div>
+                  
+                  <div className="p-3 rounded-md border border-muted bg-card/20">
+                    <h4 className="text-sm font-medium text-muted-foreground flex items-center">
+                      <Clock className="h-4 w-4 mr-1 text-muted-foreground" />
+                      Processing Time
+                    </h4>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Estimated ~{Math.round(eligibleEmployeeCount * 0.5)} minutes to complete
+                    </p>
+                  </div>
+                </div>
+                
+                <div className="flex justify-between mt-4">
+                  <Button variant="outline">
+                    Save for Later
+                  </Button>
+                  
+                  <Button 
+                    size="lg"
+                    onClick={() => setCurrentStage(STAGES.CALCULATE)}
+                    disabled={eligibleEmployeeCount === 0}
+                  >
+                    <Calculator className="mr-2 h-5 w-5" />
+                    Proceed to Calculation
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
           </div>
         </div>
       )}

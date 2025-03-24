@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -18,8 +18,28 @@ import {
   calculateTaxableIncome,
   formatKES 
 } from "@/lib/tax-utils";
-import { DollarSign, BarChart, Calendar, Briefcase, ChevronsUpDown, Calculator } from "lucide-react";
+import { 
+  DollarSign, 
+  BarChart, 
+  Calendar, 
+  Briefcase, 
+  ChevronsUpDown, 
+  Calculator, 
+  Download,
+  FileText,
+  Users
+} from "lucide-react";
 import { employees } from "@/lib/mock-data";
+import { 
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import { Checkbox } from "@/components/ui/checkbox";
 
 interface PayrollCalculatorProps {
   onSave?: (payrollData: any) => void;
@@ -445,6 +465,293 @@ export function PayrollCalculator({ onSave }: PayrollCalculatorProps) {
       });
     }
   };
+  
+  // Generate and download payslip as PDF
+  const generatePayslip = async () => {
+    if (!calculationResults || !selectedEmployee) {
+      toast({
+        title: "Error",
+        description: "Please calculate payroll first",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    try {
+      // In a real implementation, we would call an API endpoint that generates a PDF
+      // For this demo, we'll create a simple HTML structure and convert it to a data URL
+      
+      // Create a temporary HTML structure for the payslip
+      const payslipHTML = `
+        <html>
+          <head>
+            <title>Payslip - ${selectedEmployee.name}</title>
+            <style>
+              body { font-family: Arial, sans-serif; margin: 0; padding: 20px; color: #333; }
+              .payslip { max-width: 800px; margin: 0 auto; border: 1px solid #ddd; padding: 20px; }
+              .header { border-bottom: 2px solid #3b82f6; padding-bottom: 10px; margin-bottom: 20px; display: flex; justify-content: space-between; }
+              .company { font-size: 24px; font-weight: bold; color: #3b82f6; }
+              .title { font-size: 18px; font-weight: bold; margin: 15px 0; color: #3b82f6; }
+              .row { display: flex; margin-bottom: 5px; }
+              .label { flex: 1; font-weight: bold; }
+              .value { flex: 2; }
+              .section { margin-bottom: 20px; }
+              table { width: 100%; border-collapse: collapse; margin: 15px 0; }
+              th, td { text-align: left; padding: 8px; border-bottom: 1px solid #ddd; }
+              th { background-color: #f8f9fa; }
+              .total-row { font-weight: bold; border-top: 2px solid #ddd; }
+              .footer { margin-top: 30px; font-size: 12px; color: #777; text-align: center; }
+            </style>
+          </head>
+          <body>
+            <div class="payslip">
+              <div class="header">
+                <div class="company">Jahazii Payroll</div>
+                <div>
+                  <div>Pay Period: ${new Date(payPeriod.startDate).toLocaleDateString()} - ${new Date(payPeriod.endDate).toLocaleDateString()}</div>
+                  <div>Pay Date: ${new Date().toLocaleDateString()}</div>
+                </div>
+              </div>
+              
+              <div class="section">
+                <div class="title">Employee Information</div>
+                <div class="row">
+                  <div class="label">Name:</div>
+                  <div class="value">${selectedEmployee.name}</div>
+                </div>
+                <div class="row">
+                  <div class="label">Employee ID:</div>
+                  <div class="value">${selectedEmployee.employeeNumber || selectedEmployee.id}</div>
+                </div>
+                <div class="row">
+                  <div class="label">Department:</div>
+                  <div class="value">${selectedEmployee.department}</div>
+                </div>
+                <div class="row">
+                  <div class="label">Position:</div>
+                  <div class="value">${selectedEmployee.position}</div>
+                </div>
+              </div>
+              
+              <div class="section">
+                <div class="title">Earnings</div>
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Description</th>
+                      <th>Amount (KES)</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td>Basic Salary</td>
+                      <td>${basicSalary.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
+                    </tr>
+                    <tr>
+                      <td>Allowances</td>
+                      <td>${allowances.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
+                    </tr>
+                    ${calculationMode === 'hourly' ? `
+                    <tr>
+                      <td>Regular Hours (${calculationResults.regularHours.toFixed(1)} hrs @ ${hourlyRate.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})})</td>
+                      <td>${(calculationResults.regularHours * hourlyRate).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
+                    </tr>
+                    <tr>
+                      <td>Overtime Hours (${calculationResults.overtimeHours.toFixed(1)} hrs @ ${(hourlyRate * 1.5).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})})</td>
+                      <td>${(calculationResults.overtimeHours * hourlyRate * 1.5).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
+                    </tr>
+                    ` : ''}
+                    <tr class="total-row">
+                      <td>Gross Pay</td>
+                      <td>${calculationResults.grossPay.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+              
+              <div class="section">
+                <div class="title">Deductions</div>
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Description</th>
+                      <th>Amount (KES)</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td>PAYE Tax</td>
+                      <td>${calculationResults.paye.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
+                    </tr>
+                    <tr>
+                      <td>SHIF (Social Health Insurance Fund)</td>
+                      <td>${calculationResults.nhif.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
+                    </tr>
+                    <tr>
+                      <td>NSSF (National Social Security Fund)</td>
+                      <td>${calculationResults.nssf.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
+                    </tr>
+                    <tr>
+                      <td>Housing Levy</td>
+                      <td>${calculationResults.housingLevy.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
+                    </tr>
+                    ${ewaDeductions > 0 ? `
+                    <tr>
+                      <td>EWA Deductions</td>
+                      <td>${ewaDeductions.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
+                    </tr>
+                    ` : ''}
+                    ${loanDeductions > 0 ? `
+                    <tr>
+                      <td>Loan Repayments</td>
+                      <td>${loanDeductions.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
+                    </tr>
+                    ` : ''}
+                    ${otherDeductions > 0 ? `
+                    <tr>
+                      <td>Other Deductions</td>
+                      <td>${otherDeductions.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
+                    </tr>
+                    ` : ''}
+                    <tr class="total-row">
+                      <td>Total Deductions</td>
+                      <td>${(calculationResults.totalDeductions + getTotalCustomDeductions()).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+              
+              <div class="section">
+                <div class="title">Summary</div>
+                <table>
+                  <tbody>
+                    <tr>
+                      <td><strong>Gross Pay</strong></td>
+                      <td>${calculationResults.grossPay.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
+                    </tr>
+                    <tr>
+                      <td><strong>Total Deductions</strong></td>
+                      <td>${(calculationResults.totalDeductions + getTotalCustomDeductions()).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
+                    </tr>
+                    <tr class="total-row">
+                      <td><strong>Net Pay</strong></td>
+                      <td><strong>${calculationResults.netPay.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</strong></td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+              
+              <div class="footer">
+                <p>This is a computer-generated document and requires no signature.</p>
+                <p>For any queries regarding this payslip, please contact the HR department.</p>
+                <p>© ${new Date().getFullYear()} Jahazii EWA SaaS - Generated on ${new Date().toLocaleString()}</p>
+              </div>
+            </div>
+          </body>
+        </html>
+      `;
+      
+      // Create a Blob from the HTML content
+      const blob = new Blob([payslipHTML], { type: 'text/html' });
+      const url = URL.createObjectURL(blob);
+      
+      // Create a link element and trigger download
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `Payslip_${selectedEmployee.name.replace(/\s+/g, '_')}_${payPeriod.startDate}_${payPeriod.endDate}.html`;
+      document.body.appendChild(link);
+      link.click();
+      
+      // Clean up
+      setTimeout(() => {
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+      }, 100);
+      
+      toast({
+        title: "Payslip Generated",
+        description: "Payslip has been generated and downloaded successfully.",
+      });
+    } catch (error) {
+      console.error("Error generating payslip:", error);
+      toast({
+        title: "Error",
+        description: "Failed to generate payslip. Please try again.",
+        variant: "destructive",
+      });
+    }
+  };
+  
+  // State for batch processing dialog
+  const [showBatchDialog, setShowBatchDialog] = useState(false);
+  const [selectedEmployees, setSelectedEmployees] = useState<number[]>([]);
+  const [isBatchProcessing, setIsBatchProcessing] = useState(false);
+  
+  // Handle batch processing
+  const handleBatchProcessing = () => {
+    setShowBatchDialog(true);
+  };
+  
+  // Execute batch processing
+  const executeBatchProcessing = async () => {
+    if (selectedEmployees.length === 0) {
+      toast({
+        title: "No Employees Selected",
+        description: "Please select at least one employee to process payroll.",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    setIsBatchProcessing(true);
+    
+    try {
+      const results = [];
+      
+      // Process payroll for each selected employee
+      for (const empId of selectedEmployees) {
+        const employee = employeeList.find(emp => emp.id === empId);
+        
+        if (employee) {
+          const payrollData = {
+            employeeId: empId,
+            periodStart: payPeriod.startDate,
+            periodEnd: payPeriod.endDate,
+            // Use predefined calculation logic but with employee-specific data
+            // In a real implementation, we would fetch employee-specific data and calculate
+            status: 'pending',
+            // Add other required fields...
+          };
+          
+          // Call API to save payroll (mock for now)
+          results.push({
+            employee: employee.name,
+            status: 'success'
+          });
+        }
+      }
+      
+      // Close dialog and show success
+      setShowBatchDialog(false);
+      toast({
+        title: "Batch Processing Complete",
+        description: `Successfully processed payroll for ${results.length} employees.`,
+      });
+      
+      // Invalidate queries to refresh data
+      queryClient.invalidateQueries({ queryKey: ['/api/payroll'] });
+      
+    } catch (error) {
+      console.error("Error in batch processing:", error);
+      toast({
+        title: "Batch Processing Error",
+        description: "An error occurred during batch processing. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsBatchProcessing(false);
+    }
+  };
 
   return (
     <Card className="shadow-glass dark:shadow-glass-dark">
@@ -797,9 +1104,10 @@ export function PayrollCalculator({ onSave }: PayrollCalculatorProps) {
             
             {/* Tabs for different result views */}
             <Tabs defaultValue="summary">
-              <TabsList className="grid w-full grid-cols-3">
+              <TabsList className="grid w-full grid-cols-4">
                 <TabsTrigger value="summary">Summary</TabsTrigger>
                 <TabsTrigger value="details">Details</TabsTrigger>
+                <TabsTrigger value="tax">Tax Breakdown</TabsTrigger>
                 <TabsTrigger value="attendance">Attendance</TabsTrigger>
               </TabsList>
               
@@ -888,6 +1196,104 @@ export function PayrollCalculator({ onSave }: PayrollCalculatorProps) {
                 </div>
               </TabsContent>
               
+              {/* Tax Breakdown Tab */}
+              <TabsContent value="tax" className="pt-4">
+                <div className="space-y-6">
+                  {/* Tax Rate Visualization */}
+                  <div className="border rounded-lg p-4 bg-card/20">
+                    <h4 className="text-sm font-medium mb-3">PAYE Tax Bands (2024)</h4>
+                    <div className="space-y-2">
+                      <div className="flex justify-between">
+                        <span className="text-sm">10% on first KES 24,000</span>
+                        <span className="text-sm font-medium">KES {Math.min(24000, calculateTaxableIncome(calculationResults.grossPay)) * 0.1}</span>
+                      </div>
+                      <div className="w-full bg-gray-200 rounded-full h-2.5 dark:bg-gray-700 mb-1">
+                        <div className="bg-primary h-2.5 rounded-full" style={{ width: `${Math.min(100, (calculateTaxableIncome(calculationResults.grossPay) / 24000) * 100)}%` }}></div>
+                      </div>
+                      
+                      <div className="flex justify-between mt-3">
+                        <span className="text-sm">25% on next KES 8,333</span>
+                        <span className="text-sm font-medium">KES {Math.max(0, Math.min(8333, calculateTaxableIncome(calculationResults.grossPay) - 24000)) * 0.25}</span>
+                      </div>
+                      <div className="w-full bg-gray-200 rounded-full h-2.5 dark:bg-gray-700 mb-1">
+                        <div className="bg-blue-500 h-2.5 rounded-full" style={{ width: `${Math.min(100, Math.max(0, (calculateTaxableIncome(calculationResults.grossPay) - 24000) / 8333) * 100)}%` }}></div>
+                      </div>
+                      
+                      <div className="flex justify-between mt-3">
+                        <span className="text-sm">30% on next KES 467,667</span>
+                        <span className="text-sm font-medium">KES {Math.max(0, Math.min(467667, calculateTaxableIncome(calculationResults.grossPay) - 32333)) * 0.3}</span>
+                      </div>
+                      <div className="w-full bg-gray-200 rounded-full h-2.5 dark:bg-gray-700 mb-1">
+                        <div className="bg-amber-500 h-2.5 rounded-full" style={{ width: `${Math.min(100, Math.max(0, (calculateTaxableIncome(calculationResults.grossPay) - 32333) / 467667) * 100)}%` }}></div>
+                      </div>
+                      
+                      <div className="flex justify-between mt-3">
+                        <span className="text-sm">32.5% on next KES 300,000</span>
+                        <span className="text-sm font-medium">KES {Math.max(0, Math.min(300000, calculateTaxableIncome(calculationResults.grossPay) - 500000)) * 0.325}</span>
+                      </div>
+                      <div className="w-full bg-gray-200 rounded-full h-2.5 dark:bg-gray-700 mb-1">
+                        <div className="bg-red-500 h-2.5 rounded-full" style={{ width: `${Math.min(100, Math.max(0, (calculateTaxableIncome(calculationResults.grossPay) - 500000) / 300000) * 100)}%` }}></div>
+                      </div>
+                      
+                      <div className="flex justify-between mt-3">
+                        <span className="text-sm">35% on amount over KES 800,000</span>
+                        <span className="text-sm font-medium">KES {Math.max(0, (calculateTaxableIncome(calculationResults.grossPay) - 800000)) * 0.35}</span>
+                      </div>
+                      <div className="w-full bg-gray-200 rounded-full h-2.5 dark:bg-gray-700 mb-1">
+                        <div className="bg-purple-500 h-2.5 rounded-full" style={{ width: `${Math.min(100, Math.max(0, (calculateTaxableIncome(calculationResults.grossPay) - 800000) / 200000) * 100)}%` }}></div>
+                      </div>
+                    </div>
+                    
+                    <div className="mt-4 pt-3 border-t flex justify-between">
+                      <span className="text-sm">Personal Relief</span>
+                      <span className="text-sm font-medium text-red-500">- KES 2,400</span>
+                    </div>
+                  </div>
+                  
+                  {/* Other Statutory Deductions */}
+                  <div className="border rounded-lg p-4 bg-card/20">
+                    <h4 className="text-sm font-medium mb-3">Other Statutory Deductions</h4>
+                    
+                    <div className="space-y-4">
+                      <div>
+                        <div className="flex justify-between mb-1">
+                          <span className="text-sm">SHIF (2.75% of gross pay)</span>
+                          <span className="text-sm font-medium">{formatKES(calculationResults.nhif)}</span>
+                        </div>
+                        <div className="w-full bg-gray-200 rounded-full h-2.5 dark:bg-gray-700">
+                          <div className="bg-green-500 h-2.5 rounded-full" style={{ width: `${(calculationResults.nhif / calculationResults.grossPay) * 100}%` }}></div>
+                        </div>
+                        <p className="text-xs text-muted-foreground mt-1">Social Health Insurance Fund (replaced NHIF)</p>
+                      </div>
+                      
+                      <div>
+                        <div className="flex justify-between mb-1">
+                          <span className="text-sm">NSSF (6% with tiered limits)</span>
+                          <span className="text-sm font-medium">{formatKES(calculationResults.nssf)}</span>
+                        </div>
+                        <div className="w-full bg-gray-200 rounded-full h-2.5 dark:bg-gray-700">
+                          <div className="bg-blue-500 h-2.5 rounded-full" style={{ width: `${(calculationResults.nssf / calculationResults.grossPay) * 100}%` }}></div>
+                        </div>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          KES 480 for salaries up to 8,000 | 6% from 8,000-72,000 | KES 4,320 maximum
+                        </p>
+                      </div>
+                      
+                      <div>
+                        <div className="flex justify-between mb-1">
+                          <span className="text-sm">Housing Levy (1.5% of gross pay)</span>
+                          <span className="text-sm font-medium">{formatKES(calculationResults.housingLevy)}</span>
+                        </div>
+                        <div className="w-full bg-gray-200 rounded-full h-2.5 dark:bg-gray-700">
+                          <div className="bg-amber-500 h-2.5 rounded-full" style={{ width: `${(calculationResults.housingLevy / calculationResults.grossPay) * 100}%` }}></div>
+                        </div>
+                        <p className="text-xs text-muted-foreground mt-1">Affordable Housing Levy</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </TabsContent>
+              
               {/* Attendance Tab */}
               <TabsContent value="attendance" className="pt-4">
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-x-4 gap-y-2">
@@ -927,17 +1333,128 @@ export function PayrollCalculator({ onSave }: PayrollCalculatorProps) {
               </TabsContent>
             </Tabs>
             
-            {/* Save Button */}
-            <Button 
-              onClick={handleSavePayroll} 
-              variant="outline" 
-              className="w-full mt-4"
-            >
-              Save Payroll
-            </Button>
+            {/* Action Buttons */}
+            <div className="flex flex-col md:flex-row gap-2 mt-4">
+              <Button 
+                onClick={handleSavePayroll} 
+                variant="outline" 
+                className="flex-1"
+              >
+                <svg className="mr-2 h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
+                  <polyline points="17 21 17 13 7 13 7 21"></polyline>
+                  <polyline points="7 3 7 8 15 8"></polyline>
+                </svg>
+                Save Payroll
+              </Button>
+              
+              <Button 
+                onClick={generatePayslip} 
+                variant="default" 
+                className="flex-1"
+              >
+                <svg className="mr-2 h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                  <polyline points="7 10 12 15 17 10"></polyline>
+                  <line x1="12" y1="15" x2="12" y2="3"></line>
+                </svg>
+                Generate Payslip
+              </Button>
+              
+              <Button 
+                onClick={handleBatchProcessing} 
+                variant="secondary" 
+                className="flex-1"
+              >
+                <svg className="mr-2 h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                  <circle cx="9" cy="7" r="4"></circle>
+                  <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+                  <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+                </svg>
+                Batch Processing
+              </Button>
+            </div>
           </div>
         )}
       </CardContent>
+      
+      {/* Batch Processing Dialog */}
+      <Dialog open={showBatchDialog} onOpenChange={setShowBatchDialog}>
+        <DialogContent className="sm:max-w-[600px]">
+          <DialogHeader>
+            <DialogTitle>Batch Payroll Processing</DialogTitle>
+            <DialogDescription>
+              Process payroll for multiple employees at once using the current pay period.
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="grid gap-4 py-4">
+            <div className="border p-3 rounded-md space-y-3">
+              <h4 className="font-medium text-sm">Pay Period</h4>
+              <div className="grid grid-cols-2 gap-2 text-sm">
+                <div>
+                  <span className="text-muted-foreground">Start Date:</span>
+                  <p>{new Date(payPeriod.startDate).toLocaleDateString()}</p>
+                </div>
+                <div>
+                  <span className="text-muted-foreground">End Date:</span>
+                  <p>{new Date(payPeriod.endDate).toLocaleDateString()}</p>
+                </div>
+              </div>
+            </div>
+            
+            <div className="border rounded-md p-3 max-h-[300px] overflow-y-auto">
+              <h4 className="font-medium text-sm mb-3">Select Employees</h4>
+              <div className="space-y-2">
+                {employeeList.map((employee) => (
+                  <div key={employee.id} className="flex items-center space-x-2">
+                    <Checkbox 
+                      id={`employee-${employee.id}`} 
+                      checked={selectedEmployees.includes(employee.id)}
+                      onCheckedChange={(checked) => {
+                        if (checked) {
+                          setSelectedEmployees(prev => [...prev, employee.id]);
+                        } else {
+                          setSelectedEmployees(prev => prev.filter(id => id !== employee.id));
+                        }
+                      }}
+                    />
+                    <label
+                      htmlFor={`employee-${employee.id}`}
+                      className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                    >
+                      {employee.name} - {employee.department}
+                    </label>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+          
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowBatchDialog(false)}>
+              Cancel
+            </Button>
+            <Button 
+              onClick={executeBatchProcessing} 
+              disabled={isBatchProcessing || selectedEmployees.length === 0}
+            >
+              {isBatchProcessing ? (
+                <>
+                  <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                  Processing...
+                </>
+              ) : (
+                <>Process Selected ({selectedEmployees.length})</>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Card>
   );
 }

@@ -231,10 +231,14 @@ export default function ProcessPayrollPage() {
               </div>
             )}
             {status === 'warning' && (
-              <AlertTriangle className="h-5 w-5 text-amber-500 mr-2" />
+              <div className="rounded-full p-1 bg-amber-100 dark:bg-amber-950/50 mr-2">
+                <AlertTriangle className="h-4 w-4 text-amber-600" />
+              </div>
             )}
             {status === 'error' && (
-              <XCircle className="h-5 w-5 text-red-500 mr-2" />
+              <div className="rounded-full p-1 bg-red-100 dark:bg-red-950/50 mr-2">
+                <XCircle className="h-4 w-4 text-red-600" />
+              </div>
             )}
             <span className="capitalize">{status}</span>
           </div>
@@ -1285,7 +1289,7 @@ export default function ProcessPayrollPage() {
                           const employee = employeeData.find(emp => emp.id === issue.employeeId);
                           return (
                             <div key={index} className="flex p-2 bg-card rounded-md border">
-                              <div className="p-2 bg-amber-100 dark:bg-amber-800/40 rounded-full mr-3">
+                              <div className="p-2 bg-amber-100 dark:bg-amber-950/50 rounded-full mr-3">
                                 <AlertTriangle className="h-4 w-4 text-amber-600" />
                               </div>
                               <div>
@@ -1315,8 +1319,8 @@ export default function ProcessPayrollPage() {
                   ) : (
                     <div className="border p-5 rounded-md">
                       <div className="flex justify-center">
-                        <div className="rounded-full bg-green-100 dark:bg-green-800/40 p-3 mb-4">
-                          <CheckCircle className="h-8 w-8 text-green-600 dark:text-green-300" />
+                        <div className="rounded-full bg-green-100 dark:bg-green-950/50 p-3 mb-4">
+                          <CheckCircle className="h-8 w-8 text-green-600" />
                         </div>
                       </div>
                       <h4 className="text-center font-medium mb-2">All Employees Validated</h4>
@@ -1391,8 +1395,8 @@ export default function ProcessPayrollPage() {
                   {isCalculating ? (
                     <div>
                       <div className="mb-4 flex justify-center">
-                        <div className="rounded-full bg-blue-100 dark:bg-blue-900/50 p-3">
-                          <RefreshCw className="h-8 w-8 text-blue-600 dark:text-blue-400 animate-spin" />
+                        <div className="rounded-full bg-blue-100 dark:bg-blue-950/50 p-3">
+                          <RefreshCw className="h-8 w-8 text-blue-600 animate-spin" />
                         </div>
                       </div>
                       <h3 className="text-center font-medium mb-2">Calculating Payroll</h3>
@@ -1412,8 +1416,8 @@ export default function ProcessPayrollPage() {
                   ) : (
                     <div className="flex flex-col items-center">
                       <div className="mb-4 flex justify-center">
-                        <div className="rounded-full bg-emerald-100 dark:bg-emerald-900/50 p-3">
-                          <Calculator className="h-8 w-8 text-emerald-600 dark:text-emerald-400" />
+                        <div className="rounded-full bg-emerald-100 dark:bg-emerald-950/50 p-3">
+                          <Calculator className="h-8 w-8 text-emerald-600" />
                         </div>
                       </div>
                       <h3 className="text-center font-medium mb-2">Ready to Calculate</h3>

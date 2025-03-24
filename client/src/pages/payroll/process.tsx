@@ -70,6 +70,10 @@ import {
   ChevronRight,
   ChevronsLeft,
   ChevronsRight,
+  User,
+  ArrowUp,
+  ArrowDown,
+  Pencil,
 } from "lucide-react";
 import { 
   calculatePAYE, 
@@ -588,25 +592,61 @@ export default function ProcessPayrollPage() {
     });
   };
   
+  // State for employee detail dialog
+  const [editingEmployee, setEditingEmployee] = useState<EmployeePayrollCalculation | null>(null);
+  const [viewingEmployee, setViewingEmployee] = useState<EmployeePayrollCalculation | null>(null);
+  const [editValues, setEditValues] = useState({
+    grossPay: 0,
+    netPay: 0,
+    hoursWorked: 0,
+    overtimeHours: 0,
+    ewaDeductions: 0,
+    adjustmentReason: ""
+  });
+
   // Handle editing an employee's payroll calculation
   const handleEditEmployee = (employee: EmployeePayrollCalculation) => {
-    // In a real implementation, this would open a modal for editing
-    // For now, we'll just simulate an edit
+    setEditingEmployee(employee);
+    setEditValues({
+      grossPay: employee.grossPay,
+      netPay: employee.netPay,
+      hoursWorked: employee.hoursWorked,
+      overtimeHours: employee.overtimeHours,
+      ewaDeductions: employee.ewaDeductions,
+      adjustmentReason: ""
+    });
+  };
+  
+  // Handle saving edited employee payroll
+  const handleSaveEmployeeEdit = () => {
+    if (!editingEmployee) return;
     
     const editedCalculations = payrollCalculations.map(calc => {
-      if (calc.id === employee.id) {
+      if (calc.id === editingEmployee.id) {
         // Store original value if not already stored
         const originalNetPay = calc.originalNetPay || calc.netPay;
         
-        // Simulate a manual adjustment (±5%)
-        const adjustmentFactor = 1 + (Math.random() * 0.1 - 0.05);
-        const adjustedNetPay = Math.round(calc.netPay * adjustmentFactor);
+        // Calculate new totals with edited values
+        const totalDeductions = 
+          calc.paye + 
+          calc.nssf + 
+          calc.nhif + 
+          calc.housingLevy + 
+          editValues.ewaDeductions + 
+          calc.loanDeductions + 
+          calc.otherDeductions;
         
         return {
           ...calc,
-          netPay: adjustedNetPay,
+          grossPay: editValues.grossPay,
+          hoursWorked: editValues.hoursWorked,
+          overtimeHours: editValues.overtimeHours,
+          ewaDeductions: editValues.ewaDeductions,
+          totalDeductions,
+          netPay: editValues.netPay,
           isEdited: true,
-          originalNetPay
+          originalNetPay,
+          statusReason: editValues.adjustmentReason || "Manual adjustment"
         };
       }
       return calc;
@@ -614,20 +654,23 @@ export default function ProcessPayrollPage() {
     
     setPayrollCalculations(editedCalculations);
     calculatePayrollSummary(editedCalculations);
+    setEditingEmployee(null);
     
     toast({
       title: "Payroll Adjusted",
-      description: `Manual adjustment applied to ${employee.name}'s payroll.`
+      description: `Manual adjustment applied to ${editingEmployee.name}'s payroll.`,
+      variant: "default"
     });
   };
   
   // Handle viewing employee details
   const handleViewDetails = (employee: EmployeePayrollCalculation) => {
-    // In a real implementation, this would open a detailed view
-    toast({
-      title: "Employee Details",
-      description: `Viewing detailed calculation for ${employee.name}.`,
-    });
+    setViewingEmployee(employee);
+  };
+  
+  // Close employee details dialog
+  const handleCloseDetails = () => {
+    setViewingEmployee(null);
   };
   
   // Handle recalculation of payroll
@@ -2198,6 +2241,437 @@ export default function ProcessPayrollPage() {
           </div>
         </div>
       )}
+      {/* Employee Edit Dialog */}
+      <Dialog open={!!editingEmployee} onOpenChange={(open) => !open && setEditingEmployee(null)}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Edit Employee Payroll</DialogTitle>
+            <DialogDescription>
+              Make manual adjustments to {editingEmployee?.name}'s payroll information
+            </DialogDescription>
+          </DialogHeader>
+          
+          {editingEmployee && (
+            <div className="space-y-6 py-4">
+              <div className="grid grid-cols-2 gap-6">
+                <div className="space-y-4">
+                  <div>
+                    <Label htmlFor="edit-gross-pay">Gross Pay (KES)</Label>
+                    <Input
+                      id="edit-gross-pay"
+                      type="number"
+                      value={editValues.grossPay}
+                      onChange={(e) => setEditValues({
+                        ...editValues,
+                        grossPay: Number(e.target.value),
+                      })}
+                    />
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Original value: {formatKES(editingEmployee.grossPay)}
+                    </p>
+                  </div>
+                  
+                  <div>
+                    <Label htmlFor="edit-net-pay">Net Pay (KES)</Label>
+                    <Input
+                      id="edit-net-pay"
+                      type="number"
+                      value={editValues.netPay}
+                      onChange={(e) => setEditValues({
+                        ...editValues,
+                        netPay: Number(e.target.value),
+                      })}
+                    />
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Original value: {formatKES(editingEmployee.netPay)}
+                    </p>
+                  </div>
+                </div>
+                
+                <div className="space-y-4">
+                  <div>
+                    <Label htmlFor="edit-hours">Hours Worked</Label>
+                    <Input
+                      id="edit-hours"
+                      type="number"
+                      value={editValues.hoursWorked}
+                      onChange={(e) => setEditValues({
+                        ...editValues,
+                        hoursWorked: Number(e.target.value),
+                      })}
+                    />
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Original value: {editingEmployee.hoursWorked} hours
+                    </p>
+                  </div>
+                  
+                  <div>
+                    <Label htmlFor="edit-overtime">Overtime Hours</Label>
+                    <Input
+                      id="edit-overtime"
+                      type="number"
+                      value={editValues.overtimeHours}
+                      onChange={(e) => setEditValues({
+                        ...editValues,
+                        overtimeHours: Number(e.target.value),
+                      })}
+                    />
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Original value: {editingEmployee.overtimeHours} hours
+                    </p>
+                  </div>
+                </div>
+              </div>
+              
+              <div>
+                <Label htmlFor="edit-ewa">EWA Deductions (KES)</Label>
+                <Input
+                  id="edit-ewa"
+                  type="number"
+                  value={editValues.ewaDeductions}
+                  onChange={(e) => setEditValues({
+                    ...editValues,
+                    ewaDeductions: Number(e.target.value),
+                  })}
+                />
+                <p className="text-xs text-muted-foreground mt-1">
+                  Original value: {formatKES(editingEmployee.ewaDeductions)}
+                </p>
+              </div>
+              
+              <div>
+                <Label htmlFor="edit-reason">Adjustment Reason</Label>
+                <Textarea
+                  id="edit-reason"
+                  rows={3}
+                  placeholder="Provide a reason for the manual adjustment (required for audit purposes)"
+                  value={editValues.adjustmentReason}
+                  onChange={(e) => setEditValues({
+                    ...editValues,
+                    adjustmentReason: e.target.value,
+                  })}
+                />
+              </div>
+              
+              {/* Statutory deductions summary - not editable */}
+              <div className="bg-muted p-4 rounded-md">
+                <h4 className="text-sm font-medium mb-2">Statutory Deductions (Not Editable)</h4>
+                <dl className="grid grid-cols-2 gap-2 text-sm">
+                  <div>
+                    <dt className="text-muted-foreground">PAYE</dt>
+                    <dd className="font-medium">{formatKES(editingEmployee.paye)}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-muted-foreground">NSSF</dt>
+                    <dd className="font-medium">{formatKES(editingEmployee.nssf)}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-muted-foreground">SHIF</dt>
+                    <dd className="font-medium">{formatKES(editingEmployee.nhif)}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-muted-foreground">Housing Levy</dt>
+                    <dd className="font-medium">{formatKES(editingEmployee.housingLevy)}</dd>
+                  </div>
+                </dl>
+              </div>
+            </div>
+          )}
+          
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditingEmployee(null)}>
+              Cancel
+            </Button>
+            <Button onClick={handleSaveEmployeeEdit}>
+              Save Changes
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Employee Details Dialog */}
+      <Dialog open={!!viewingEmployee} onOpenChange={(open) => !open && setViewingEmployee(null)}>
+        <DialogContent className="max-w-3xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center">
+              <User className="mr-2 h-5 w-5" />
+              {viewingEmployee?.name} - Payroll Details
+            </DialogTitle>
+            <DialogDescription>
+              Detailed payroll calculation for pay period {formatDate(payPeriod.startDate)} - {formatDate(payPeriod.endDate)}
+            </DialogDescription>
+          </DialogHeader>
+          
+          {viewingEmployee && (
+            <div className="space-y-6 py-2">
+              {/* Employee Info Banner */}
+              <div className="flex flex-col md:flex-row gap-4 items-center bg-muted p-4 rounded-lg">
+                <div className="flex-shrink-0">
+                  <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center text-2xl font-bold text-primary">
+                    {viewingEmployee.name.split(' ').map(n => n[0]).join('')}
+                  </div>
+                </div>
+                <div className="flex-grow text-center md:text-left">
+                  <h3 className="text-lg font-bold">{viewingEmployee.name}</h3>
+                  <p className="text-sm text-muted-foreground">{viewingEmployee.position}</p>
+                  <p className="text-sm">
+                    <Badge variant={viewingEmployee.department === "Finance" ? "default" : 
+                                    viewingEmployee.department === "Marketing" ? "secondary" : 
+                                    viewingEmployee.department === "IT" ? "outline" : "destructive"}>
+                      {viewingEmployee.department}
+                    </Badge>
+                    <span className="mx-2">•</span>
+                    <span className="text-xs">ID: {viewingEmployee.employeeNumber}</span>
+                  </p>
+                </div>
+                <div className="bg-card border rounded-md p-3 flex flex-col items-center">
+                  <span className="text-xs text-muted-foreground">Hourly Rate</span>
+                  <span className="text-lg font-bold">{formatKES(viewingEmployee.hourlyRate)}</span>
+                </div>
+              </div>
+              
+              {/* Summary Cards */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <Card className="bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800">
+                  <CardContent className="pt-4">
+                    <div className="text-xs text-blue-800 dark:text-blue-300 font-medium">Gross Pay</div>
+                    <div className="text-2xl font-bold">{formatKES(viewingEmployee.grossPay)}</div>
+                    <div className="text-xs text-blue-700 dark:text-blue-400 mt-1">
+                      {viewingEmployee.hoursWorked} hours × {formatKES(viewingEmployee.hourlyRate)}/hr
+                      {viewingEmployee.overtimeHours > 0 && ` + ${viewingEmployee.overtimeHours} OT hrs`}
+                    </div>
+                  </CardContent>
+                </Card>
+                
+                <Card className="bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800">
+                  <CardContent className="pt-4">
+                    <div className="text-xs text-red-800 dark:text-red-300 font-medium">Total Deductions</div>
+                    <div className="text-2xl font-bold">{formatKES(viewingEmployee.totalDeductions)}</div>
+                    <div className="text-xs text-red-700 dark:text-red-400 mt-1">
+                      {(viewingEmployee.totalDeductions / viewingEmployee.grossPay * 100).toFixed(1)}% of gross pay
+                    </div>
+                  </CardContent>
+                </Card>
+                
+                <Card className="bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-800">
+                  <CardContent className="pt-4">
+                    <div className="text-xs text-emerald-800 dark:text-emerald-300 font-medium">Net Pay</div>
+                    <div className="text-2xl font-bold">{formatKES(viewingEmployee.netPay)}</div>
+                    {viewingEmployee.isEdited && viewingEmployee.originalNetPay && (
+                      <div className="text-xs text-emerald-700 dark:text-emerald-400 mt-1 flex items-center">
+                        <span>Original: {formatKES(viewingEmployee.originalNetPay)}</span>
+                        <span className="ml-1">
+                          {viewingEmployee.netPay > viewingEmployee.originalNetPay ? (
+                            <ArrowUp className="h-3 w-3 text-emerald-600" />
+                          ) : (
+                            <ArrowDown className="h-3 w-3 text-red-600" />
+                          )}
+                        </span>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              </div>
+              
+              {/* Detailed Breakdown */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* Left: Deduction Breakdown */}
+                <div>
+                  <h4 className="text-sm font-medium mb-3">Deduction Breakdown</h4>
+                  <div className="space-y-3">
+                    <div>
+                      <div className="flex justify-between text-sm">
+                        <span>PAYE (Income Tax)</span>
+                        <span className="font-medium">{formatKES(viewingEmployee.paye)}</span>
+                      </div>
+                      <div className="w-full h-1.5 bg-muted rounded-full mt-1">
+                        <div 
+                          className="h-1.5 bg-blue-500 rounded-full" 
+                          style={{ width: `${(viewingEmployee.paye / viewingEmployee.totalDeductions) * 100}%` }}
+                        ></div>
+                      </div>
+                    </div>
+                    
+                    <div>
+                      <div className="flex justify-between text-sm">
+                        <span>NSSF (6%)</span>
+                        <span className="font-medium">{formatKES(viewingEmployee.nssf)}</span>
+                      </div>
+                      <div className="w-full h-1.5 bg-muted rounded-full mt-1">
+                        <div 
+                          className="h-1.5 bg-green-500 rounded-full" 
+                          style={{ width: `${(viewingEmployee.nssf / viewingEmployee.totalDeductions) * 100}%` }}
+                        ></div>
+                      </div>
+                    </div>
+                    
+                    <div>
+                      <div className="flex justify-between text-sm">
+                        <span>SHIF (2.75%)</span>
+                        <span className="font-medium">{formatKES(viewingEmployee.nhif)}</span>
+                      </div>
+                      <div className="w-full h-1.5 bg-muted rounded-full mt-1">
+                        <div 
+                          className="h-1.5 bg-purple-500 rounded-full" 
+                          style={{ width: `${(viewingEmployee.nhif / viewingEmployee.totalDeductions) * 100}%` }}
+                        ></div>
+                      </div>
+                    </div>
+                    
+                    <div>
+                      <div className="flex justify-between text-sm">
+                        <span>Housing Levy (1.5%)</span>
+                        <span className="font-medium">{formatKES(viewingEmployee.housingLevy)}</span>
+                      </div>
+                      <div className="w-full h-1.5 bg-muted rounded-full mt-1">
+                        <div 
+                          className="h-1.5 bg-amber-500 rounded-full" 
+                          style={{ width: `${(viewingEmployee.housingLevy / viewingEmployee.totalDeductions) * 100}%` }}
+                        ></div>
+                      </div>
+                    </div>
+                    
+                    <div>
+                      <div className="flex justify-between text-sm">
+                        <span>EWA Withdrawals</span>
+                        <span className="font-medium">{formatKES(viewingEmployee.ewaDeductions)}</span>
+                      </div>
+                      <div className="w-full h-1.5 bg-muted rounded-full mt-1">
+                        <div 
+                          className="h-1.5 bg-red-500 rounded-full" 
+                          style={{ width: `${(viewingEmployee.ewaDeductions / viewingEmployee.totalDeductions) * 100}%` }}
+                        ></div>
+                      </div>
+                    </div>
+                    
+                    {viewingEmployee.loanDeductions > 0 && (
+                      <div>
+                        <div className="flex justify-between text-sm">
+                          <span>Loan Repayments</span>
+                          <span className="font-medium">{formatKES(viewingEmployee.loanDeductions)}</span>
+                        </div>
+                        <div className="w-full h-1.5 bg-muted rounded-full mt-1">
+                          <div 
+                            className="h-1.5 bg-orange-500 rounded-full" 
+                            style={{ width: `${(viewingEmployee.loanDeductions / viewingEmployee.totalDeductions) * 100}%` }}
+                          ></div>
+                        </div>
+                      </div>
+                    )}
+                    
+                    {viewingEmployee.otherDeductions > 0 && (
+                      <div>
+                        <div className="flex justify-between text-sm">
+                          <span>Other Deductions</span>
+                          <span className="font-medium">{formatKES(viewingEmployee.otherDeductions)}</span>
+                        </div>
+                        <div className="w-full h-1.5 bg-muted rounded-full mt-1">
+                          <div 
+                            className="h-1.5 bg-gray-500 rounded-full" 
+                            style={{ width: `${(viewingEmployee.otherDeductions / viewingEmployee.totalDeductions) * 100}%` }}
+                          ></div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                  
+                  <div className="mt-4 pt-3 border-t">
+                    <div className="flex justify-between font-medium">
+                      <span>Total Deductions</span>
+                      <span>{formatKES(viewingEmployee.totalDeductions)}</span>
+                    </div>
+                  </div>
+                </div>
+                
+                {/* Right: Calculation Details & Status */}
+                <div className="space-y-4">
+                  <div className="bg-muted p-4 rounded-md">
+                    <h4 className="text-sm font-medium mb-3">Pay Calculation</h4>
+                    <dl className="grid grid-cols-2 gap-y-2 text-sm">
+                      <dt className="text-muted-foreground">Regular Hours</dt>
+                      <dd className="font-medium">{viewingEmployee.hoursWorked} hours</dd>
+                      
+                      <dt className="text-muted-foreground">Overtime Hours</dt>
+                      <dd className="font-medium">{viewingEmployee.overtimeHours} hours</dd>
+                      
+                      <dt className="text-muted-foreground">Hourly Rate</dt>
+                      <dd className="font-medium">{formatKES(viewingEmployee.hourlyRate)}</dd>
+                      
+                      <dt className="text-muted-foreground">Regular Pay</dt>
+                      <dd className="font-medium">{formatKES(viewingEmployee.hourlyRate * viewingEmployee.hoursWorked)}</dd>
+                      
+                      {viewingEmployee.overtimeHours > 0 && (
+                        <>
+                          <dt className="text-muted-foreground">Overtime Pay (1.5×)</dt>
+                          <dd className="font-medium">{formatKES(viewingEmployee.hourlyRate * viewingEmployee.overtimeHours * 1.5)}</dd>
+                        </>
+                      )}
+                      
+                      <dt className="text-muted-foreground">Gross Pay</dt>
+                      <dd className="font-medium">{formatKES(viewingEmployee.grossPay)}</dd>
+                    </dl>
+                  </div>
+                  
+                  <div className={`p-4 rounded-md ${
+                    viewingEmployee.status === 'complete' ? 'bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800' :
+                    viewingEmployee.status === 'warning' ? 'bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800' :
+                    'bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800'
+                  }`}>
+                    <h4 className="text-sm font-medium mb-2 flex items-center">
+                      {viewingEmployee.status === 'complete' ? (
+                        <CheckCircle className="h-4 w-4 mr-2 text-green-600" />
+                      ) : viewingEmployee.status === 'warning' ? (
+                        <AlertTriangle className="h-4 w-4 mr-2 text-amber-600" />
+                      ) : (
+                        <XCircle className="h-4 w-4 mr-2 text-red-600" />
+                      )}
+                      <span>Status: <span className="capitalize">{viewingEmployee.status}</span></span>
+                    </h4>
+                    
+                    {viewingEmployee.statusReason && (
+                      <p className={`text-sm ${
+                        viewingEmployee.status === 'complete' ? 'text-green-700 dark:text-green-300' :
+                        viewingEmployee.status === 'warning' ? 'text-amber-700 dark:text-amber-300' :
+                        'text-red-700 dark:text-red-300'
+                      }`}>
+                        {viewingEmployee.statusReason}
+                      </p>
+                    )}
+                    
+                    {viewingEmployee.isEdited && (
+                      <div className="flex items-center mt-2 text-xs">
+                        <Clock className="h-3.5 w-3.5 mr-1 text-muted-foreground" />
+                        <span className="text-muted-foreground">Manually adjusted</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+          
+          <DialogFooter>
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={handleCloseDetails}>
+                Close
+              </Button>
+              {viewingEmployee && (
+                <Button variant="secondary" onClick={() => {
+                  handleCloseDetails();
+                  handleEditEmployee(viewingEmployee);
+                }}>
+                  <Pencil className="h-4 w-4 mr-2" />
+                  Edit Payroll
+                </Button>
+              )}
+              <Button>
+                <FileText className="h-4 w-4 mr-2" />
+                Print Payslip
+              </Button>
+            </div>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

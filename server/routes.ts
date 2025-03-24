@@ -640,7 +640,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
       return res.status(404).json({ message: "Wallet not found" });
     }
     
-    return res.status(200).json(wallet);
+    // Calculate total balance for response
+    const totalBalance = (
+      parseFloat(wallet.employerBalance.toString() || "0") + 
+      parseFloat(wallet.jahaziiBalance.toString() || "0")
+    ).toString();
+    
+    return res.status(200).json({
+      ...wallet,
+      totalBalance
+    });
   });
   
   app.get("/api/wallet/transactions", async (_req, res) => {
@@ -687,13 +696,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
       status: 'completed'
     });
     
-    // Calculate total balance
-    updatedWallet.totalBalance = (
+    // Calculate total balance for response only (not stored in DB)
+    const totalBalance = updatedWallet ? (
       parseFloat(updatedWallet.employerBalance?.toString() || "0") + 
       parseFloat(updatedWallet.jahaziiBalance?.toString() || "0")
-    ).toString();
+    ).toString() : "0";
     
-    return res.status(200).json(updatedWallet);
+    // Add totalBalance to the response
+    return res.status(200).json({
+      ...updatedWallet,
+      totalBalance
+    });
   });
   
   // Statistics for dashboard

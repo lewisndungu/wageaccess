@@ -156,9 +156,30 @@ export class MemStorage implements IStorage {
     
     // Create a wallet with dual funding sources
     this.createWallet({
-      employerBalance: 250000,
-      jahaziiBalance: 100000,
-      perEmployeeCap: 3000
+      employerBalance: "250000",
+      jahaziiBalance: "100000",
+      perEmployeeCap: "3000"
+    });
+    
+    // Create initial wallet transactions to reflect the balances
+    this.createWalletTransaction({
+      walletId: 1,
+      amount: "250000",
+      transactionType: "employer_topup",
+      description: "Initial employer fund deposit",
+      referenceId: `INI-EMP-${Date.now()}`,
+      fundingSource: "employer",
+      status: "completed"
+    });
+    
+    this.createWalletTransaction({
+      walletId: 1,
+      amount: "100000",
+      transactionType: "jahazii_topup",
+      description: "Initial Jahazii fund deposit",
+      referenceId: `INI-JAH-${Date.now()}`,
+      fundingSource: "jahazii",
+      status: "completed"
     });
   }
 

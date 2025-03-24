@@ -1410,15 +1410,100 @@ export default function ProcessPayrollPage() {
                   Review the payroll data before finalizing for the period {formatDate(payPeriod.startDate)} - {formatDate(payPeriod.endDate)}
                 </p>
               </div>
-              <div className="flex space-x-2">
-                <Button variant="outline" size="sm">
-                  <FileSpreadsheet className="h-4 w-4 mr-2" />
-                  Export Preview
-                </Button>
-                <Button variant="outline" size="sm">
+              <div className="flex flex-wrap gap-2">
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="outline" size="sm">
+                      <FileSpreadsheet className="h-4 w-4 mr-2" />
+                      Export Preview
+                      <ChevronDown className="h-3.5 w-3.5 ml-1 opacity-70" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem onClick={() => console.log("Export to Excel")}>
+                      <FileSpreadsheet className="mr-2 h-4 w-4" />
+                      <span>Excel Spreadsheet</span>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => console.log("Export to CSV")}>
+                      <FileText className="mr-2 h-4 w-4" />
+                      <span>CSV File</span>
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem onClick={() => console.log("Generate Payslips")}>
+                      <FileText className="mr-2 h-4 w-4" />
+                      <span>Generate Payslips</span>
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+                <Button variant="outline" size="sm" onClick={handleRecalculate}>
                   <RefreshCw className="h-4 w-4 mr-2" />
                   Recalculate
                 </Button>
+              </div>
+            </div>
+            
+            {/* Status Overview Strip - Quick at-a-glance visual status */}
+            <div className="mt-6 grid grid-cols-1 md:grid-cols-4 gap-4">
+              <div className="flex items-center gap-3 bg-card rounded-md border p-3">
+                <div className="bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 rounded-full p-2">
+                  <CheckCircle className="h-5 w-5" />
+                </div>
+                <div>
+                  <div className="text-sm font-medium">Complete</div>
+                  <div className="text-2xl font-bold">
+                    {payrollCalculations.filter(calc => calc.status === 'complete').length}
+                    <span className="text-xs font-normal text-muted-foreground ml-1">
+                      ({((payrollCalculations.filter(calc => calc.status === 'complete').length / payrollCalculations.length) * 100).toFixed(0)}%)
+                    </span>
+                  </div>
+                </div>
+              </div>
+              
+              <div className="flex items-center gap-3 bg-card rounded-md border p-3">
+                <div className="bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 rounded-full p-2">
+                  <AlertTriangle className="h-5 w-5" />
+                </div>
+                <div>
+                  <div className="text-sm font-medium">Warnings</div>
+                  <div className="text-2xl font-bold">
+                    {payrollCalculations.filter(calc => calc.status === 'warning').length}
+                    <span className="text-xs font-normal text-muted-foreground ml-1">
+                      ({((payrollCalculations.filter(calc => calc.status === 'warning').length / payrollCalculations.length) * 100).toFixed(0)}%)
+                    </span>
+                  </div>
+                </div>
+              </div>
+              
+              <div className="flex items-center gap-3 bg-card rounded-md border p-3">
+                <div className="bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 rounded-full p-2">
+                  <XCircle className="h-5 w-5" />
+                </div>
+                <div>
+                  <div className="text-sm font-medium">Errors</div>
+                  <div className="text-2xl font-bold">
+                    {payrollCalculations.filter(calc => calc.status === 'error').length}
+                    <span className="text-xs font-normal text-muted-foreground ml-1">
+                      ({((payrollCalculations.filter(calc => calc.status === 'error').length / payrollCalculations.length) * 100).toFixed(0)}%)
+                    </span>
+                  </div>
+                </div>
+              </div>
+              
+              <div className="flex items-center gap-3 bg-card rounded-md border p-3">
+                <div className="bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded-full p-2">
+                  <Clock className="h-5 w-5" />
+                </div>
+                <div>
+                  <div className="text-sm font-medium">Avg. Hours</div>
+                  <div className="text-2xl font-bold">
+                    {payrollCalculations.length > 0 
+                      ? (payrollCalculations.reduce((sum, calc) => sum + calc.hoursWorked, 0) / payrollCalculations.length).toFixed(1)
+                      : "0"}
+                    <span className="text-xs font-normal text-muted-foreground ml-1">
+                      hours
+                    </span>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -1498,54 +1583,222 @@ export default function ProcessPayrollPage() {
             </Card>
           </div>
           
-          {/* Department Breakdown */}
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="flex items-center text-base">
-                <Building className="mr-2 h-5 w-5" />
-                Department Breakdown
-              </CardTitle>
-              <CardDescription>
-                Payroll distribution by department
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                {payrollSummary.departmentSummary.map((dept, index) => (
-                  <div key={dept.department} className="space-y-1">
-                    <div className="flex justify-between text-sm">
-                      <span className="flex items-center">
-                        <div className={`w-2 h-2 rounded-full mr-2 ${
-                          index === 0 ? "bg-blue-500" :
-                          index === 1 ? "bg-green-500" :
-                          index === 2 ? "bg-purple-500" :
-                          index === 3 ? "bg-yellow-500" :
-                          index === 4 ? "bg-red-500" : "bg-orange-500"
-                        }`}></div>
-                        {dept.department}
-                      </span>
-                      <div className="flex space-x-4">
-                        <span className="text-muted-foreground text-xs">{dept.employeeCount} employees</span>
-                        <span className="font-medium">{formatKES(dept.totalAmount)}</span>
+          {/* Enhanced Payroll Analytics */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+            {/* Left: Department Breakdown */}
+            <Card className="lg:col-span-2">
+              <CardHeader className="pb-2">
+                <CardTitle className="flex items-center text-base">
+                  <Building className="mr-2 h-5 w-5" />
+                  Department Breakdown
+                </CardTitle>
+                <CardDescription>
+                  Payroll distribution by department
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  {payrollSummary.departmentSummary.map((dept, index) => (
+                    <div key={dept.department} className="space-y-1">
+                      <div className="flex justify-between text-sm">
+                        <span className="flex items-center">
+                          <div className={`w-2 h-2 rounded-full mr-2 ${
+                            index === 0 ? "bg-blue-500" :
+                            index === 1 ? "bg-green-500" :
+                            index === 2 ? "bg-purple-500" :
+                            index === 3 ? "bg-yellow-500" :
+                            index === 4 ? "bg-red-500" : "bg-orange-500"
+                          }`}></div>
+                          {dept.department}
+                        </span>
+                        <div className="flex space-x-4">
+                          <span className="text-muted-foreground text-xs">{dept.employeeCount} employees</span>
+                          <span className="font-medium">{formatKES(dept.totalAmount)}</span>
+                        </div>
+                      </div>
+                      <div className="w-full bg-muted rounded-full h-2">
+                        <div 
+                          className={`${
+                            index === 0 ? "bg-blue-500" :
+                            index === 1 ? "bg-green-500" :
+                            index === 2 ? "bg-purple-500" :
+                            index === 3 ? "bg-yellow-500" :
+                            index === 4 ? "bg-red-500" : "bg-orange-500"
+                          } h-2 rounded-full`}
+                          style={{ width: `${dept.percentageOfTotal}%` }}
+                        ></div>
                       </div>
                     </div>
-                    <div className="w-full bg-muted rounded-full h-2">
-                      <div 
-                        className={`${
-                          index === 0 ? "bg-blue-500" :
-                          index === 1 ? "bg-green-500" :
-                          index === 2 ? "bg-purple-500" :
-                          index === 3 ? "bg-yellow-500" :
-                          index === 4 ? "bg-red-500" : "bg-orange-500"
-                        } h-2 rounded-full`}
-                        style={{ width: `${dept.percentageOfTotal}%` }}
-                      ></div>
+                  ))}
+                </div>
+                
+                {/* Department Statistics */}
+                <div className="grid grid-cols-2 gap-2 mt-6">
+                  <div className="rounded-lg border bg-card p-3">
+                    <div className="text-xs text-muted-foreground">
+                      Highest Net Pay
+                    </div>
+                    <div className="text-lg font-semibold mt-1">
+                      {payrollSummary.departmentSummary.length > 0 
+                        ? payrollSummary.departmentSummary.sort((a, b) => b.totalAmount - a.totalAmount)[0].department
+                        : "-"}
+                    </div>
+                    <div className="text-xs text-muted-foreground mt-1">
+                      {payrollSummary.departmentSummary.length > 0 
+                        ? formatKES(payrollSummary.departmentSummary.sort((a, b) => b.totalAmount - a.totalAmount)[0].totalAmount) 
+                        : ""}
                     </div>
                   </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
+                  
+                  <div className="rounded-lg border bg-card p-3">
+                    <div className="text-xs text-muted-foreground">
+                      Highest Per Employee
+                    </div>
+                    <div className="text-lg font-semibold mt-1">
+                      {payrollSummary.departmentSummary.length > 0 
+                        ? payrollSummary.departmentSummary
+                            .map(dept => ({
+                              ...dept,
+                              avgPerEmployee: dept.totalAmount / dept.employeeCount
+                            }))
+                            .sort((a, b) => b.avgPerEmployee - a.avgPerEmployee)[0].department
+                        : "-"}
+                    </div>
+                    <div className="text-xs text-muted-foreground mt-1">
+                      {payrollSummary.departmentSummary.length > 0
+                        ? formatKES(payrollSummary.departmentSummary
+                            .map(dept => ({
+                              ...dept,
+                              avgPerEmployee: dept.totalAmount / dept.employeeCount
+                            }))
+                            .sort((a, b) => b.avgPerEmployee - a.avgPerEmployee)[0].avgPerEmployee)
+                        : ""}
+                        avg per employee
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+            
+            {/* Right: Deduction Summary */}
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="flex items-center text-base">
+                  <BarChart className="mr-2 h-5 w-5" />
+                  Deduction Analysis
+                </CardTitle>
+                <CardDescription>
+                  Breakdown of all deductions
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {/* Deduction Pie Chart (Visualization) */}
+                <div className="flex justify-center items-center py-2">
+                  <div className="h-48 w-48 rounded-full border-8 border-transparent relative flex items-center justify-center">
+                    {/* Visual representation of deductions */}
+                    <div className="absolute inset-0 flex items-center justify-center">
+                      <div className="h-full w-full rounded-full flex items-center justify-center overflow-hidden">
+                        <div 
+                          className="absolute bg-blue-500 opacity-80" 
+                          style={{ 
+                            height: '100%', 
+                            width: '100%', 
+                            clipPath: `polygon(50% 50%, 50% 0, ${50 + 50 * Math.cos(Math.PI * 2 * (payrollCalculations.reduce((sum, emp) => sum + emp.paye, 0) / payrollSummary.totalDeductions))}% ${50 - 50 * Math.sin(Math.PI * 2 * (payrollCalculations.reduce((sum, emp) => sum + emp.paye, 0) / payrollSummary.totalDeductions))}%)` 
+                          }}
+                        ></div>
+                        <div 
+                          className="absolute bg-green-500 opacity-80" 
+                          style={{ 
+                            height: '100%', 
+                            width: '100%', 
+                            clipPath: `polygon(50% 50%, ${50 + 50 * Math.cos(Math.PI * 2 * (payrollCalculations.reduce((sum, emp) => sum + emp.paye, 0) / payrollSummary.totalDeductions))}% ${50 - 50 * Math.sin(Math.PI * 2 * (payrollCalculations.reduce((sum, emp) => sum + emp.paye, 0) / payrollSummary.totalDeductions))}%, ${50 + 50 * Math.cos(Math.PI * 2 * ((payrollCalculations.reduce((sum, emp) => sum + emp.paye, 0) + payrollCalculations.reduce((sum, emp) => sum + emp.nssf, 0)) / payrollSummary.totalDeductions))}% ${50 - 50 * Math.sin(Math.PI * 2 * ((payrollCalculations.reduce((sum, emp) => sum + emp.paye, 0) + payrollCalculations.reduce((sum, emp) => sum + emp.nssf, 0)) / payrollSummary.totalDeductions))}%)` 
+                          }}
+                        ></div>
+                        <div 
+                          className="absolute bg-purple-500 opacity-80" 
+                          style={{ 
+                            height: '100%', 
+                            width: '100%', 
+                            clipPath: `polygon(50% 50%, ${50 + 50 * Math.cos(Math.PI * 2 * ((payrollCalculations.reduce((sum, emp) => sum + emp.paye, 0) + payrollCalculations.reduce((sum, emp) => sum + emp.nssf, 0)) / payrollSummary.totalDeductions))}% ${50 - 50 * Math.sin(Math.PI * 2 * ((payrollCalculations.reduce((sum, emp) => sum + emp.paye, 0) + payrollCalculations.reduce((sum, emp) => sum + emp.nssf, 0)) / payrollSummary.totalDeductions))}%, ${50 + 50 * Math.cos(Math.PI * 2 * ((payrollCalculations.reduce((sum, emp) => sum + emp.paye, 0) + payrollCalculations.reduce((sum, emp) => sum + emp.nssf, 0) + payrollCalculations.reduce((sum, emp) => sum + emp.nhif, 0)) / payrollSummary.totalDeductions))}% ${50 - 50 * Math.sin(Math.PI * 2 * ((payrollCalculations.reduce((sum, emp) => sum + emp.paye, 0) + payrollCalculations.reduce((sum, emp) => sum + emp.nssf, 0) + payrollCalculations.reduce((sum, emp) => sum + emp.nhif, 0)) / payrollSummary.totalDeductions))}%)` 
+                          }}
+                        ></div>
+                        <div 
+                          className="absolute bg-amber-500 opacity-80" 
+                          style={{ 
+                            height: '100%', 
+                            width: '100%', 
+                            clipPath: `polygon(50% 50%, ${50 + 50 * Math.cos(Math.PI * 2 * ((payrollCalculations.reduce((sum, emp) => sum + emp.paye, 0) + payrollCalculations.reduce((sum, emp) => sum + emp.nssf, 0) + payrollCalculations.reduce((sum, emp) => sum + emp.nhif, 0)) / payrollSummary.totalDeductions))}% ${50 - 50 * Math.sin(Math.PI * 2 * ((payrollCalculations.reduce((sum, emp) => sum + emp.paye, 0) + payrollCalculations.reduce((sum, emp) => sum + emp.nssf, 0) + payrollCalculations.reduce((sum, emp) => sum + emp.nhif, 0)) / payrollSummary.totalDeductions))}%, ${50 + 50 * Math.cos(Math.PI * 2 * ((payrollCalculations.reduce((sum, emp) => sum + emp.paye, 0) + payrollCalculations.reduce((sum, emp) => sum + emp.nssf, 0) + payrollCalculations.reduce((sum, emp) => sum + emp.nhif, 0) + payrollCalculations.reduce((sum, emp) => sum + emp.housingLevy, 0)) / payrollSummary.totalDeductions))}% ${50 - 50 * Math.sin(Math.PI * 2 * ((payrollCalculations.reduce((sum, emp) => sum + emp.paye, 0) + payrollCalculations.reduce((sum, emp) => sum + emp.nssf, 0) + payrollCalculations.reduce((sum, emp) => sum + emp.nhif, 0) + payrollCalculations.reduce((sum, emp) => sum + emp.housingLevy, 0)) / payrollSummary.totalDeductions))}%)` 
+                          }}
+                        ></div>
+                        <div 
+                          className="absolute bg-red-500 opacity-80" 
+                          style={{ 
+                            height: '100%', 
+                            width: '100%', 
+                            clipPath: `polygon(50% 50%, ${50 + 50 * Math.cos(Math.PI * 2 * ((payrollCalculations.reduce((sum, emp) => sum + emp.paye, 0) + payrollCalculations.reduce((sum, emp) => sum + emp.nssf, 0) + payrollCalculations.reduce((sum, emp) => sum + emp.nhif, 0) + payrollCalculations.reduce((sum, emp) => sum + emp.housingLevy, 0)) / payrollSummary.totalDeductions))}% ${50 - 50 * Math.sin(Math.PI * 2 * ((payrollCalculations.reduce((sum, emp) => sum + emp.paye, 0) + payrollCalculations.reduce((sum, emp) => sum + emp.nssf, 0) + payrollCalculations.reduce((sum, emp) => sum + emp.nhif, 0) + payrollCalculations.reduce((sum, emp) => sum + emp.housingLevy, 0)) / payrollSummary.totalDeductions))}%, ${50 + 50 * Math.cos(Math.PI * 2 * ((payrollCalculations.reduce((sum, emp) => sum + emp.paye, 0) + payrollCalculations.reduce((sum, emp) => sum + emp.nssf, 0) + payrollCalculations.reduce((sum, emp) => sum + emp.nhif, 0) + payrollCalculations.reduce((sum, emp) => sum + emp.housingLevy, 0) + payrollCalculations.reduce((sum, emp) => sum + emp.ewaDeductions, 0)) / payrollSummary.totalDeductions))}% ${50 - 50 * Math.sin(Math.PI * 2 * ((payrollCalculations.reduce((sum, emp) => sum + emp.paye, 0) + payrollCalculations.reduce((sum, emp) => sum + emp.nssf, 0) + payrollCalculations.reduce((sum, emp) => sum + emp.nhif, 0) + payrollCalculations.reduce((sum, emp) => sum + emp.housingLevy, 0) + payrollCalculations.reduce((sum, emp) => sum + emp.ewaDeductions, 0)) / payrollSummary.totalDeductions))}%)` 
+                          }}
+                        ></div>
+                      </div>
+                    </div>
+                    {/* Center circle and text */}
+                    <div className="bg-background h-[65%] w-[65%] rounded-full z-10 flex flex-col items-center justify-center shadow-inner">
+                      <span className="text-sm font-medium">Deductions</span>
+                      <span className="text-xs text-muted-foreground">{formatKES(payrollSummary.totalDeductions)}</span>
+                    </div>
+                  </div>
+                </div>
+                
+                {/* Deduction Legend */}
+                <div className="space-y-2 mt-4">
+                  <div className="flex items-center justify-between text-sm">
+                    <div className="flex items-center">
+                      <div className="w-3 h-3 rounded-sm bg-blue-500 mr-2"></div>
+                      <span>PAYE</span>
+                    </div>
+                    <span className="font-medium">
+                      {formatKES(payrollCalculations.reduce((sum, emp) => sum + emp.paye, 0))}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between text-sm">
+                    <div className="flex items-center">
+                      <div className="w-3 h-3 rounded-sm bg-green-500 mr-2"></div>
+                      <span>NSSF</span>
+                    </div>
+                    <span className="font-medium">
+                      {formatKES(payrollCalculations.reduce((sum, emp) => sum + emp.nssf, 0))}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between text-sm">
+                    <div className="flex items-center">
+                      <div className="w-3 h-3 rounded-sm bg-purple-500 mr-2"></div>
+                      <span>SHIF</span>
+                    </div>
+                    <span className="font-medium">
+                      {formatKES(payrollCalculations.reduce((sum, emp) => sum + emp.nhif, 0))}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between text-sm">
+                    <div className="flex items-center">
+                      <div className="w-3 h-3 rounded-sm bg-amber-500 mr-2"></div>
+                      <span>Housing Levy</span>
+                    </div>
+                    <span className="font-medium">
+                      {formatKES(payrollCalculations.reduce((sum, emp) => sum + emp.housingLevy, 0))}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between text-sm">
+                    <div className="flex items-center">
+                      <div className="w-3 h-3 rounded-sm bg-red-500 mr-2"></div>
+                      <span>EWA Advances</span>
+                    </div>
+                    <span className="font-medium">
+                      {formatKES(payrollCalculations.reduce((sum, emp) => sum + emp.ewaDeductions, 0))}
+                    </span>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
           
           {/* Employee-Level Review Table */}
           <Card>

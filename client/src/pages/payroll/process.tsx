@@ -1125,97 +1125,256 @@ export default function ProcessPayrollPage() {
       
       {currentStage === STAGES.CALCULATE && (
         <div className="space-y-8">
-          <div className="grid grid-cols-1 gap-8">
-            {/* Pre-Calculation Validation */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center">
-                  <CheckCircle className="mr-2 h-5 w-5" />
-                  Validation Check
-                </CardTitle>
-                <CardDescription>
-                  Verify employee data before calculation
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="space-y-4">
-                  <div className="bg-card/20 p-4 rounded-md">
-                    <h4 className="text-sm font-medium mb-2">Pay Period</h4>
-                    <p>
-                      {new Date(payPeriod.startDate).toLocaleDateString()} - {new Date(payPeriod.endDate).toLocaleDateString()}
-                    </p>
+          {/* Summary Cards - Status Overview */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <Card className="bg-blue-50 border-blue-200 dark:bg-blue-900/20 dark:border-blue-800">
+              <CardContent className="pt-6">
+                <div className="flex flex-col space-y-1">
+                  <span className="text-xs font-medium text-blue-800 dark:text-blue-300">Pay Period</span>
+                  <div className="flex items-center">
+                    <CalendarDays className="h-4 w-4 mr-2 text-blue-600 dark:text-blue-400" />
+                    <span className="text-sm font-semibold text-blue-900 dark:text-blue-100">
+                      {formatDate(payPeriod.startDate)} - {formatDate(payPeriod.endDate)}
+                    </span>
                   </div>
-                  
-                  <div className="bg-card/20 p-4 rounded-md">
-                    <h4 className="text-sm font-medium mb-2">Employees to Process</h4>
-                    <p>{eligibleEmployeeCount} employees from {selectedDepartment === "all" ? "all departments" : selectedDepartment}</p>
-                  </div>
-                  
-                  {validationIssues.length > 0 && (
-                    <div className="border border-amber-200 bg-amber-50 dark:bg-amber-950/30 p-4 rounded-md">
-                      <h4 className="text-sm font-medium text-amber-800 dark:text-amber-200 flex items-center mb-2">
-                        <AlertTriangle className="h-4 w-4 mr-1" />
-                        Validation Issues ({validationIssues.length})
-                      </h4>
-                      <ul className="space-y-1 text-sm">
-                        {validationIssues.slice(0, 5).map((issue, index) => {
-                          const employee = employeeData.find(emp => emp.id === issue.employeeId);
-                          return (
-                            <li key={index} className="text-amber-700 dark:text-amber-300">
-                              {employee?.name}: {issue.issue}
-                            </li>
-                          );
-                        })}
-                        {validationIssues.length > 5 && (
-                          <li className="text-amber-700 dark:text-amber-300">
-                            ...and {validationIssues.length - 5} more issues
-                          </li>
-                        )}
-                      </ul>
-                    </div>
-                  )}
+                  <span className="text-xs text-blue-700 dark:text-blue-400">
+                    {(() => {
+                      const start = new Date(payPeriod.startDate);
+                      const end = new Date(payPeriod.endDate);
+                      const days = Math.round((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+                      return `${days} days period`;
+                    })()}
+                  </span>
                 </div>
               </CardContent>
             </Card>
             
-            {/* Calculation Button */}
-            <div className="flex flex-col items-center">
-              {isCalculating ? (
-                <div className="w-full max-w-md">
-                  <div className="mb-2 text-center">
-                    <p className="text-sm font-medium">Calculating Payroll...</p>
-                    <p className="text-xs text-muted-foreground">
-                      Processing {Math.round(calculationProgress / 100 * eligibleEmployeeCount)} of {eligibleEmployeeCount} employees
-                    </p>
+            <Card className="bg-emerald-50 border-emerald-200 dark:bg-emerald-900/20 dark:border-emerald-800">
+              <CardContent className="pt-6">
+                <div className="flex flex-col space-y-1">
+                  <span className="text-xs font-medium text-emerald-800 dark:text-emerald-300">Processing Scope</span>
+                  <div className="flex items-center">
+                    <Users className="h-4 w-4 mr-2 text-emerald-600 dark:text-emerald-400" />
+                    <span className="text-lg font-bold text-emerald-900 dark:text-emerald-100">{eligibleEmployeeCount} Employees</span>
                   </div>
-                  <div className="w-full bg-muted rounded-full h-2.5 dark:bg-muted mb-4">
-                    <div 
-                      className="bg-primary h-2.5 rounded-full transition-all duration-300" 
-                      style={{ width: `${calculationProgress}%` }}
-                    ></div>
-                  </div>
+                  <span className="text-xs text-emerald-700 dark:text-emerald-400">
+                    {selectedDepartment === "all" ? "All departments" : `Department: ${selectedDepartment}`}
+                  </span>
                 </div>
-              ) : (
-                <Button 
-                  size="lg"
-                  variant="default"
-                  className="min-w-[200px]"
-                  onClick={calculatePayroll}
-                  disabled={eligibleEmployeeCount === 0}
-                >
-                  <Calculator className="mr-2 h-5 w-5" />
-                  Calculate Payroll
-                </Button>
-              )}
+              </CardContent>
+            </Card>
+            
+            <Card className={validationIssues.length > 0 ? "bg-amber-50 border-amber-200 dark:bg-amber-900/20 dark:border-amber-800" : "bg-green-50 border-green-200 dark:bg-green-900/20 dark:border-green-800"}>
+              <CardContent className="pt-6">
+                <div className="flex flex-col space-y-1">
+                  <span className="text-xs font-medium text-amber-800 dark:text-amber-300">Validation Status</span>
+                  <div className="flex items-center">
+                    {validationIssues.length > 0 ? (
+                      <>
+                        <AlertTriangle className="h-4 w-4 mr-2 text-amber-600 dark:text-amber-400" />
+                        <span className="text-lg font-bold text-amber-900 dark:text-amber-100">{validationIssues.length} Issues</span>
+                      </>
+                    ) : (
+                      <>
+                        <CheckCircle className="h-4 w-4 mr-2 text-green-600 dark:text-green-400" />
+                        <span className="text-lg font-bold text-green-900 dark:text-green-100">Ready to Process</span>
+                      </>
+                    )}
+                  </div>
+                  <span className="text-xs text-amber-700 dark:text-amber-400">
+                    {validationIssues.length > 0 ? 'Review issues below' : 'All data validated successfully'}
+                  </span>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+          
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+            {/* Pre-Calculation Validation */}
+            <div className="md:col-span-2">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center">
+                    <CheckCircle className="mr-2 h-5 w-5" />
+                    Validation Check
+                  </CardTitle>
+                  <CardDescription>
+                    Verify employee data before calculation
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  {validationIssues.length > 0 ? (
+                    <div className="border border-amber-200 bg-amber-50 dark:bg-amber-900/10 p-4 rounded-md">
+                      <h4 className="text-sm font-medium text-amber-800 dark:text-amber-300 flex items-center mb-3">
+                        <AlertTriangle className="h-4 w-4 mr-1" />
+                        Validation Issues ({validationIssues.length})
+                      </h4>
+                      
+                      <div className="space-y-3 max-h-[300px] overflow-y-auto pr-2">
+                        {validationIssues.map((issue, index) => {
+                          const employee = employeeData.find(emp => emp.id === issue.employeeId);
+                          return (
+                            <div key={index} className="flex p-2 bg-white dark:bg-amber-900/20 rounded-md border border-amber-100 dark:border-amber-800/50">
+                              <div className="p-2 bg-amber-100 dark:bg-amber-800/40 rounded-full mr-3">
+                                <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-300" />
+                              </div>
+                              <div>
+                                <h5 className="font-medium text-sm">{employee?.name}</h5>
+                                <p className="text-xs text-amber-700 dark:text-amber-400">{issue.issue}</p>
+                                <div className="mt-1 flex space-x-2">
+                                  <Button variant="outline" size="sm" className="h-7 text-xs px-2 py-0">
+                                    Fix Issue
+                                  </Button>
+                                  <Button variant="ghost" size="sm" className="h-7 text-xs px-2 py-0">
+                                    Ignore
+                                  </Button>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                      
+                      <div className="mt-4 pt-3 border-t border-amber-200 dark:border-amber-800/70">
+                        <p className="text-xs text-amber-700 dark:text-amber-400 flex items-center">
+                          <AlertTriangle className="h-3 w-3 mr-1" />
+                          These issues may affect payroll accuracy. Consider fixing them before proceeding.
+                        </p>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="border border-green-200 bg-green-50 dark:bg-green-900/10 p-5 rounded-md">
+                      <div className="flex justify-center">
+                        <div className="rounded-full bg-green-100 dark:bg-green-800/40 p-3 mb-4">
+                          <CheckCircle className="h-8 w-8 text-green-600 dark:text-green-300" />
+                        </div>
+                      </div>
+                      <h4 className="text-center text-green-800 dark:text-green-300 font-medium mb-2">All Employees Validated</h4>
+                      <p className="text-center text-sm text-green-700 dark:text-green-400">
+                        {eligibleEmployeeCount} employees are ready to have their payroll calculated.
+                      </p>
+                    </div>
+                  )}
+                  
+                  <div className="bg-blue-50 dark:bg-blue-900/10 p-4 rounded-md border border-blue-200 dark:border-blue-800/50">
+                    <h4 className="text-sm font-medium text-blue-800 dark:text-blue-300 mb-2 flex items-center">
+                      <FileText className="h-4 w-4 mr-1" />
+                      Processing Information
+                    </h4>
+                    <ul className="text-sm space-y-1.5 text-blue-700 dark:text-blue-400">
+                      <li className="flex items-center">
+                        <Circle className="h-1.5 w-1.5 mr-2" />
+                        {eligibleEmployeeCount} employees selected for calculation
+                      </li>
+                      <li className="flex items-center">
+                        <Circle className="h-1.5 w-1.5 mr-2" />
+                        The calculation will include KRA statutory deductions
+                      </li>
+                      <li className="flex items-center">
+                        <Circle className="h-1.5 w-1.5 mr-2" />
+                        EWA (Earned Wage Access) deductions will be applied where applicable
+                      </li>
+                      <li className="flex items-center">
+                        <Circle className="h-1.5 w-1.5 mr-2" />
+                        Attendance data from {formatDate(payPeriod.startDate)} to {formatDate(payPeriod.endDate)} will be used
+                      </li>
+                    </ul>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+            
+            {/* Calculation Controls */}
+            <div>
+              <Card className="mb-4">
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-sm">Calculation Options</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <Label htmlFor="include-overtime" className="flex items-center">
+                        <span>Include Overtime</span>
+                        <span className="ml-1 text-xs text-blue-600 cursor-help" title="Includes overtime hours at 1.5x hourly rate">(?)</span>
+                      </Label>
+                      <Switch id="include-overtime" defaultChecked={true} />
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <Label htmlFor="calculate-bonuses" className="flex items-center">
+                        <span>Performance Bonuses</span>
+                      </Label>
+                      <Switch id="calculate-bonuses" defaultChecked={false} />
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <Label htmlFor="round-amounts">
+                        <span>Round to Nearest KES</span>
+                      </Label>
+                      <Switch id="round-amounts" defaultChecked={true} />
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
               
-              <Button 
-                variant="outline"
-                className="mt-4"
-                onClick={() => setCurrentStage(STAGES.SETUP)}
-                disabled={isCalculating}
-              >
-                Back to Setup
-              </Button>
+              {/* Calculation Button */}
+              <Card className={isCalculating ? "border-blue-300 shadow-blue-100 dark:shadow-none" : ""}>
+                <CardContent className="pt-6 pb-6">
+                  {isCalculating ? (
+                    <div>
+                      <div className="mb-4 flex justify-center">
+                        <div className="rounded-full bg-blue-100 dark:bg-blue-900/50 p-3">
+                          <RefreshCw className="h-8 w-8 text-blue-600 dark:text-blue-400 animate-spin" />
+                        </div>
+                      </div>
+                      <h3 className="text-center font-medium mb-2">Calculating Payroll</h3>
+                      <div className="mb-2 text-center">
+                        <p className="text-xs text-muted-foreground">
+                          Processing {Math.round(calculationProgress / 100 * eligibleEmployeeCount)} of {eligibleEmployeeCount} employees
+                        </p>
+                      </div>
+                      <div className="w-full bg-muted rounded-full h-3 dark:bg-muted my-4">
+                        <div 
+                          className="bg-blue-500 dark:bg-blue-600 h-3 rounded-full transition-all duration-300" 
+                          style={{ width: `${calculationProgress}%` }}
+                        ></div>
+                      </div>
+                      <p className="text-xs text-center text-muted-foreground">This may take a few moments</p>
+                    </div>
+                  ) : (
+                    <div className="flex flex-col items-center">
+                      <div className="mb-4 flex justify-center">
+                        <div className="rounded-full bg-emerald-100 dark:bg-emerald-900/50 p-3">
+                          <Calculator className="h-8 w-8 text-emerald-600 dark:text-emerald-400" />
+                        </div>
+                      </div>
+                      <h3 className="text-center font-medium mb-2">Ready to Calculate</h3>
+                      <p className="text-center text-sm text-muted-foreground mb-4">
+                        {validationIssues.length === 0 
+                          ? "All employee data has been validated and is ready for processing." 
+                          : `There are ${validationIssues.length} issues that may affect calculation accuracy.`}
+                      </p>
+                      <Button 
+                        size="lg"
+                        variant="default"
+                        className="min-w-[200px]"
+                        onClick={calculatePayroll}
+                        disabled={eligibleEmployeeCount === 0}
+                      >
+                        <Calculator className="mr-2 h-5 w-5" />
+                        Calculate Payroll
+                      </Button>
+                      
+                      <Button 
+                        variant="outline"
+                        className="mt-4 w-full"
+                        onClick={() => setCurrentStage(STAGES.SETUP)}
+                        disabled={isCalculating}
+                      >
+                        Back to Setup
+                      </Button>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
             </div>
           </div>
         </div>

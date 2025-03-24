@@ -26,19 +26,18 @@ function useChart() {
   const context = React.useContext(ChartContext)
 
   if (!context) {
-    throw new Error("useChart must be used within a <ChartContainer />")
+    throw new Error("useChart must be used within a <Chart />")
   }
 
   return context
 }
 
-const ChartContainer = React.forwardRef<
+// Main Chart component - updated with modern Shadcn naming and styling
+const Chart = React.forwardRef<
   HTMLDivElement,
   React.ComponentProps<"div"> & {
     config: ChartConfig
-    children: React.ComponentProps<
-      typeof RechartsPrimitive.ResponsiveContainer
-    >["children"]
+    children: React.ReactNode
   }
 >(({ id, className, children, config, ...props }, ref) => {
   const uniqueId = React.useId()
@@ -50,20 +49,23 @@ const ChartContainer = React.forwardRef<
         data-chart={chartId}
         ref={ref}
         className={cn(
-          "flex aspect-video justify-center text-xs [&_.recharts-cartesian-axis-tick_text]:fill-muted-foreground [&_.recharts-cartesian-grid_line[stroke='#ccc']]:stroke-border/50 [&_.recharts-curve.recharts-tooltip-cursor]:stroke-border [&_.recharts-dot[stroke='#fff']]:stroke-transparent [&_.recharts-layer]:outline-none [&_.recharts-polar-grid_[stroke='#ccc']]:stroke-border [&_.recharts-radial-bar-background-sector]:fill-muted [&_.recharts-rectangle.recharts-tooltip-cursor]:fill-muted [&_.recharts-reference-line_[stroke='#ccc']]:stroke-border [&_.recharts-sector[stroke='#fff']]:stroke-transparent [&_.recharts-sector]:outline-none [&_.recharts-surface]:outline-none",
+          "w-full h-full text-sm [&_.recharts-cartesian-axis-tick_text]:fill-muted-foreground [&_.recharts-cartesian-grid_line[stroke='#ccc']]:stroke-border/50 [&_.recharts-curve.recharts-tooltip-cursor]:stroke-border [&_.recharts-dot[stroke='#fff']]:stroke-transparent [&_.recharts-layer]:outline-none [&_.recharts-polar-grid_[stroke='#ccc']]:stroke-border [&_.recharts-radial-bar-background-sector]:fill-muted [&_.recharts-rectangle.recharts-tooltip-cursor]:fill-muted [&_.recharts-reference-line_[stroke='#ccc']]:stroke-border [&_.recharts-sector[stroke='#fff']]:stroke-transparent [&_.recharts-sector]:outline-none [&_.recharts-surface]:outline-none",
           className
         )}
         {...props}
       >
         <ChartStyle id={chartId} config={config} />
-        <RechartsPrimitive.ResponsiveContainer>
+        <RechartsPrimitive.ResponsiveContainer width="100%" height="100%">
           {children}
         </RechartsPrimitive.ResponsiveContainer>
       </div>
     </ChartContext.Provider>
   )
 })
-ChartContainer.displayName = "Chart"
+Chart.displayName = "Chart"
+
+// For backwards compatibility
+const ChartContainer = Chart
 
 const ChartStyle = ({ id, config }: { id: string; config: ChartConfig }) => {
   const colorConfig = Object.entries(config).filter(
@@ -252,7 +254,7 @@ const ChartTooltipContent = React.forwardRef<
     )
   }
 )
-ChartTooltipContent.displayName = "ChartTooltip"
+ChartTooltipContent.displayName = "ChartTooltipContent"
 
 const ChartLegend = RechartsPrimitive.Legend
 
@@ -312,7 +314,7 @@ const ChartLegendContent = React.forwardRef<
     )
   }
 )
-ChartLegendContent.displayName = "ChartLegend"
+ChartLegendContent.displayName = "ChartLegendContent"
 
 // Helper to extract item config from a payload.
 function getPayloadConfigFromPayload(
@@ -353,11 +355,85 @@ function getPayloadConfigFromPayload(
     : config[key as keyof typeof config]
 }
 
+// Core chart components
+const ChartArea = RechartsPrimitive.Area
+const ChartBar = RechartsPrimitive.Bar
+const ChartCell = RechartsPrimitive.Cell
+const ChartLine = RechartsPrimitive.Line
+const ChartPie = RechartsPrimitive.Pie
+const ChartXAxis = RechartsPrimitive.XAxis
+const ChartYAxis = RechartsPrimitive.YAxis
+const CartesianGrid = RechartsPrimitive.CartesianGrid
+const ResponsiveContainer = RechartsPrimitive.ResponsiveContainer
+
+// Chart types
+const AreaChart = RechartsPrimitive.AreaChart
+const BarChart = RechartsPrimitive.BarChart
+const LineChart = RechartsPrimitive.LineChart
+const PieChart = RechartsPrimitive.PieChart
+const RadarChart = RechartsPrimitive.RadarChart
+const RadialBarChart = RechartsPrimitive.RadialBarChart
+const ScatterChart = RechartsPrimitive.ScatterChart
+const ComposedChart = RechartsPrimitive.ComposedChart
+
+// Additional components
+const Radar = RechartsPrimitive.Radar
+const RadialBar = RechartsPrimitive.RadialBar
+const Scatter = RechartsPrimitive.Scatter
+const Brush = RechartsPrimitive.Brush
+const Reference = RechartsPrimitive.ReferenceLine
+const ReferenceLine = RechartsPrimitive.ReferenceLine
+const ReferenceArea = RechartsPrimitive.ReferenceArea
+const ReferenceDot = RechartsPrimitive.ReferenceDot
+const Label = RechartsPrimitive.Label
+const LabelList = RechartsPrimitive.LabelList
+
 export {
+  // Main chart component
+  Chart,
+  
+  // Legacy exports
   ChartContainer,
   ChartTooltip,
   ChartTooltipContent,
   ChartLegend,
   ChartLegendContent,
   ChartStyle,
+  
+  // Core chart components
+  ChartArea,
+  ChartBar,
+  ChartCell,
+  ChartLine,
+  ChartPie,
+  ChartXAxis,
+  ChartYAxis,
+  CartesianGrid,
+  ResponsiveContainer,
+  
+  // Chart types
+  AreaChart,
+  BarChart,
+  LineChart,
+  PieChart,
+  RadarChart,
+  RadialBarChart,
+  ScatterChart,
+  ComposedChart,
+  
+  // Additional components
+  Radar,
+  RadialBar,
+  Scatter,
+  Brush,
+  Reference,
+  ReferenceLine,
+  ReferenceArea,
+  ReferenceDot,
+  Label,
+  LabelList,
+  
+  // Utilities
+  getPayloadConfigFromPayload,
+  useChart,
 }

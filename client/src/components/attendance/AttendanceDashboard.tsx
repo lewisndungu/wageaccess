@@ -27,21 +27,22 @@ import {
   SelectTrigger, 
   SelectValue 
 } from "@/components/ui/select";
-import { 
-  AreaChart, 
-  Area, 
-  XAxis, 
-  YAxis, 
-  CartesianGrid, 
-  Tooltip, 
-  ResponsiveContainer,
+import {
+  Chart,
+  AreaChart,
   BarChart,
-  Bar,
-  Cell,
   PieChart,
-  Pie,
-  Legend
-} from 'recharts';
+  ChartArea,
+  ChartBar,
+  ChartPie,
+  ChartCell,
+  ChartTooltip,
+  ChartXAxis,
+  ChartYAxis,
+  ChartLegend,
+  CartesianGrid,
+  ResponsiveContainer,
+} from "@/components/ui/chart";
 import { ColumnDef } from "@tanstack/react-table";
 import { attendanceRecords, employees, formatDate, formatTime } from "@/lib/mock-data";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -603,10 +604,23 @@ export function AttendanceDashboard() {
                   </CardHeader>
                   <CardContent>
                     <div className="h-80">
-                      <ResponsiveContainer width="100%" height="100%">
+                      <Chart
+                        config={{
+                          present: {
+                            label: "Present",
+                            color: "#10B981"
+                          },
+                          late: {
+                            label: "Late",
+                            color: "#F59E0B"
+                          },
+                          absent: {
+                            label: "Absent", 
+                            color: "#EF4444"
+                          }
+                        }}
+                      >
                         <BarChart
-                          width={500}
-                          height={300}
                           data={departmentData}
                           margin={{
                             top: 5,
@@ -616,15 +630,15 @@ export function AttendanceDashboard() {
                           }}
                         >
                           <CartesianGrid strokeDasharray="3 3" />
-                          <XAxis dataKey="name" />
-                          <YAxis />
-                          <Tooltip />
-                          <Legend />
-                          <Bar dataKey="present" fill="#10B981" name="Present" />
-                          <Bar dataKey="late" fill="#F59E0B" name="Late" />
-                          <Bar dataKey="absent" fill="#EF4444" name="Absent" />
+                          <ChartXAxis dataKey="name" />
+                          <ChartYAxis />
+                          <ChartTooltip />
+                          <ChartLegend />
+                          <ChartBar dataKey="present" fill="#10B981" name="Present" />
+                          <ChartBar dataKey="late" fill="#F59E0B" name="Late" />
+                          <ChartBar dataKey="absent" fill="#EF4444" name="Absent" />
                         </BarChart>
-                      </ResponsiveContainer>
+                      </Chart>
                     </div>
                   </CardContent>
                 </Card>
@@ -637,10 +651,15 @@ export function AttendanceDashboard() {
                   </CardHeader>
                   <CardContent>
                     <div className="h-80">
-                      <ResponsiveContainer width="100%" height="100%">
+                      <Chart
+                        config={{
+                          rate: {
+                            label: "Attendance Rate (%)",
+                            color: "#3B82F6"
+                          }
+                        }}
+                      >
                         <AreaChart
-                          width={500}
-                          height={300}
                           data={trendData}
                           margin={{
                             top: 5,
@@ -650,20 +669,20 @@ export function AttendanceDashboard() {
                           }}
                         >
                           <CartesianGrid strokeDasharray="3 3" />
-                          <XAxis dataKey="date" />
-                          <YAxis />
-                          <Tooltip />
-                          <Legend />
-                          <Area
+                          <ChartXAxis dataKey="date" />
+                          <ChartYAxis />
+                          <ChartTooltip />
+                          <ChartLegend />
+                          <ChartArea
                             type="monotone"
                             dataKey="rate"
-                            stroke="#6C2BD9"
-                            fill="#6C2BD9"
+                            stroke="#3B82F6"
+                            fill="#3B82F6"
                             fillOpacity={0.2}
                             name="Attendance Rate (%)"
                           />
                         </AreaChart>
-                      </ResponsiveContainer>
+                      </Chart>
                     </div>
                   </CardContent>
                 </Card>

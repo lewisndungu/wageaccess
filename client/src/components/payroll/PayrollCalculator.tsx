@@ -750,8 +750,14 @@ export function PayrollCalculator({ onSave }: PayrollCalculatorProps) {
                     <p className="font-medium">{formatKES(calculationResults.grossPay)}</p>
                   </div>
                   <div>
+                    <p className="text-sm text-muted-foreground">Taxable Income</p>
+                    <p className="font-medium">{formatKES(calculateTaxableIncome(calculationResults.grossPay))}</p>
+                    <p className="text-xs text-muted-foreground">(After statutory deductions)</p>
+                  </div>
+                  <div>
                     <p className="text-sm text-muted-foreground">PAYE</p>
                     <p className="font-medium">{formatKES(calculationResults.paye)}</p>
+                    <p className="text-xs text-muted-foreground">(After KES 2,400 personal relief)</p>
                   </div>
                   <div>
                     <p className="text-sm text-muted-foreground">SHIF</p>
@@ -761,10 +767,12 @@ export function PayrollCalculator({ onSave }: PayrollCalculatorProps) {
                   <div>
                     <p className="text-sm text-muted-foreground">NSSF</p>
                     <p className="font-medium">{formatKES(calculationResults.nssf)}</p>
+                    <p className="text-xs text-muted-foreground">(6% rate with tiered limits)</p>
                   </div>
                   <div>
                     <p className="text-sm text-muted-foreground">Housing Levy</p>
                     <p className="font-medium">{formatKES(calculationResults.housingLevy)}</p>
+                    <p className="text-xs text-muted-foreground">(1.5% of gross pay)</p>
                   </div>
                   <div>
                     <p className="text-sm text-muted-foreground">EWA Deductions</p>

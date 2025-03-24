@@ -99,11 +99,14 @@ export function PayrollCalculator({ onSave }: PayrollCalculatorProps) {
     overtimeHours: number;
   } | null>(null);
   
-  // Fetch employees
-  const { data: employeeList } = useQuery({
-    queryKey: ['/api/employees/active'],
-    initialData: employees,
-  });
+  // Use mock employees directly for now
+  const employeeList = employees || [];
+  
+  // This would be the real API call in production
+  // const { data: employeeList } = useQuery({
+  //   queryKey: ['/api/employees/active'],
+  //   initialData: employees,
+  // });
   
   // Fetch EWA withdrawals
   const { data: ewaWithdrawals, isLoading: isLoadingEwa } = useQuery({

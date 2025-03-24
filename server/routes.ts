@@ -658,7 +658,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
   
   app.post("/api/wallet/topup", async (req, res) => {
-    const { amount, fundingSource = 'employer' } = req.body;
+    // We only allow employer funding - ignore any other funding source that might be sent
+    const { amount } = req.body;
+    const fundingSource = 'employer'; // Force employer funding source
     
     if (!amount || isNaN(parseFloat(amount))) {
       return res.status(400).json({ message: "Valid amount is required" });
@@ -672,25 +674,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
     
     const parsedAmount = parseFloat(amount);
     
-    let updatedWallet;
-    
-    if (fundingSource === 'employer') {
-      const currentEmployerBalance = parseFloat(wallet.employerBalance?.toString() || "0");
-      updatedWallet = await storage.updateWallet(wallet.id, {
-        employerBalance: (currentEmployerBalance + parsedAmount).toString() // Convert to string for decimal type
-      });
-    } else {
-      const currentJahaziiBalance = parseFloat(wallet.jahaziiBalance?.toString() || "0");
-      updatedWallet = await storage.updateWallet(wallet.id, {
-        jahaziiBalance: (currentJahaziiBalance + parsedAmount).toString() // Convert to string for decimal type
-      });
-    }
+    // Always update employer balance
+    const currentEmployerBalance = parseFloat(wallet.employerBalance?.toString() || "0");
+    const updatedWallet = await storage.updateWallet(wallet.id, {
+      employerBalance: (currentEmployerBalance + parsedAmount).toString() // Convert to string for decimal type
+    });
     
     await storage.createWalletTransaction({
       walletId: wallet.id,
       amount: parsedAmount.toString(), // Convert to string for decimal type
-      transactionType: fundingSource === 'employer' ? 'employer_topup' : 'jahazii_topup',
-      description: `${fundingSource === 'employer' ? 'Employer' : 'Jahazii'} wallet top-up`,
+      transactionType: 'employer_topup',
+      description: 'Employer wallet top-up',
       referenceId: `TOP-${Date.now()}`,
       fundingSource,
       status: 'completed'

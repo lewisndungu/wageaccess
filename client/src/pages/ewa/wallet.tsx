@@ -12,7 +12,8 @@ import { ColumnDef } from "@tanstack/react-table";
 import { DataTable } from "@/components/ui/data-table";
 import { walletData, formatCurrency, formatDateTime } from "@/lib/mock-data";
 import { toast } from "@/hooks/use-toast";
-import { ChevronLeft, DollarSign, Download, Plus, RefreshCw } from "lucide-react";
+import { ChevronLeft, DollarSign, Download, Info, Plus, RefreshCw } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 
 interface WalletTransaction {
   id: number;

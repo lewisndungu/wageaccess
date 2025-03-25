@@ -62,7 +62,7 @@ import { toast } from "@/hooks/use-toast";
 import { useQuery } from "@tanstack/react-query";
 import { employees, departments, formatCurrency, formatDate } from "@/lib/mock-data";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { Stepper } from "@/components/ui/stepper";
+import Stepper from "@/components/ui/stepper";
 
 import {
   ChevronDown,
@@ -771,23 +771,24 @@ export default function ProcessPayrollPage() {
   
   // Define stepper steps based on the current stage
   const getStepperSteps = () => {
+    const stageIndex = Object.values(STAGES).indexOf(currentStage);
     return [
       {
         id: 1, 
         name: "Setup", 
-        completed: currentStage !== STAGES.SETUP,
+        completed: stageIndex > 0, // Completed if we're past this stage
         current: currentStage === STAGES.SETUP
       },
       {
         id: 2, 
         name: "Review", 
-        completed: currentStage === STAGES.FINALIZE,
+        completed: stageIndex > 1, // Completed if we're past this stage
         current: currentStage === STAGES.REVIEW
       },
       {
         id: 3, 
         name: "Finalize", 
-        completed: false,
+        completed: false, // Never completed as it's the last step
         current: currentStage === STAGES.FINALIZE
       }
     ];

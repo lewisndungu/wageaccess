@@ -281,6 +281,11 @@ export default function ProcessPayrollPage() {
       ),
     },
     {
+      accessorKey: "overtimeHours",
+      header: "Overtime",
+      enableHiding: true, // Hidden by default, used for reference in other cells
+    },
+    {
       accessorKey: "grossPay",
       header: "Gross Pay",
       cell: ({ row }) => formatKES(row.getValue("grossPay")),

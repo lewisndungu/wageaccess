@@ -692,6 +692,7 @@ export default function ProcessPayrollPage() {
       { name: "Loans", value: totalLoans, fill: "#6366f1" },
       { name: "Other", value: totalOther, fill: "#94a3b8" },
     ].filter((item) => item.value > 0); // Only include non-zero values
+
     
     // If no items have positive values, provide minimum data for chart
     return chartData.length > 0 ? chartData : [
@@ -1812,7 +1813,7 @@ export default function ProcessPayrollPage() {
               <CardContent className="grid grid-cols-2 place-items-center">
                 {/* Deduction Pie Chart (Visualization) */}
                 <div className="flex flex justify-center items-center py-2">
-                  <ResponsiveContainer width="100%" height={240}>
+                  <ChartContainer>
                     <PieChart>
                       <Pie
                         data={prepareDeductionsChartData(payrollCalculations)}
@@ -1851,7 +1852,7 @@ export default function ProcessPayrollPage() {
                           : formatKES(0)}
                       </text>
                     </PieChart>
-                  </ResponsiveContainer>
+                  </ChartContainer>
                 </div>
 
                 {/* Deduction Legend */}

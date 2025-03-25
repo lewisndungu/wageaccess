@@ -1130,10 +1130,6 @@ export default function ProcessPayrollPage() {
           
           {/* Action Buttons */}
           <div className="flex justify-end space-x-2 mt-6">
-            <Button variant="outline">
-              Save for Later
-            </Button>
-            
             <Button 
               size="default"
               onClick={() => calculatePayroll()}

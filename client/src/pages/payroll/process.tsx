@@ -78,6 +78,7 @@ import {
   CalendarDays,
   Users,
   Building,
+  Building2,
   BarChart,
   PieChart as PieChartIcon,
   AlertTriangle,
@@ -94,6 +95,9 @@ import {
   ArrowUp,
   ArrowDown,
   Pencil,
+  CreditCard,
+  Smartphone,
+  Calendar,
 } from "lucide-react";
 import {
   ChartConfig,
@@ -1679,84 +1683,7 @@ export default function ProcessPayrollPage() {
                 </div>
               </div>
 
-              {/* Single unified pagination row */}
-              <div className="flex flex-wrap items-center justify-between py-4 gap-2">
-                <div className="flex items-center gap-2">
-                  <p className="text-sm text-muted-foreground whitespace-nowrap">
-                    Showing <span className="font-medium">1</span> to <span className="font-medium">{Math.min(25, payrollCalculations.length)}</span> of <span className="font-medium">{payrollCalculations.length}</span> employees
-                  </p>
-
-                  <div className="flex items-center gap-1 ml-4">
-                    <span className="text-xs text-muted-foreground whitespace-nowrap">Page Size:</span>
-                    <Select
-                      defaultValue="25"
-                      onValueChange={(value) => {
-                        console.log(`Changed page size to ${value}`);
-                        // In a real implementation, this would update the page size in pagination state
-                      }}
-                    >
-                      <SelectTrigger className="border-0 h-7 w-16 focus:ring-0">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="5">5</SelectItem>
-                        <SelectItem value="10">10</SelectItem>
-                        <SelectItem value="25">25</SelectItem>
-                        <SelectItem value="50">50</SelectItem>
-                        <SelectItem value="100">100</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-1">
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    className="h-8 w-8"
-                    onClick={() => console.log('First page')}
-                    disabled={true}
-                  >
-                    <ChevronsLeft className="h-4 w-4" />
-                    <span className="sr-only">First page</span>
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    className="h-8 w-8"
-                    onClick={() => console.log('Previous page')}
-                    disabled={true}
-                  >
-                    <ChevronLeft className="h-4 w-4" />
-                    <span className="sr-only">Previous page</span>
-                  </Button>
-
-                  <span className="text-sm px-2">
-                    Page <span className="font-medium">1</span> of <span className="font-medium">{Math.ceil(payrollCalculations.length / 25)}</span>
-                  </span>
-
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    className="h-8 w-8"
-                    onClick={() => console.log('Next page')}
-                    disabled={payrollCalculations.length <= 25}
-                  >
-                    <ChevronRight className="h-4 w-4" />
-                    <span className="sr-only">Next page</span>
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    className="h-8 w-8"
-                    onClick={() => console.log('Last page')}
-                    disabled={payrollCalculations.length <= 25}
-                  >
-                    <ChevronsRight className="h-4 w-4" />
-                    <span className="sr-only">Last page</span>
-                  </Button>
-                </div>
-              </div>
+              {/* Pagination is handled by the DataTable component */}
             </CardContent>
           </Card>
           

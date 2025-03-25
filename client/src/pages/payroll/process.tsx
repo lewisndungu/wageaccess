@@ -62,6 +62,7 @@ import { toast } from "@/hooks/use-toast";
 import { useQuery } from "@tanstack/react-query";
 import { employees, departments, formatCurrency, formatDate } from "@/lib/mock-data";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { Stepper } from "@/components/ui/stepper";
 
 import {
   ChevronDown,
@@ -768,6 +769,30 @@ export default function ProcessPayrollPage() {
     }
   };
   
+  // Define stepper steps based on the current stage
+  const getStepperSteps = () => {
+    return [
+      {
+        id: 1, 
+        name: "Setup", 
+        completed: currentStage !== STAGES.SETUP,
+        current: currentStage === STAGES.SETUP
+      },
+      {
+        id: 2, 
+        name: "Review", 
+        completed: currentStage === STAGES.FINALIZE,
+        current: currentStage === STAGES.REVIEW
+      },
+      {
+        id: 3, 
+        name: "Finalize", 
+        completed: false,
+        current: currentStage === STAGES.FINALIZE
+      }
+    ];
+  };
+
   return (
     <div className="container mx-auto py-6 space-y-8">
       <div className="flex justify-between items-center">
@@ -779,8 +804,11 @@ export default function ProcessPayrollPage() {
         </div>
       </div>
       
-      {/* Process Status Tracker */}
-      <div className="relative">
+      {/* Import the Stepper component */}
+      <Stepper steps={getStepperSteps()} />
+      
+      {/* Legacy Process Status Tracker - Replaced with Stepper
+      <div className="relative hidden">
         <div className="flex justify-between mb-2">
           {Object.values(STAGES).map((stage, index) => (
             <div 

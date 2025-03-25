@@ -647,6 +647,42 @@ export default function ProcessPayrollPage() {
   };
 
   // Calculate payroll summary statistics
+  // Define chart configuration for deductions
+  const deductionsChartConfig: ChartConfig = {
+    paye: {
+      label: "PAYE",
+      color: "#3b82f6" // blue
+    },
+    shif: {
+      label: "SHIF",
+      color: "#10b981" // green
+    },
+    nssf: {
+      label: "NSSF",
+      color: "#8b5cf6" // purple
+    },
+    housingLevy: {
+      label: "Housing Levy",
+      color: "#f59e0b" // amber
+    },
+    ewa: {
+      label: "EWA",
+      color: "#ef4444" // red
+    },
+    loans: {
+      label: "Loans",
+      color: "#6366f1" // indigo
+    },
+    other: {
+      label: "Other",
+      color: "#94a3b8" // slate
+    },
+    noData: {
+      label: "No Data",
+      color: "#d1d5db" // gray
+    }
+  };
+
   // Prepare data for the deductions pie chart
   const prepareDeductionsChartData = (
     calculations: EmployeePayrollCalculation[],
@@ -654,10 +690,10 @@ export default function ProcessPayrollPage() {
     // If no data is available, return placeholder data
     if (!calculations || calculations.length === 0) {
       return [
-        { name: "PAYE", value: 1, fill: "#3b82f6" },
-        { name: "SHIF", value: 1, fill: "#10b981" },
-        { name: "NSSF", value: 1, fill: "#8b5cf6" },
-        { name: "Housing Levy", value: 1, fill: "#f59e0b" },
+        { name: "paye", value: 1 },
+        { name: "shif", value: 1 },
+        { name: "nssf", value: 1 },
+        { name: "housingLevy", value: 1 }
       ];
     }
 
@@ -684,19 +720,19 @@ export default function ProcessPayrollPage() {
 
     // Format into chart data
     const chartData = [
-      { name: "PAYE", value: totalPaye, fill: "#3b82f6" },
-      { name: "SHIF", value: totalNhif, fill: "#10b981" },
-      { name: "NSSF", value: totalNssf, fill: "#8b5cf6" },
-      { name: "Housing Levy", value: totalHousingLevy, fill: "#f59e0b" },
-      { name: "EWA", value: totalEwa, fill: "#ef4444" },
-      { name: "Loans", value: totalLoans, fill: "#6366f1" },
-      { name: "Other", value: totalOther, fill: "#94a3b8" },
+      { name: "paye", value: totalPaye },
+      { name: "shif", value: totalNhif },
+      { name: "nssf", value: totalNssf },
+      { name: "housingLevy", value: totalHousingLevy },
+      { name: "ewa", value: totalEwa },
+      { name: "loans", value: totalLoans },
+      { name: "other", value: totalOther }
     ].filter((item) => item.value > 0); // Only include non-zero values
 
     
     // If no items have positive values, provide minimum data for chart
     return chartData.length > 0 ? chartData : [
-      { name: "No Data", value: 1, fill: "#d1d5db" },
+      { name: "noData", value: 1 }
     ];
   };
   
@@ -705,24 +741,24 @@ export default function ProcessPayrollPage() {
     // If no employee or employee has no deductions
     if (!employee) {
       return [
-        { name: "No Data", value: 1, fill: "#d1d5db" },
+        { name: "noData", value: 1 },
       ];
     }
     
     // Format into chart data
     const chartData = [
-      { name: "PAYE", value: employee.paye, fill: "#3b82f6" },
-      { name: "SHIF", value: employee.nhif, fill: "#10b981" },
-      { name: "NSSF", value: employee.nssf, fill: "#8b5cf6" },
-      { name: "Housing Levy", value: employee.housingLevy, fill: "#f59e0b" },
-      { name: "EWA", value: employee.ewaDeductions, fill: "#ef4444" },
-      { name: "Loans", value: employee.loanDeductions, fill: "#6366f1" },
-      { name: "Other", value: employee.otherDeductions, fill: "#94a3b8" },
+      { name: "paye", value: employee.paye },
+      { name: "shif", value: employee.nhif },
+      { name: "nssf", value: employee.nssf },
+      { name: "housingLevy", value: employee.housingLevy },
+      { name: "ewa", value: employee.ewaDeductions },
+      { name: "loans", value: employee.loanDeductions },
+      { name: "other", value: employee.otherDeductions },
     ].filter((item) => item.value > 0); // Only include non-zero values
     
     // If no items have positive values, provide minimum data for chart
     return chartData.length > 0 ? chartData : [
-      { name: "No Deductions", value: 1, fill: "#d1d5db" },
+      { name: "noData", value: 1 },
     ];
   };
 
@@ -1813,7 +1849,7 @@ export default function ProcessPayrollPage() {
               <CardContent className="grid grid-cols-2 place-items-center">
                 {/* Deduction Pie Chart (Visualization) */}
                 <div className="flex flex justify-center items-center py-2">
-                  <ChartContainer>
+                  <ChartContainer config={deductionsChartConfig}>
                     <PieChart>
                       <Pie
                         data={prepareDeductionsChartData(payrollCalculations)}
@@ -1827,7 +1863,7 @@ export default function ProcessPayrollPage() {
                       >
                         {prepareDeductionsChartData(payrollCalculations).map(
                           (entry, index) => (
-                            <Cell key={`cell-${index}`} fill={entry.fill} />
+                            <Cell key={`cell-${index}`} />
                           ),
                         )}
                       </Pie>

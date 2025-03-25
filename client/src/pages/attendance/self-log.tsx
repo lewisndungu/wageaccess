@@ -5,15 +5,9 @@ import { QRGenerator } from "@/components/attendance/QRGenerator";
 import { OTPForm } from "@/components/attendance/OTPForm";
 import { ClockInOut } from "@/components/attendance/ClockInOut";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Switch } from "@/components/ui/switch";
-import { Label } from "@/components/ui/label";
-import { Badge } from "@/components/ui/badge";
 import { Link } from "react-router-dom";
-import { Download, QrCode, Settings, Users, Clock, Calendar, RotateCw, MapPin } from "lucide-react";
+import { QrCode, Users, Clock, Calendar } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
-import { toast } from "@/hooks/use-toast";
-import { apiRequest, queryClient } from "@/lib/queryClient";
 
 interface ClockEvent {
   employeeName: string;
@@ -23,11 +17,6 @@ interface ClockEvent {
 
 export default function SelfLogPage() {
   const [tabValue, setTabValue] = useState("qr");
-  const [autoClockOut, setAutoClockOut] = useState(true);
-  const [geoVerification, setGeoVerification] = useState(false);
-  const [otpExpiryTime, setOtpExpiryTime] = useState(15);
-  const [qrRefreshInterval, setQrRefreshInterval] = useState(10);
-  const [isUpdatingSettings, setIsUpdatingSettings] = useState(false);
   
   // Mock usage statistics from API
   const stats = {
@@ -54,30 +43,6 @@ export default function SelfLogPage() {
   const handleAttendanceSuccess = () => {
     // Refetch events to update the list
     refetchEvents();
-  };
-  
-  // Handle save settings
-  const handleSaveSettings = async () => {
-    setIsUpdatingSettings(true);
-    
-    try {
-      // In a real implementation, we would call the API to update settings
-      await new Promise(resolve => setTimeout(resolve, 800)); // Simulate API call
-      
-      toast({
-        title: "Settings Updated",
-        description: "Attendance settings have been updated successfully."
-      });
-      
-    } catch (error) {
-      toast({
-        title: "Error",
-        description: "Failed to update settings",
-        variant: "destructive"
-      });
-    } finally {
-      setIsUpdatingSettings(false);
-    }
   };
   
   // Format timestamp for display
@@ -118,7 +83,7 @@ export default function SelfLogPage() {
         </div>
       </div>
       
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="space-y-6">
         {/* Status Cards */}
         <div className="lg:col-span-3 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
           <Card className="shadow-glass dark:shadow-glass-dark">
@@ -180,7 +145,7 @@ export default function SelfLogPage() {
           </Card>
         </div>
         
-        <div className="lg:col-span-2 space-y-6">
+        <div className="space-y-6">
           <Card className="shadow-glass dark:shadow-glass-dark">
             <Tabs value={tabValue} onValueChange={setTabValue}>
               <CardHeader>
@@ -223,150 +188,6 @@ export default function SelfLogPage() {
           </Card>
         </div>
         
-        <div className="space-y-6">
-          <Card className="shadow-glass dark:shadow-glass-dark">
-            <CardHeader>
-              <CardTitle>Recent Activity</CardTitle>
-              <CardDescription>Latest attendance records</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="border rounded-md p-2 max-h-[380px] overflow-y-auto">
-                {recentEvents && recentEvents.length > 0 ? (
-                  <ul className="divide-y divide-gray-100 dark:divide-gray-800">
-                    {recentEvents.map((event, index) => (
-                      <li key={index} className="py-3 px-1">
-                        <div className="flex items-start justify-between">
-                          <div className="flex items-center">
-                            <div className="bg-primary/10 h-9 w-9 rounded-full flex items-center justify-center mr-3 text-primary">
-                              {event.employeeName.charAt(0)}
-                            </div>
-                            <div>
-                              <p className="text-sm font-medium">{event.employeeName}</p>
-                              <div className="flex items-center">
-                                <Badge 
-                                  variant="outline" 
-                                  className={event.action === 'in' ? 
-                                    "text-green-600 bg-green-50 border-green-100" : 
-                                    "text-blue-600 bg-blue-50 border-blue-100"
-                                  }
-                                >
-                                  {event.action === 'in' ? 'Clocked In' : 'Clocked Out'}
-                                </Badge>
-                              </div>
-                            </div>
-                          </div>
-                          <div className="text-xs text-right text-muted-foreground">
-                            <div>{formatEventTime(event.timestamp)}</div>
-                            <div>{formatEventDate(event.timestamp)}</div>
-                          </div>
-                        </div>
-                      </li>
-                    ))}
-                  </ul>
-                ) : (
-                  <div className="flex flex-col items-center justify-center py-6">
-                    <RotateCw className="h-10 w-10 text-muted-foreground/50 mb-3" />
-                    <p className="text-sm text-muted-foreground text-center">
-                      No recent clock events
-                    </p>
-                  </div>
-                )}
-              </div>
-            </CardContent>
-            <CardFooter>
-              <Button variant="outline" className="w-full" asChild>
-                <Link to="/attendance">
-                  View All Records
-                </Link>
-              </Button>
-            </CardFooter>
-          </Card>
-          
-          <Card className="shadow-glass dark:shadow-glass-dark">
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <CardTitle>Settings</CardTitle>
-                <Badge variant="outline">System</Badge>
-              </div>
-              <CardDescription>Configure attendance system</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex items-center justify-between">
-                <div className="space-y-0.5">
-                  <Label htmlFor="auto-clock">Auto-Clock Out</Label>
-                  <p className="text-sm text-muted-foreground">
-                    Clock out employees at shift end
-                  </p>
-                </div>
-                <Switch 
-                  id="auto-clock"
-                  checked={autoClockOut}
-                  onCheckedChange={setAutoClockOut}
-                />
-              </div>
-              
-              <div className="flex items-center justify-between">
-                <div className="space-y-0.5">
-                  <Label htmlFor="geo-verification">Location Verification</Label>
-                  <p className="text-sm text-muted-foreground">
-                    <MapPin className="inline-block h-3 w-3 mr-1" />
-                    Verify location on check-in
-                  </p>
-                </div>
-                <Switch 
-                  id="geo-verification" 
-                  checked={geoVerification}
-                  onCheckedChange={setGeoVerification}
-                />
-              </div>
-              
-              <div className="flex items-center justify-between">
-                <div className="space-y-0.5">
-                  <Label htmlFor="otp-expiry">OTP Expiry (minutes)</Label>
-                  <p className="text-sm text-muted-foreground">
-                    OTP code validity period
-                  </p>
-                </div>
-                <Input
-                  id="otp-expiry"
-                  type="number"
-                  className="w-20 text-right"
-                  value={otpExpiryTime}
-                  onChange={(e) => setOtpExpiryTime(parseInt(e.target.value) || 15)}
-                  min="1"
-                  max="60"
-                />
-              </div>
-              
-              <div className="flex items-center justify-between">
-                <div className="space-y-0.5">
-                  <Label htmlFor="qr-refresh">QR Refresh (seconds)</Label>
-                  <p className="text-sm text-muted-foreground">
-                    How often QR code refreshes
-                  </p>
-                </div>
-                <Input
-                  id="qr-refresh"
-                  type="number"
-                  className="w-20 text-right"
-                  value={qrRefreshInterval}
-                  onChange={(e) => setQrRefreshInterval(parseInt(e.target.value) || 10)}
-                  min="5"
-                  max="60"
-                />
-              </div>
-            </CardContent>
-            <CardFooter>
-              <Button 
-                className="w-full" 
-                onClick={handleSaveSettings}
-                disabled={isUpdatingSettings}
-              >
-                {isUpdatingSettings ? "Saving..." : "Save Settings"}
-              </Button>
-            </CardFooter>
-          </Card>
-        </div>
       </div>
     </div>
   );

@@ -1,13 +1,10 @@
 import { useEffect, useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "@/hooks/use-toast";
-import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useQuery } from "@tanstack/react-query";
-import { Download, RotateCw, RefreshCw } from "lucide-react";
+import { RotateCw, RefreshCw } from "lucide-react";
 
 interface QRCodePayload {
   companyId: string;
@@ -28,7 +25,6 @@ export function QRGenerator() {
   const [refreshInterval, setRefreshInterval] = useState(10); // seconds
   const [qrLoading, setQrLoading] = useState(false);
   const [timer, setTimer] = useState(refreshInterval);
-  const [recentClockEvents, setRecentClockEvents] = useState<ClockEvent[]>([]);
 
   // For WebSocket connection to get real-time clock events
   const [wsConnected, setWsConnected] = useState(false);
@@ -111,66 +107,11 @@ export function QRGenerator() {
       });
     }, 1000);
     
-    // Connect to WebSocket for real-time updates
-    const connectWebSocket = () => {
-      try {
-        // In a real implementation, we would connect to a WebSocket server
-        // Mock connection success
-        setWsConnected(true);
-        
-        // Mock clock events coming through WebSocket
-        const mockWsInterval = setInterval(() => {
-          const random = Math.random();
-          if (random > 0.7) {
-            const names = ["James Mwangi", "Lucy Njeri", "David Ochieng", "Alice Kamau", "Bob Wanjiku"];
-            const randomName = names[Math.floor(Math.random() * names.length)];
-            const action: 'in' | 'out' = Math.random() > 0.5 ? 'in' : 'out';
-            
-            addClockEvent({
-              employeeName: randomName,
-              action,
-              timestamp: new Date().toISOString()
-            });
-          }
-        }, 8000);
-        
-        return () => clearInterval(mockWsInterval);
-      } catch (error) {
-        console.error("WebSocket connection failed:", error);
-        setWsConnected(false);
-        return () => {};
-      }
-    };
-    
-    const cleanup = connectWebSocket();
-    
     return () => {
       clearInterval(timerInterval);
-      cleanup();
     };
   }, [refreshInterval]);
   
-  // Update recent events when clockEvents changes
-  useEffect(() => {
-    if (clockEvents && clockEvents.length > 0) {
-      setRecentClockEvents(prev => {
-        // Merge and remove duplicates
-        const combined = [...clockEvents, ...prev];
-        const uniqueEvents = Array.from(new Map(combined.map(event => 
-          [event.timestamp, event]
-        )).values());
-        
-        // Sort by timestamp (newest first) and limit to 10
-        return uniqueEvents
-          .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
-          .slice(0, 10);
-      });
-    }
-  }, [clockEvents]);
-  
-  const addClockEvent = (event: ClockEvent) => {
-    setRecentClockEvents(prev => [event, ...prev.slice(0, 9)]);
-  };
   
   // Format timestamp for display
   const formatEventTime = (timestamp: string) => {
@@ -228,80 +169,18 @@ export function QRGenerator() {
           
           <div className="text-center space-y-2 mt-4">
             <p className="text-sm font-medium">Scan with your smartphone camera to clock in/out</p>
-            <Badge variant="outline" className={wsConnected ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"}>
-              {wsConnected ? "Live Updates On" : "Live Updates Off"}
-            </Badge>
+            
           </div>
           
           <div className="flex space-x-2 mt-2">
-            <Button variant="outline" onClick={saveQrCode}>
-              <Download className="mr-2 h-4 w-4" />
-              Save QR
-            </Button>
-            <Button onClick={generateQrCode} disabled={qrLoading}>
+            <Button className="w-full" onClick={generateQrCode} disabled={qrLoading}>
               <RefreshCw className="mr-2 h-4 w-4" />
               Refresh Now
             </Button>
           </div>
         </div>
-        
-        <div className="space-y-2 pt-4 border-t">
-          <div className="flex items-center justify-between">
-            <Label htmlFor="use-location" className="cursor-pointer flex items-center">
-              <input
-                type="checkbox"
-                id="use-location"
-                checked={useLocation}
-                onChange={(e) => setUseLocation(e.target.checked)}
-                className="mr-2 rounded border-gray-300 text-primary focus:ring-primary"
-              />
-              Use office location in QR code
-            </Label>
-            
-            <div className="flex items-center space-x-2">
-              <Label htmlFor="refresh-interval" className="text-sm whitespace-nowrap">
-                Refresh every:
-              </Label>
-              <div className="flex items-center space-x-1">
-                <Input
-                  id="refresh-interval"
-                  type="number"
-                  value={refreshInterval}
-                  onChange={handleRefreshIntervalChange}
-                  className="w-16 text-right"
-                  min="5"
-                  max="60"
-                />
-                <span className="text-sm">sec</span>
-              </div>
-            </div>
-          </div>
-        </div>
-        
-        <div className="mt-4 space-y-2">
-          <h3 className="font-medium text-sm">Recent Clock Events</h3>
-          <div className="border rounded-md p-2 max-h-40 overflow-y-auto">
-            {recentClockEvents.length > 0 ? (
-              <ul className="space-y-1 divide-y divide-gray-100 dark:divide-gray-800">
-                {recentClockEvents.map((event, index) => (
-                  <li key={index} className="text-sm py-2 flex items-center justify-between">
-                    <span>
-                      <span className="font-medium">{event.employeeName}</span> clocked {event.action}
-                    </span>
-                    <span className="text-xs text-muted-foreground">
-                      {formatEventTime(event.timestamp)}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <p className="text-sm text-muted-foreground text-center py-2">
-                No recent clock events
-              </p>
-            )}
-          </div>
-        </div>
       </CardContent>
+
       <CardFooter className="bg-muted/30 border-t px-6 py-4">
         <div className="text-sm text-muted-foreground">
           <p>

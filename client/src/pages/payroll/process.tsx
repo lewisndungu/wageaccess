@@ -96,7 +96,6 @@ import {
 // Workflow stages
 const STAGES = {
   SETUP: "setup",
-  CALCULATE: "calculate",
   REVIEW: "review",
   FINALIZE: "finalize"
 };
@@ -690,7 +689,7 @@ export default function ProcessPayrollPage() {
   
   // Handle recalculation of payroll
   const handleRecalculate = async () => {
-    setCurrentStage(STAGES.CALCULATE);
+    setCurrentStage(STAGES.REVIEW);
     calculatePayroll();
   };
   
@@ -815,7 +814,7 @@ export default function ProcessPayrollPage() {
       {currentStage === STAGES.SETUP && (
         <div className="space-y-8">
           {/* Summary Preview Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <Card>
               <CardContent className="pt-6">
                 <div className="flex flex-col space-y-1">
@@ -848,36 +847,6 @@ export default function ProcessPayrollPage() {
                   </div>
                   <span className="text-xs text-muted-foreground">
                     From {employeeData.length} total employees
-                  </span>
-                </div>
-              </CardContent>
-            </Card>
-            
-            <Card>
-              <CardContent className="pt-6">
-                <div className="flex flex-col space-y-1">
-                  <span className="text-xs font-medium text-muted-foreground">Estimated Processing</span>
-                  <div className="flex items-center">
-                    <Clock className="h-4 w-4 mr-2 text-primary" />
-                    <span className="text-lg font-bold">~{Math.round(eligibleEmployeeCount * 0.5)} minutes</span>
-                  </div>
-                  <span className="text-xs text-muted-foreground">
-                    Based on employee count and complexity
-                  </span>
-                </div>
-              </CardContent>
-            </Card>
-            
-            <Card>
-              <CardContent className="pt-6">
-                <div className="flex flex-col space-y-1">
-                  <span className="text-xs font-medium text-muted-foreground">Previous Payroll</span>
-                  <div className="flex items-center">
-                    <FileText className="h-4 w-4 mr-2 text-primary" />
-                    <span className="text-sm font-semibold">Feb 1 - Feb 28, 2025</span>
-                  </div>
-                  <span className="text-xs text-muted-foreground">
-                    Last processed on March 1, 2025
                   </span>
                 </div>
               </CardContent>

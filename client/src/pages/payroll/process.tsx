@@ -1011,7 +1011,7 @@ export default function ProcessPayrollPage() {
                     </div>
                   </div>
                   
-                  <div className="border rounded-md h-[280px] overflow-y-auto p-2 bg-card/20">
+                  <div className="border rounded-md h-[400px] overflow-y-auto p-0 bg-card/20 w-full">
                     {isLoadingEmployees ? (
                       <div className="flex justify-center items-center h-full">
                         <div className="flex items-center">
@@ -1038,40 +1038,67 @@ export default function ProcessPayrollPage() {
                         </Button>
                       </div>
                     ) : (
-                      <div className="space-y-1">
-                        {employeeData.map((employee: any) => (
-                          <div 
-                            key={employee.id} 
-                            className={`flex items-center space-x-2 p-2 rounded-md ${
-                              !excludedEmployees.includes(employee.id) ? 'bg-blue-50 dark:bg-blue-900/20' : ''
-                            }`}
-                          >
-                            <Checkbox 
-                              id={`exclude-${employee.id}`}
-                              checked={!excludedEmployees.includes(employee.id)}
-                              onCheckedChange={(checked) => {
-                                toggleEmployeeExclusion(employee.id);
-                              }}
-                            />
-                            <Avatar className="h-6 w-6">
-                              <AvatarFallback className="text-xs">
-                                {employee.name.split(' ').map((n: string) => n[0]).join('')}
-                              </AvatarFallback>
-                            </Avatar>
-                            <label
-                              htmlFor={`exclude-${employee.id}`}
-                              className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 flex-1"
-                            >
-                              {employee.name}
-                              <span className="text-xs text-muted-foreground ml-1">
-                                ({employee.employeeNumber})
-                              </span>
-                            </label>
-                            <Badge variant="outline" className="text-xs">
-                              {employee.department}
-                            </Badge>
-                          </div>
-                        ))}
+                      <div className="w-full">
+                        <Table>
+                          <TableHeader className="sticky top-0 bg-card z-10">
+                            <TableRow>
+                              <TableHead className="w-10">
+                                <Checkbox 
+                                  checked={eligibleEmployeeCount === employeeData.length}
+                                  onCheckedChange={(checked) => {
+                                    if (checked) {
+                                      setExcludedEmployees([]);
+                                    } else {
+                                      setExcludedEmployees(employeeData.map(emp => emp.id));
+                                    }
+                                  }}
+                                />
+                              </TableHead>
+                              <TableHead>Employee</TableHead>
+                              <TableHead>Department</TableHead>
+                              <TableHead>Position</TableHead>
+                              <TableHead>Contact</TableHead>
+                              <TableHead className="text-right">Hourly Rate</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {employeeData.map((employee: any) => (
+                              <TableRow 
+                                key={employee.id} 
+                                className={excludedEmployees.includes(employee.id) ? "opacity-60" : ""}
+                              >
+                                <TableCell>
+                                  <Checkbox 
+                                    id={`exclude-${employee.id}`}
+                                    checked={!excludedEmployees.includes(employee.id)}
+                                    onCheckedChange={(checked) => {
+                                      toggleEmployeeExclusion(employee.id);
+                                    }}
+                                  />
+                                </TableCell>
+                                <TableCell>
+                                  <div className="flex items-center">
+                                    <Avatar className="h-6 w-6 mr-2">
+                                      <AvatarFallback className="text-xs">
+                                        {employee.name.split(' ').map((n: string) => n[0]).join('')}
+                                      </AvatarFallback>
+                                    </Avatar>
+                                    <div>
+                                      <div className="font-medium">{employee.name}</div>
+                                      <div className="text-xs text-muted-foreground">{employee.employeeNumber}</div>
+                                    </div>
+                                  </div>
+                                </TableCell>
+                                <TableCell>{employee.department}</TableCell>
+                                <TableCell>{employee.position}</TableCell>
+                                <TableCell>{employee.contact || employee.email}</TableCell>
+                                <TableCell className="text-right">
+                                  {formatCurrency(employee.hourlyRate || Math.floor(500 + Math.random() * 1000))}
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
                       </div>
                     )}
                   </div>
@@ -1088,80 +1115,20 @@ export default function ProcessPayrollPage() {
             </Card>
           </div>
           
-          {/* Additional Options and Action Buttons */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-sm">Payroll Options</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <Label htmlFor="include-ewa" className="flex items-center">
-                      <span>Include EWA Deductions</span>
-                      <span className="ml-1 text-xs text-blue-600">(?)</span>
-                    </Label>
-                    <Switch id="include-ewa" defaultChecked={true} />
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <Label htmlFor="auto-tax" className="flex items-center">
-                      <span>Auto-Calculate Taxes</span>
-                    </Label>
-                    <Switch id="auto-tax" defaultChecked={true} />
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <Label htmlFor="save-template">
-                      <span>Save as Template</span>
-                    </Label>
-                    <Switch id="save-template" />
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+          {/* Action Buttons */}
+          <div className="flex justify-end space-x-2 mt-6">
+            <Button variant="outline">
+              Save for Later
+            </Button>
             
-            <Card className="md:col-span-2">
-              <CardHeader className="pb-3">
-                <CardTitle className="text-sm">Validation Status</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="bg-green-50 p-3 rounded-md border border-green-200 dark:bg-green-950/30 dark:border-green-950/50">
-                    <h4 className="text-sm font-medium text-green-800 dark:text-green-300 flex items-center">
-                      <CheckCircle className="h-4 w-4 mr-1 text-green-600" />
-                      Ready to Process
-                    </h4>
-                    <p className="text-xs text-green-700 dark:text-green-400 mt-1">
-                      {eligibleEmployeeCount} employees selected for processing
-                    </p>
-                  </div>
-                  
-                  <div className="p-3 rounded-md border border-muted bg-card/20">
-                    <h4 className="text-sm font-medium text-muted-foreground flex items-center">
-                      <Clock className="h-4 w-4 mr-1 text-muted-foreground" />
-                      Processing Time
-                    </h4>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      Estimated ~{Math.round(eligibleEmployeeCount * 0.5)} minutes to complete
-                    </p>
-                  </div>
-                </div>
-                
-                <div className="flex justify-between mt-4">
-                  <Button variant="outline">
-                    Save for Later
-                  </Button>
-                  
-                  <Button 
-                    size="lg"
-                    onClick={() => calculatePayroll()}
-                    disabled={eligibleEmployeeCount === 0}
-                  >
-                    <Calculator className="mr-2 h-5 w-5" />
-                    Calculate & Review
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
+            <Button 
+              size="default"
+              onClick={() => calculatePayroll()}
+              disabled={eligibleEmployeeCount === 0}
+            >
+              <Calculator className="mr-2 h-4 w-4" />
+              Calculate & Review
+            </Button>
           </div>
         </div>
       )}

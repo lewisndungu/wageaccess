@@ -571,6 +571,11 @@ export default function ProcessPayrollPage() {
       statusReason = 'Total deductions exceed 70% of gross pay';
     }
     
+    // Generate mock payment details (simulated)
+    const mpesaNumber = employee.id % 2 === 0 ? `07${Math.floor(10000000 + Math.random() * 90000000)}` : undefined;
+    const bankName = !mpesaNumber ? ['Equity Bank', 'KCB', 'Co-operative Bank', 'NCBA', 'Stanbic Bank'][Math.floor(Math.random() * 5)] : undefined;
+    const bankAccountNumber = !mpesaNumber ? `${Math.floor(100000 + Math.random() * 900000)}${Math.floor(1000 + Math.random() * 9000)}` : undefined;
+
     return {
       id: employee.id,
       employeeNumber: employee.employeeNumber,
@@ -593,7 +598,11 @@ export default function ProcessPayrollPage() {
       netPay,
       status,
       statusReason,
-      isEdited: false
+      isEdited: false,
+      // Payment details
+      mpesaNumber,
+      bankName,
+      bankAccountNumber
     };
   };
   
@@ -2332,6 +2341,67 @@ export default function ProcessPayrollPage() {
                         <span className="text-muted-foreground">Manually adjusted</span>
                       </div>
                     )}
+                  </div>
+                </div>
+              </div>
+              
+              {/* Payment Details Section */}
+              <div className="mt-6 pt-4 border-t">
+                <h3 className="text-base font-semibold flex items-center mb-3">
+                  <CreditCard className="h-4 w-4 mr-2 text-primary" />
+                  Payment Details
+                </h3>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {viewingEmployee.mpesaNumber ? (
+                    <div className="bg-muted p-4 rounded-md">
+                      <h4 className="text-sm font-medium mb-2 flex items-center">
+                        <Smartphone className="h-4 w-4 mr-1 text-muted-foreground" />
+                        M-Pesa Payment
+                      </h4>
+                      <p className="text-sm mb-1">
+                        <span className="text-muted-foreground">Number:</span> 
+                        <span className="font-medium ml-2">{viewingEmployee.mpesaNumber}</span>
+                      </p>
+                      <Badge variant="outline" className="bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-300 border-blue-200 dark:border-blue-800">
+                        Mobile Money
+                      </Badge>
+                    </div>
+                  ) : (
+                    <div className="bg-muted p-4 rounded-md">
+                      <h4 className="text-sm font-medium mb-2 flex items-center">
+                        <Building2 className="h-4 w-4 mr-1 text-muted-foreground" />
+                        Bank Transfer
+                      </h4>
+                      <p className="text-sm mb-1">
+                        <span className="text-muted-foreground">Bank:</span> 
+                        <span className="font-medium ml-2">{viewingEmployee.bankName}</span>
+                      </p>
+                      <p className="text-sm mb-1">
+                        <span className="text-muted-foreground">Account:</span> 
+                        <span className="font-medium ml-2">{viewingEmployee.bankAccountNumber}</span>
+                      </p>
+                      <Badge variant="outline" className="bg-green-50 text-green-700 dark:bg-green-950 dark:text-green-300 border-green-200 dark:border-green-800">
+                        Direct Deposit
+                      </Badge>
+                    </div>
+                  )}
+                  
+                  <div className="bg-muted p-4 rounded-md">
+                    <h4 className="text-sm font-medium mb-2 flex items-center">
+                      <Calendar className="h-4 w-4 mr-1 text-muted-foreground" />
+                      Payment Schedule
+                    </h4>
+                    <p className="text-sm mb-1">
+                      <span className="text-muted-foreground">Date:</span> 
+                      <span className="font-medium ml-2">{new Date(payPeriod.endDate).getDate() + 3} {new Date(payPeriod.endDate).toLocaleString('default', { month: 'short' })} {new Date(payPeriod.endDate).getFullYear()}</span>
+                    </p>
+                    <p className="text-sm mb-1">
+                      <span className="text-muted-foreground">Amount:</span> 
+                      <span className="font-medium ml-2">{formatKES(viewingEmployee.netPay)}</span>
+                    </p>
+                    <Badge variant="outline" className="bg-primary/10 text-primary border-primary/20">
+                      Scheduled
+                    </Badge>
                   </div>
                 </div>
               </div>

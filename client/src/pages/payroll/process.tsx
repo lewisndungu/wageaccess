@@ -683,6 +683,20 @@ export default function ProcessPayrollPage() {
       { name: "Other", value: totalOther, fill: "#94a3b8" },
     ].filter((item) => item.value > 0); // Only include non-zero values
   };
+  
+  // Prepare data for a single employee's deduction chart
+  const prepareEmployeeDeductionsChartData = (employee: EmployeePayrollCalculation) => {
+    // Format into chart data
+    return [
+      { name: "PAYE", value: employee.paye, fill: "#3b82f6" },
+      { name: "SHIF", value: employee.nhif, fill: "#10b981" },
+      { name: "NSSF", value: employee.nssf, fill: "#8b5cf6" },
+      { name: "Housing Levy", value: employee.housingLevy, fill: "#f59e0b" },
+      { name: "EWA", value: employee.ewaDeductions, fill: "#ef4444" },
+      { name: "Loans", value: employee.loanDeductions, fill: "#6366f1" },
+      { name: "Other", value: employee.otherDeductions, fill: "#94a3b8" },
+    ].filter((item) => item.value > 0); // Only include non-zero values
+  };
 
   const calculatePayrollSummary = (
     calculations: EmployeePayrollCalculation[],

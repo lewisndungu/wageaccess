@@ -101,6 +101,7 @@ import {
   ChartTooltip,
   ChartTooltipContent
 } from "@/components/ui/chart";
+import { PieChart, Pie, Cell, ResponsiveContainer } from 'recharts';
 import { 
   calculatePAYE, 
   calculateSHIF, 
@@ -1499,58 +1500,42 @@ export default function ProcessPayrollPage() {
               <CardContent>
                 {/* Deduction Pie Chart (Visualization) */}
                 <div className="flex justify-center items-center py-2">
-                  <div className="h-48 w-48 rounded-full border-8 border-transparent relative flex items-center justify-center">
-                    {/* Visual representation of deductions */}
-                    <div className="absolute inset-0 flex items-center justify-center">
-                      <div className="h-full w-full rounded-full flex items-center justify-center overflow-hidden">
-                        <div 
-                          className="absolute bg-blue-500 opacity-80" 
-                          style={{ 
-                            height: '100%', 
-                            width: '100%', 
-                            clipPath: `polygon(50% 50%, 50% 0, ${50 + 50 * Math.cos(Math.PI * 2 * (payrollCalculations.reduce((sum, emp) => sum + emp.paye, 0) / payrollSummary.totalDeductions))}% ${50 - 50 * Math.sin(Math.PI * 2 * (payrollCalculations.reduce((sum, emp) => sum + emp.paye, 0) / payrollSummary.totalDeductions))}%)` 
-                          }}
-                        ></div>
-                        <div 
-                          className="absolute bg-green-500 opacity-80" 
-                          style={{ 
-                            height: '100%', 
-                            width: '100%', 
-                            clipPath: `polygon(50% 50%, ${50 + 50 * Math.cos(Math.PI * 2 * (payrollCalculations.reduce((sum, emp) => sum + emp.paye, 0) / payrollSummary.totalDeductions))}% ${50 - 50 * Math.sin(Math.PI * 2 * (payrollCalculations.reduce((sum, emp) => sum + emp.paye, 0) / payrollSummary.totalDeductions))}%, ${50 + 50 * Math.cos(Math.PI * 2 * ((payrollCalculations.reduce((sum, emp) => sum + emp.paye, 0) + payrollCalculations.reduce((sum, emp) => sum + emp.nssf, 0)) / payrollSummary.totalDeductions))}% ${50 - 50 * Math.sin(Math.PI * 2 * ((payrollCalculations.reduce((sum, emp) => sum + emp.paye, 0) + payrollCalculations.reduce((sum, emp) => sum + emp.nssf, 0)) / payrollSummary.totalDeductions))}%)` 
-                          }}
-                        ></div>
-                        <div 
-                          className="absolute bg-purple-500 opacity-80" 
-                          style={{ 
-                            height: '100%', 
-                            width: '100%', 
-                            clipPath: `polygon(50% 50%, ${50 + 50 * Math.cos(Math.PI * 2 * ((payrollCalculations.reduce((sum, emp) => sum + emp.paye, 0) + payrollCalculations.reduce((sum, emp) => sum + emp.nssf, 0)) / payrollSummary.totalDeductions))}% ${50 - 50 * Math.sin(Math.PI * 2 * ((payrollCalculations.reduce((sum, emp) => sum + emp.paye, 0) + payrollCalculations.reduce((sum, emp) => sum + emp.nssf, 0)) / payrollSummary.totalDeductions))}%, ${50 + 50 * Math.cos(Math.PI * 2 * ((payrollCalculations.reduce((sum, emp) => sum + emp.paye, 0) + payrollCalculations.reduce((sum, emp) => sum + emp.nssf, 0) + payrollCalculations.reduce((sum, emp) => sum + emp.nhif, 0)) / payrollSummary.totalDeductions))}% ${50 - 50 * Math.sin(Math.PI * 2 * ((payrollCalculations.reduce((sum, emp) => sum + emp.paye, 0) + payrollCalculations.reduce((sum, emp) => sum + emp.nssf, 0) + payrollCalculations.reduce((sum, emp) => sum + emp.nhif, 0)) / payrollSummary.totalDeductions))}%)` 
-                          }}
-                        ></div>
-                        <div 
-                          className="absolute bg-amber-500 opacity-80" 
-                          style={{ 
-                            height: '100%', 
-                            width: '100%', 
-                            clipPath: `polygon(50% 50%, ${50 + 50 * Math.cos(Math.PI * 2 * ((payrollCalculations.reduce((sum, emp) => sum + emp.paye, 0) + payrollCalculations.reduce((sum, emp) => sum + emp.nssf, 0) + payrollCalculations.reduce((sum, emp) => sum + emp.nhif, 0)) / payrollSummary.totalDeductions))}% ${50 - 50 * Math.sin(Math.PI * 2 * ((payrollCalculations.reduce((sum, emp) => sum + emp.paye, 0) + payrollCalculations.reduce((sum, emp) => sum + emp.nssf, 0) + payrollCalculations.reduce((sum, emp) => sum + emp.nhif, 0)) / payrollSummary.totalDeductions))}%, ${50 + 50 * Math.cos(Math.PI * 2 * ((payrollCalculations.reduce((sum, emp) => sum + emp.paye, 0) + payrollCalculations.reduce((sum, emp) => sum + emp.nssf, 0) + payrollCalculations.reduce((sum, emp) => sum + emp.nhif, 0) + payrollCalculations.reduce((sum, emp) => sum + emp.housingLevy, 0)) / payrollSummary.totalDeductions))}% ${50 - 50 * Math.sin(Math.PI * 2 * ((payrollCalculations.reduce((sum, emp) => sum + emp.paye, 0) + payrollCalculations.reduce((sum, emp) => sum + emp.nssf, 0) + payrollCalculations.reduce((sum, emp) => sum + emp.nhif, 0) + payrollCalculations.reduce((sum, emp) => sum + emp.housingLevy, 0)) / payrollSummary.totalDeductions))}%)` 
-                          }}
-                        ></div>
-                        <div 
-                          className="absolute bg-red-500 opacity-80" 
-                          style={{ 
-                            height: '100%', 
-                            width: '100%', 
-                            clipPath: `polygon(50% 50%, ${50 + 50 * Math.cos(Math.PI * 2 * ((payrollCalculations.reduce((sum, emp) => sum + emp.paye, 0) + payrollCalculations.reduce((sum, emp) => sum + emp.nssf, 0) + payrollCalculations.reduce((sum, emp) => sum + emp.nhif, 0) + payrollCalculations.reduce((sum, emp) => sum + emp.housingLevy, 0)) / payrollSummary.totalDeductions))}% ${50 - 50 * Math.sin(Math.PI * 2 * ((payrollCalculations.reduce((sum, emp) => sum + emp.paye, 0) + payrollCalculations.reduce((sum, emp) => sum + emp.nssf, 0) + payrollCalculations.reduce((sum, emp) => sum + emp.nhif, 0) + payrollCalculations.reduce((sum, emp) => sum + emp.housingLevy, 0)) / payrollSummary.totalDeductions))}%, ${50 + 50 * Math.cos(Math.PI * 2 * ((payrollCalculations.reduce((sum, emp) => sum + emp.paye, 0) + payrollCalculations.reduce((sum, emp) => sum + emp.nssf, 0) + payrollCalculations.reduce((sum, emp) => sum + emp.nhif, 0) + payrollCalculations.reduce((sum, emp) => sum + emp.housingLevy, 0) + payrollCalculations.reduce((sum, emp) => sum + emp.ewaDeductions, 0)) / payrollSummary.totalDeductions))}% ${50 - 50 * Math.sin(Math.PI * 2 * ((payrollCalculations.reduce((sum, emp) => sum + emp.paye, 0) + payrollCalculations.reduce((sum, emp) => sum + emp.nssf, 0) + payrollCalculations.reduce((sum, emp) => sum + emp.nhif, 0) + payrollCalculations.reduce((sum, emp) => sum + emp.housingLevy, 0) + payrollCalculations.reduce((sum, emp) => sum + emp.ewaDeductions, 0)) / payrollSummary.totalDeductions))}%)` 
-                          }}
-                        ></div>
-                      </div>
-                    </div>
-                    {/* Center circle and text */}
-                    <div className="bg-background h-[65%] w-[65%] rounded-full z-10 flex flex-col items-center justify-center shadow-inner">
-                      <span className="text-sm font-medium">Deductions</span>
-                      <span className="text-xs text-muted-foreground">{formatKES(payrollSummary.totalDeductions)}</span>
-                    </div>
-                  </div>
+                  <ResponsiveContainer width="100%" height={240}>
+                    <PieChart>
+                      <Pie
+                        data={prepareDeductionsChartData(payrollCalculations)}
+                        dataKey="value"
+                        nameKey="name"
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={60}
+                        outerRadius={80}
+                        paddingAngle={2}
+                      >
+                        {prepareDeductionsChartData(payrollCalculations).map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={entry.fill} />
+                        ))}
+                      </Pie>
+                      <text 
+                        x="50%" 
+                        y="50%" 
+                        textAnchor="middle" 
+                        dominantBaseline="middle" 
+                        className="text-sm font-medium"
+                      >
+                        Deductions
+                      </text>
+                      <text 
+                        x="50%" 
+                        y="65%" 
+                        textAnchor="middle" 
+                        dominantBaseline="middle" 
+                        className="text-xs"
+                      >
+                        {formatKES(payrollSummary.totalDeductions)}
+                      </text>
+                    </PieChart>
+                  </ResponsiveContainer>
                 </div>
                 
                 {/* Deduction Legend */}

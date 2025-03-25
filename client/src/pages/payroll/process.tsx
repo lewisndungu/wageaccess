@@ -2642,7 +2642,9 @@ export default function ProcessPayrollPage() {
                         <div
                           className="h-1.5 bg-primary/70 rounded-full"
                           style={{
-                            width: `${(viewingEmployee.nhif / viewingEmployee.totalDeductions) * 100}%`,
+                            width: `${viewingEmployee.totalDeductions > 0 
+                              ? (viewingEmployee.nhif / viewingEmployee.totalDeductions) * 100 
+                              : 0}%`,
                           }}
                         ></div>
                       </div>
@@ -2659,7 +2661,9 @@ export default function ProcessPayrollPage() {
                         <div
                           className="h-1.5 bg-primary/60 rounded-full"
                           style={{
-                            width: `${(viewingEmployee.housingLevy / viewingEmployee.totalDeductions) * 100}%`,
+                            width: `${viewingEmployee.totalDeductions > 0 
+                              ? (viewingEmployee.housingLevy / viewingEmployee.totalDeductions) * 100 
+                              : 0}%`,
                           }}
                         ></div>
                       </div>
@@ -2676,7 +2680,9 @@ export default function ProcessPayrollPage() {
                         <div
                           className="h-1.5 bg-primary/50 rounded-full"
                           style={{
-                            width: `${(viewingEmployee.ewaDeductions / viewingEmployee.totalDeductions) * 100}%`,
+                            width: `${viewingEmployee.totalDeductions > 0 
+                              ? (viewingEmployee.ewaDeductions / viewingEmployee.totalDeductions) * 100 
+                              : 0}%`,
                           }}
                         ></div>
                       </div>
@@ -2694,7 +2700,9 @@ export default function ProcessPayrollPage() {
                           <div
                             className="h-1.5 bg-primary/40 rounded-full"
                             style={{
-                              width: `${(viewingEmployee.loanDeductions / viewingEmployee.totalDeductions) * 100}%`,
+                              width: `${viewingEmployee.totalDeductions > 0 
+                                ? (viewingEmployee.loanDeductions / viewingEmployee.totalDeductions) * 100 
+                                : 0}%`,
                             }}
                           ></div>
                         </div>
@@ -2713,7 +2721,9 @@ export default function ProcessPayrollPage() {
                           <div
                             className="h-1.5 bg-primary/30 rounded-full"
                             style={{
-                              width: `${(viewingEmployee.otherDeductions / viewingEmployee.totalDeductions) * 100}%`,
+                              width: `${viewingEmployee.totalDeductions > 0 
+                                ? (viewingEmployee.otherDeductions / viewingEmployee.totalDeductions) * 100 
+                                : 0}%`,
                             }}
                           ></div>
                         </div>

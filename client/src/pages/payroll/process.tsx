@@ -586,6 +586,29 @@ export default function ProcessPayrollPage() {
   };
   
   // Calculate payroll summary statistics
+  // Prepare data for the deductions pie chart
+  const prepareDeductionsChartData = (calculations: EmployeePayrollCalculation[]) => {
+    // Calculate total for each deduction type
+    const totalPaye = calculations.reduce((sum, emp) => sum + emp.paye, 0);
+    const totalNhif = calculations.reduce((sum, emp) => sum + emp.nhif, 0);
+    const totalNssf = calculations.reduce((sum, emp) => sum + emp.nssf, 0);
+    const totalHousingLevy = calculations.reduce((sum, emp) => sum + emp.housingLevy, 0);
+    const totalEwa = calculations.reduce((sum, emp) => sum + emp.ewaDeductions, 0);
+    const totalLoans = calculations.reduce((sum, emp) => sum + emp.loanDeductions, 0);
+    const totalOther = calculations.reduce((sum, emp) => sum + emp.otherDeductions, 0);
+    
+    // Format into chart data
+    return [
+      { name: 'PAYE', value: totalPaye, fill: '#3b82f6' },
+      { name: 'SHIF', value: totalNhif, fill: '#10b981' },
+      { name: 'NSSF', value: totalNssf, fill: '#8b5cf6' },
+      { name: 'Housing Levy', value: totalHousingLevy, fill: '#f59e0b' },
+      { name: 'EWA', value: totalEwa, fill: '#ef4444' },
+      { name: 'Loans', value: totalLoans, fill: '#6366f1' },
+      { name: 'Other', value: totalOther, fill: '#94a3b8' }
+    ].filter(item => item.value > 0); // Only include non-zero values
+  };
+
   const calculatePayrollSummary = (calculations: EmployeePayrollCalculation[]) => {
     // Calculate totals
     const totalGrossPay = calculations.reduce((sum, calc) => sum + calc.grossPay, 0);

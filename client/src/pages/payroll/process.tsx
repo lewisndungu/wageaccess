@@ -143,6 +143,10 @@ interface EmployeePayrollCalculation {
   statusReason?: string;
   isEdited: boolean;
   originalNetPay?: number;
+  // Payment details
+  mpesaNumber?: string;
+  bankName?: string;
+  bankAccountNumber?: string;
 }
 
 export default function ProcessPayrollPage() {
@@ -1588,7 +1592,7 @@ export default function ProcessPayrollPage() {
                       }}
                     />
                   </div>
-                  
+
                   <Select
                     value={(columnFilters.find(f => f.id === 'department')?.value as string) || 'all'}
                     onValueChange={(value) => {
@@ -1614,7 +1618,7 @@ export default function ProcessPayrollPage() {
                       ))}
                     </SelectContent>
                   </Select>
-                  
+
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                       <Button variant="outline" size="sm" className="h-9">
@@ -1665,43 +1669,16 @@ export default function ProcessPayrollPage() {
                   />
                 </div>
               </div>
-              
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between mt-4 gap-3">
-                <div>
-                  <p className="text-sm text-muted-foreground">
-                    Showing <span className="font-medium">{payrollCalculations.length}</span> employees 
-                    with <span className="font-medium">{payrollCalculations.filter(e => e.status === 'warning' || e.status === 'error').length}</span> warnings/errors
+
+              {/* Single unified pagination row */}
+              <div className="flex flex-wrap items-center justify-between py-4 gap-2">
+                <div className="flex items-center gap-2">
+                  <p className="text-sm text-muted-foreground whitespace-nowrap">
+                    Showing <span className="font-medium">1</span> to <span className="font-medium">{Math.min(25, payrollCalculations.length)}</span> of <span className="font-medium">{payrollCalculations.length}</span> employees
                   </p>
-                </div>
-                <div className="flex flex-wrap items-center gap-2">
-                  <Button 
-                    variant="outline" 
-                    size="sm" 
-                    onClick={() => {
-                      // Filter to show only employees with warnings or errors
-                      const hasIssues = payrollCalculations.filter(emp => emp.status !== 'complete');
-                      if (hasIssues.length > 0) {
-                        setColumnFilters(prev => {
-                          const filtered = prev.filter(filter => filter.id !== 'status');
-                          return [...filtered, { id: 'status', value: ['warning', 'error'] }];
-                        });
-                      }
-                    }}
-                  >
-                    <AlertTriangle className="h-3.5 w-3.5 mr-1 text-amber-500" />
-                    Show Issues Only
-                  </Button>
-                  <Button 
-                    variant="outline" 
-                    size="sm"
-                    onClick={() => setColumnFilters([])}
-                  >
-                    <Users className="h-3.5 w-3.5 mr-1" />
-                    Show All
-                  </Button>
-                  
-                  <div className="flex items-center gap-1 bg-muted pl-2 pr-1 rounded h-9">
-                    <span className="text-xs text-muted-foreground">Page Size:</span>
+
+                  <div className="flex items-center gap-1 ml-4">
+                    <span className="text-xs text-muted-foreground whitespace-nowrap">Page Size:</span>
                     <Select
                       defaultValue="25"
                       onValueChange={(value) => {
@@ -1713,6 +1690,7 @@ export default function ProcessPayrollPage() {
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
+                        <SelectItem value="5">5</SelectItem>
                         <SelectItem value="10">10</SelectItem>
                         <SelectItem value="25">25</SelectItem>
                         <SelectItem value="50">50</SelectItem>
@@ -1721,45 +1699,54 @@ export default function ProcessPayrollPage() {
                     </Select>
                   </div>
                 </div>
-              </div>
-              
-              {/* Pagination Controls - For handling large datasets */}
-              <div className="flex items-center justify-center space-x-2 py-4">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => console.log('First page')}
-                  disabled={true}
-                >
-                  <ChevronsLeft className="h-4 w-4" />
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => console.log('Previous page')}
-                  disabled={true}
-                >
-                  <ChevronLeft className="h-4 w-4" />
-                </Button>
-                <span className="text-sm">
-                  Page <strong>1</strong> of <strong>{Math.ceil(payrollCalculations.length / 25)}</strong>
-                </span>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => console.log('Next page')}
-                  disabled={payrollCalculations.length <= 25}
-                >
-                  <ChevronRight className="h-4 w-4" />
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => console.log('Last page')}
-                  disabled={payrollCalculations.length <= 25}
-                >
-                  <ChevronsRight className="h-4 w-4" />
-                </Button>
+
+                <div className="flex items-center gap-1">
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    className="h-8 w-8"
+                    onClick={() => console.log('First page')}
+                    disabled={true}
+                  >
+                    <ChevronsLeft className="h-4 w-4" />
+                    <span className="sr-only">First page</span>
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    className="h-8 w-8"
+                    onClick={() => console.log('Previous page')}
+                    disabled={true}
+                  >
+                    <ChevronLeft className="h-4 w-4" />
+                    <span className="sr-only">Previous page</span>
+                  </Button>
+
+                  <span className="text-sm px-2">
+                    Page <span className="font-medium">1</span> of <span className="font-medium">{Math.ceil(payrollCalculations.length / 25)}</span>
+                  </span>
+
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    className="h-8 w-8"
+                    onClick={() => console.log('Next page')}
+                    disabled={payrollCalculations.length <= 25}
+                  >
+                    <ChevronRight className="h-4 w-4" />
+                    <span className="sr-only">Next page</span>
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    className="h-8 w-8"
+                    onClick={() => console.log('Last page')}
+                    disabled={payrollCalculations.length <= 25}
+                  >
+                    <ChevronsRight className="h-4 w-4" />
+                    <span className="sr-only">Last page</span>
+                  </Button>
+                </div>
               </div>
             </CardContent>
           </Card>

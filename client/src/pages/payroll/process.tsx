@@ -701,8 +701,15 @@ export default function ProcessPayrollPage() {
   
   // Prepare data for a single employee's deduction chart
   const prepareEmployeeDeductionsChartData = (employee: EmployeePayrollCalculation) => {
+    // If no employee or employee has no deductions
+    if (!employee) {
+      return [
+        { name: "No Data", value: 1, fill: "#d1d5db" },
+      ];
+    }
+    
     // Format into chart data
-    return [
+    const chartData = [
       { name: "PAYE", value: employee.paye, fill: "#3b82f6" },
       { name: "SHIF", value: employee.nhif, fill: "#10b981" },
       { name: "NSSF", value: employee.nssf, fill: "#8b5cf6" },
@@ -711,6 +718,11 @@ export default function ProcessPayrollPage() {
       { name: "Loans", value: employee.loanDeductions, fill: "#6366f1" },
       { name: "Other", value: employee.otherDeductions, fill: "#94a3b8" },
     ].filter((item) => item.value > 0); // Only include non-zero values
+    
+    // If no items have positive values, provide minimum data for chart
+    return chartData.length > 0 ? chartData : [
+      { name: "No Deductions", value: 1, fill: "#d1d5db" },
+    ];
   };
 
   const calculatePayrollSummary = (
@@ -1834,7 +1846,9 @@ export default function ProcessPayrollPage() {
                         dominantBaseline="middle"
                         className="text-xs"
                       >
-                        {formatKES(payrollSummary.totalDeductions)}
+                        {payrollSummary && typeof payrollSummary.totalDeductions === 'number' 
+                          ? formatKES(payrollSummary.totalDeductions)
+                          : formatKES(0)}
                       </text>
                     </PieChart>
                   </ResponsiveContainer>

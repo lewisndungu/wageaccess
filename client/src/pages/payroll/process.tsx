@@ -855,28 +855,6 @@ export default function ProcessPayrollPage() {
             <Card>
               <CardContent className="pt-6">
                 <div className="flex flex-col space-y-1">
-                  <span className="text-xs font-medium text-muted-foreground">Pay Period</span>
-                  <div className="flex items-center">
-                    <CalendarDays className="h-4 w-4 mr-2 text-primary" />
-                    <span className="text-sm font-semibold">
-                      {formatDate(payPeriod.startDate)} - {formatDate(payPeriod.endDate)}
-                    </span>
-                  </div>
-                  <span className="text-xs text-muted-foreground">
-                    {(() => {
-                      const start = new Date(payPeriod.startDate);
-                      const end = new Date(payPeriod.endDate);
-                      const days = Math.round((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
-                      return `${days} days period`;
-                    })()}
-                  </span>
-                </div>
-              </CardContent>
-            </Card>
-            
-            <Card>
-              <CardContent className="pt-6">
-                <div className="flex flex-col space-y-1">
                   <span className="text-xs font-medium text-muted-foreground">Eligible Employees</span>
                   <div className="flex items-center">
                     <Users className="h-4 w-4 mr-2 text-primary" />
@@ -888,69 +866,44 @@ export default function ProcessPayrollPage() {
                 </div>
               </CardContent>
             </Card>
+            
+            <Card>
+              <CardContent className="pt-6">
+                <div className="flex flex-col space-y-1">
+                  <span className="text-xs font-medium text-muted-foreground">Working Days</span>
+                  <div className="flex items-center">
+                    <Clock className="h-4 w-4 mr-2 text-primary" />
+                    <span className="text-lg font-bold">
+                      {(() => {
+                        const start = new Date(payPeriod.startDate);
+                        const end = new Date(payPeriod.endDate);
+                        // Count only weekdays (Monday-Friday)
+                        let workdays = 0;
+                        for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+                          const day = d.getDay();
+                          if (day !== 0 && day !== 6) workdays++;
+                        }
+                        return workdays;
+                      })()}
+                    </span>
+                  </div>
+                  <span className="text-xs text-muted-foreground">
+                    Business days in the period
+                  </span>
+                </div>
+              </CardContent>
+            </Card>
           </div>
           
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-            {/* Pay Period Selection */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center">
-                  <CalendarDays className="mr-2 h-5 w-5" />
-                  Pay Period Selection
-                </CardTitle>
-                <CardDescription>
-                  Select the date range for this payroll processing
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="start-date">Start Date <span className="text-xs text-muted-foreground">(YYYY-MM-DD)</span></Label>
-                    <Input
-                      id="start-date"
-                      type="date"
-                      value={payPeriod.startDate}
-                      onChange={(e) => setPayPeriod({...payPeriod, startDate: e.target.value})}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="end-date">End Date <span className="text-xs text-muted-foreground">(YYYY-MM-DD)</span></Label>
-                    <Input
-                      id="end-date"
-                      type="date"
-                      value={payPeriod.endDate}
-                      onChange={(e) => setPayPeriod({...payPeriod, endDate: e.target.value})}
-                    />
-                  </div>
-                </div>
-                
-                <div className="flex flex-wrap gap-2 mt-2">
-                  <Button 
-                    variant="outline" 
-                    onClick={() => handlePeriodSelection('current')}
-                    title="March 1 - March 31, 2025"
-                  >
-                    Current Month
-                  </Button>
-                  <Button 
-                    variant="outline" 
-                    onClick={() => handlePeriodSelection('previous')}
-                    title="February 1 - February 28, 2025"
-                  >
-                    Previous Month
-                  </Button>
-                </div>
-                
-                <div className="mt-2 p-3 bg-muted rounded-md border">
-                  <h4 className="text-sm font-medium flex items-center">
-                    <svg className="h-4 w-4 mr-1 text-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <circle cx="12" cy="12" r="10"></circle>
-                      <path d="M12 8v4M12 16h.01"></path>
-                    </svg>
-                    Period Information
-                  </h4>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    This pay period contains approximately {(() => {
+          <div className="grid grid-cols-1 gap-8">
+            {/* Period Info Banner */}
+            <div className="py-3 px-4 bg-muted rounded-md border flex items-center justify-between">
+              <div className="flex items-center">
+                <CalendarDays className="h-5 w-5 mr-2 text-primary" />
+                <div>
+                  <h3 className="text-sm font-medium">Current Pay Period</h3>
+                  <p className="text-xs text-muted-foreground">
+                    {formatDate(payPeriod.startDate)} - {formatDate(payPeriod.endDate)} ({(() => {
                       const start = new Date(payPeriod.startDate);
                       const end = new Date(payPeriod.endDate);
                       // Count only weekdays (Monday-Friday)
@@ -960,11 +913,28 @@ export default function ProcessPayrollPage() {
                         if (day !== 0 && day !== 6) workdays++;
                       }
                       return workdays;
-                    })()} working days.
+                    })()} working days)
                   </p>
                 </div>
-              </CardContent>
-            </Card>
+              </div>
+              
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" size="sm">
+                    Change Period
+                    <ChevronDown className="h-3.5 w-3.5 ml-1 opacity-70" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onClick={() => handlePeriodSelection('current')}>
+                    Current Month (Mar 2025)
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => handlePeriodSelection('previous')}>
+                    Previous Month (Feb 2025)
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
             
             {/* Processing Scope */}
             <Card>

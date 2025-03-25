@@ -17,32 +17,41 @@ export const Stepper = React.forwardRef<
 >(({ className, steps, ...props }, ref) => (
   <ol
     ref={ref}
-    className={cn("flex items-center w-full text-sm text-gray-500 font-medium sm:text-base mb-12", className)}
+    className={cn("flex items-center w-full text-sm font-medium sm:text-base mb-8 relative", className)}
     {...props}
   >
+    {/* Background line that spans the entire stepper */}
+    <div className="absolute top-1/2 left-0 right-0 h-0.5 bg-muted-foreground/30 -translate-y-1/2"></div>
+    
+    {/* Progress line that fills based on current step */}
+    <div 
+      className="absolute top-1/2 left-0 h-0.5 bg-primary -translate-y-1/2 transition-all duration-500" 
+      style={{ 
+        width: `${(Math.max(0, steps.findIndex(s => s.current) || (steps.filter(s => s.completed).length)) / (steps.length - 1)) * 100}%` 
+      }}
+    ></div>
+    
     {steps.map((step, index) => (
       <li
         key={step.id}
         className={cn(
-          "flex md:w-full items-center",
-          step.completed || step.current ? "text-indigo-600" : "text-gray-600",
-          index < steps.length - 1 
-            ? "sm:after:content-[''] after:w-full after:h-1 after:border-b after:border-gray-200 after:border-1 after:hidden sm:after:inline-block after:mx-4 xl:after:mx-8" 
-            : ""
+          "flex items-center justify-center z-10 px-4 first:pl-0 last:pr-0",
+          step.completed || step.current ? "text-primary" : "text-muted-foreground"
         )}
+        style={{ width: `${100 / steps.length}%` }}
       >
-        <div className="flex items-center whitespace-nowrap after:content-['/'] sm:after:hidden after:mx-2">
+        <div className="flex flex-col items-center whitespace-nowrap">
           <span 
             className={cn(
-              "w-6 h-6 border rounded-full flex justify-center items-center mr-3 text-sm lg:w-10 lg:h-10",
+              "w-8 h-8 border rounded-full flex justify-center items-center mb-2 text-sm lg:w-10 lg:h-10 transition-colors",
               step.completed || step.current 
-                ? "bg-indigo-600 border-indigo-200 text-white"
-                : "bg-gray-100 border-gray-200 text-gray-600"
+                ? "bg-primary border-primary/20 text-primary-foreground"
+                : "bg-background border-muted-foreground/30 text-muted-foreground"
             )}
           >
             {step.id}
           </span>
-          {step.name}
+          <span className="text-center">{step.name}</span>
         </div>
       </li>
     ))}

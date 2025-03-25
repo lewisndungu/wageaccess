@@ -1902,9 +1902,9 @@ export default function ProcessPayrollPage() {
                         <div className="flex items-center">
                           <div
                             className="w-3 h-3 rounded-sm mr-2"
-                            style={{ backgroundColor: item.fill }}
+                            style={{ backgroundColor: deductionsChartConfig[item.name]?.color || "#d1d5db" }}
                           ></div>
-                          <span>{item.name}</span>
+                          <span>{deductionsChartConfig[item.name]?.label || item.name}</span>
                         </div>
                         <span className="font-medium">
                           {formatKES(item.value)}

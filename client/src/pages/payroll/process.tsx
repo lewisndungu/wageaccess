@@ -79,6 +79,7 @@ import {
   Users,
   Building,
   BarChart,
+  PieChart as PieChartIcon,
   AlertTriangle,
   Circle,
   RefreshCw,
@@ -94,6 +95,12 @@ import {
   ArrowDown,
   Pencil,
 } from "lucide-react";
+import {
+  ChartConfig,
+  ChartContainer,
+  ChartTooltip,
+  ChartTooltipContent
+} from "@/components/ui/chart";
 import { 
   calculatePAYE, 
   calculateSHIF, 

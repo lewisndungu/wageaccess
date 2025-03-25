@@ -1540,51 +1540,17 @@ export default function ProcessPayrollPage() {
                 
                 {/* Deduction Legend */}
                 <div className="space-y-2 mt-4">
-                  <div className="flex items-center justify-between text-sm">
-                    <div className="flex items-center">
-                      <div className="w-3 h-3 rounded-sm bg-blue-500 mr-2"></div>
-                      <span>PAYE</span>
+                  {prepareDeductionsChartData(payrollCalculations).map((item, index) => (
+                    <div key={index} className="flex items-center justify-between text-sm">
+                      <div className="flex items-center">
+                        <div className="w-3 h-3 rounded-sm mr-2" style={{ backgroundColor: item.fill }}></div>
+                        <span>{item.name}</span>
+                      </div>
+                      <span className="font-medium">
+                        {formatKES(item.value)}
+                      </span>
                     </div>
-                    <span className="font-medium">
-                      {formatKES(payrollCalculations.reduce((sum, emp) => sum + emp.paye, 0))}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between text-sm">
-                    <div className="flex items-center">
-                      <div className="w-3 h-3 rounded-sm bg-green-500 mr-2"></div>
-                      <span>NSSF</span>
-                    </div>
-                    <span className="font-medium">
-                      {formatKES(payrollCalculations.reduce((sum, emp) => sum + emp.nssf, 0))}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between text-sm">
-                    <div className="flex items-center">
-                      <div className="w-3 h-3 rounded-sm bg-purple-500 mr-2"></div>
-                      <span>SHIF</span>
-                    </div>
-                    <span className="font-medium">
-                      {formatKES(payrollCalculations.reduce((sum, emp) => sum + emp.nhif, 0))}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between text-sm">
-                    <div className="flex items-center">
-                      <div className="w-3 h-3 rounded-sm bg-amber-500 mr-2"></div>
-                      <span>Housing Levy</span>
-                    </div>
-                    <span className="font-medium">
-                      {formatKES(payrollCalculations.reduce((sum, emp) => sum + emp.housingLevy, 0))}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between text-sm">
-                    <div className="flex items-center">
-                      <div className="w-3 h-3 rounded-sm bg-red-500 mr-2"></div>
-                      <span>EWA Advances</span>
-                    </div>
-                    <span className="font-medium">
-                      {formatKES(payrollCalculations.reduce((sum, emp) => sum + emp.ewaDeductions, 0))}
-                    </span>
-                  </div>
+                  ))}
                 </div>
               </CardContent>
             </Card>

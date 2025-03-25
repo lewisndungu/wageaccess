@@ -651,35 +651,35 @@ export default function ProcessPayrollPage() {
   const deductionsChartConfig: ChartConfig = {
     paye: {
       label: "PAYE",
-      color: "#3b82f6" // blue
+      color: "#3b82f6" // blue-500
     },
     shif: {
       label: "SHIF",
-      color: "#10b981" // green
+      color: "#22c55e" // green-500
     },
     nssf: {
       label: "NSSF",
-      color: "#8b5cf6" // purple
+      color: "#8b5cf6" // violet-500
     },
     housingLevy: {
       label: "Housing Levy",
-      color: "#f59e0b" // amber
+      color: "#f59e0b" // amber-500
     },
     ewa: {
       label: "EWA",
-      color: "#ef4444" // red
+      color: "#ef4444" // red-500
     },
     loans: {
       label: "Loans",
-      color: "#6366f1" // indigo
+      color: "#6366f1" // indigo-500
     },
     other: {
       label: "Other",
-      color: "#94a3b8" // slate
+      color: "#64748b" // slate-500
     },
     noData: {
       label: "No Data",
-      color: "#d1d5db" // gray
+      color: "#e2e8f0" // slate-200
     }
   };
 
@@ -1418,8 +1418,9 @@ export default function ProcessPayrollPage() {
       )}
 
       {isCalculating && (
-        <div className="fixed inset-0 bg-black/20 dark:bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
-          <Card className="w-full max-w-md shadow-lg">
+        <div className="!mt-0 fixed top-0 left-0 right-0 bottom-0 w-full h-full bg-black/50 dark:bg-black/80 backdrop-blur-sm flex items-center justify-center z-[9999] overflow-hidden">
+          <div className="absolute inset-0" aria-hidden="true" />
+          <Card className="relative w-full max-w-md shadow-lg mx-4">
             <CardContent className="pt-6 pb-6">
               <div>
                 <div className="mb-4 flex justify-center">
@@ -1848,46 +1849,51 @@ export default function ProcessPayrollPage() {
               </CardHeader>
               <CardContent className="grid grid-cols-2 place-items-center">
                 {/* Deduction Pie Chart (Visualization) */}
-                <div className="flex flex justify-center items-center py-2">
+                <div className="flex justify-center items-center py-2 w-[200px] h-[200px]">
                   <ChartContainer config={deductionsChartConfig}>
-                    <PieChart>
-                      <Pie
-                        data={prepareDeductionsChartData(payrollCalculations)}
-                        dataKey="value"
-                        nameKey="name"
-                        cx="50%"
-                        cy="50%"
-                        innerRadius={60}
-                        outerRadius={80}
-                        paddingAngle={2}
-                      >
-                        {prepareDeductionsChartData(payrollCalculations).map(
-                          (entry, index) => (
-                            <Cell key={`cell-${index}`} />
-                          ),
-                        )}
-                      </Pie>
-                      <text
-                        x="50%"
-                        y="50%"
-                        textAnchor="middle"
-                        dominantBaseline="middle"
-                        className="text-sm font-medium"
-                      >
-                        Deductions
-                      </text>
-                      <text
-                        x="50%"
-                        y="65%"
-                        textAnchor="middle"
-                        dominantBaseline="middle"
-                        className="text-xs"
-                      >
-                        {payrollSummary && typeof payrollSummary.totalDeductions === 'number' 
-                          ? formatKES(payrollSummary.totalDeductions)
-                          : formatKES(0)}
-                      </text>
-                    </PieChart>
+                    <ResponsiveContainer width="100%" height="100%">
+                      <PieChart>
+                        <Pie
+                          data={prepareDeductionsChartData(payrollCalculations)}
+                          dataKey="value"
+                          nameKey="name"
+                          cx="50%"
+                          cy="50%"
+                          innerRadius={60}
+                          outerRadius={80}
+                          paddingAngle={2}
+                        >
+                          {prepareDeductionsChartData(payrollCalculations).map(
+                            (entry, index) => (
+                              <Cell 
+                                key={`cell-${index}`}
+                                fill={deductionsChartConfig[entry.name]?.color || "#d1d5db"}
+                              />
+                            ),
+                          )}
+                        </Pie>
+                        <text
+                          x="50%"
+                          y="50%"
+                          textAnchor="middle"
+                          dominantBaseline="middle"
+                          className="text-sm font-medium"
+                        >
+                          Deductions
+                        </text>
+                        <text
+                          x="50%"
+                          y="65%"
+                          textAnchor="middle"
+                          dominantBaseline="middle"
+                          className="text-xs"
+                        >
+                          {payrollSummary && typeof payrollSummary.totalDeductions === 'number' 
+                            ? formatKES(payrollSummary.totalDeductions)
+                            : formatKES(0)}
+                        </text>
+                      </PieChart>
+                    </ResponsiveContainer>
                   </ChartContainer>
                 </div>
 

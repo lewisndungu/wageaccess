@@ -52,6 +52,11 @@ export interface IStorage {
   getAttendanceForDate(date: Date): Promise<Attendance[]>;
   createAttendance(attendance: InsertAttendance): Promise<Attendance>;
   updateAttendance(id: number, attendance: Partial<Attendance>): Promise<Attendance>;
+  getAttendanceByEmployeeAndDateRange(
+    employeeId: number,
+    startDate: Date,
+    endDate: Date
+  ): Promise<Attendance[]>;
   
   // Payroll operations
   getPayroll(id: number): Promise<Payroll | undefined>;
@@ -417,6 +422,41 @@ export class MemStorage implements IStorage {
     return updatedAttendance;
   }
 
+  async getAttendanceByEmployeeAndDateRange(
+    employeeId: number,
+    startDate: Date,
+    endDate: Date
+  ): Promise<Attendance[]> {
+    // Get all attendance records for the employee
+    const allRecords = await this.getAttendanceForEmployee(employeeId);
+    
+    // Filter by date range
+    return allRecords.filter(record => {
+      const recordDate = record.date ? new Date(record.date) : null;
+      if (!recordDate) return false;
+      
+      return recordDate >= startDate && recordDate <= endDate;
+    });
+  }
+
+  async deleteAttendance(id: number): Promise<boolean> {
+    if (!this.attendance.has(id)) {
+      return false;
+    }
+    
+    this.attendance.delete(id);
+    
+    // Clear cache after deleting attendance
+    this.clearTodayAttendanceCache();
+    
+    return true;
+  }
+
+  // Get all attendance records
+  getAllAttendance(): Map<number, Attendance> {
+    return this.attendance;
+  }
+
   // Payroll operations
   async getPayroll(id: number): Promise<Payroll | undefined> {
     return this.payroll.get(id);
@@ -432,7 +472,16 @@ export class MemStorage implements IStorage {
     return Array.from(this.payroll.values()).filter(
       (payroll) => {
         const periodStart = new Date(payroll.periodStart);
-        return periodStart >= startDate && periodStart <= endDate;
+        const periodEnd = new Date(payroll.periodEnd);
+        // Check if the payroll period overlaps with the requested period
+        return (
+          // Either the payroll period starts within our requested range
+          (periodStart >= startDate && periodStart <= endDate) ||
+          // Or the payroll period ends within our requested range
+          (periodEnd >= startDate && periodEnd <= endDate) ||
+          // Or the payroll period completely encompasses our requested range
+          (periodStart <= startDate && periodEnd >= endDate)
+        );
       }
     );
   }

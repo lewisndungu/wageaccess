@@ -133,8 +133,16 @@ export function ClockInOut({ onSuccess }: ClockInOutProps) {
         description: `${getEmployeeName(selectedEmployee)} has been clocked ${isClockingIn ? 'in' : 'out'} successfully.`,
       });
 
-      // Invalidate attendance queries to refresh data
-      queryClient.invalidateQueries({ queryKey: ['/api/attendance'] });
+      // Invalidate attendance queries to refresh data with the correct parameters
+      const today = new Date();
+      const employeeIdParam = employeeId ? parseInt(employeeId) : undefined;
+      
+      // Only invalidate with specific parameters to avoid 400 errors
+      if (employeeIdParam) {
+        queryClient.invalidateQueries({ 
+          queryKey: ['/api/attendance', employeeIdParam.toString(), today.toISOString(), today.toISOString()] 
+        });
+      }
       queryClient.invalidateQueries({ queryKey: ['/api/attendance/recent-events'] });
       
       // Call success callback if provided

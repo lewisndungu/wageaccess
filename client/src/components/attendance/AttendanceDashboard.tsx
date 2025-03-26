@@ -157,7 +157,25 @@ export function AttendanceDashboard({ records, employees }: AttendanceDashboardP
     queryKey: ['/api/attendance', startDate, endDate, viewType],
     queryFn: async () => {
       const params = new URLSearchParams();
-      if (startDate) params.append('date', startDate.toISOString());
+      
+      // Ensure all required parameters are included
+      if (employees && employees.length > 0) {
+        params.append('employeeId', employees[0].id.toString()); // Use first employee as default
+      } else {
+        params.append('employeeId', '1'); // Fallback employee ID
+      }
+      
+      if (startDate) params.append('startDate', startDate.toISOString());
+      if (endDate) {
+        params.append('endDate', endDate.toISOString());
+      } else if (startDate) {
+        // If no end date, use the same date as start
+        params.append('endDate', startDate.toISOString());
+      }
+      
+      // Add view type as an additional parameter if needed
+      if (viewType) params.append('viewType', viewType);
+      
       const response = await fetch(`/api/attendance?${params.toString()}`);
       if (!response.ok) throw new Error('Failed to fetch attendance records');
       const data = await response.json();

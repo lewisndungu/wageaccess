@@ -6,6 +6,7 @@ import { toast } from "@/hooks/use-toast";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { RotateCw, RefreshCw } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
+import { QRCodeSVG } from "qrcode.react";
 
 interface QRCodePayload {
   companyId: string;
@@ -15,7 +16,12 @@ interface QRCodePayload {
 }
 
 interface QRResponse {
-  qrCodeUrl: string;
+  data: {
+    companyId: string;
+    timestamp: number;
+    location: { lat: number; lng: number } | null;
+    exp: string;
+  };
   expiresAt: string;
 }
 
@@ -29,6 +35,7 @@ export function QRGenerator() {
   const [useLocation, setUseLocation] = useState(false);
   const [refreshInterval, setRefreshInterval] = useState(30); // seconds
   const [timer, setTimer] = useState(refreshInterval);
+  const [qrData, setQrData] = useState<string | null>(null);
 
   // Fetch recent clock events
   const { data: clockEvents = [] } = useQuery<ClockEvent[]>({
@@ -69,11 +76,13 @@ export function QRGenerator() {
         });
       }
       
-      // Call API to generate QR code
+      // Call API to generate QR code data
       const response = await apiRequest<QRResponse>('POST', '/api/attendance/generate-qr', payload);
       return response;
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
+      // Set QR data for rendering
+      setQrData(JSON.stringify(data.data));
       // Reset timer
       setTimer(refreshInterval);
     },
@@ -123,10 +132,13 @@ export function QRGenerator() {
   
   // Handle save QR code
   const saveQrCode = () => {
-    if (!qrCodeMutation.data?.qrCodeUrl) return;
+    if (!qrData) return;
+    
+    const canvas = document.getElementById('qr-code') as HTMLCanvasElement;
+    if (!canvas) return;
     
     const link = document.createElement('a');
-    link.href = qrCodeMutation.data.qrCodeUrl;
+    link.href = canvas.toDataURL('image/png');
     link.download = `jahazii-attendance-qr-${Date.now()}.png`;
     document.body.appendChild(link);
     link.click();
@@ -156,12 +168,17 @@ export function QRGenerator() {
               <div className="h-[250px] w-[250px] flex items-center justify-center">
                 <RotateCw className="h-10 w-10 text-primary animate-spin" />
               </div>
-            ) : qrCodeMutation.data?.qrCodeUrl ? (
-              <img 
-                src={qrCodeMutation.data.qrCodeUrl} 
-                alt="QR Code for self-log" 
-                className="h-[250px] w-[250px]"
-              />
+            ) : qrData ? (
+              <div className="flex items-center justify-center">
+                <QRCodeSVG
+                  id="qr-code"
+                  value={qrData}
+                  size={250}
+                  level="H"
+                  includeMargin={true}
+                  className="h-[250px] w-[250px]"
+                />
+              </div>
             ) : (
               <div className="h-[250px] w-[250px] flex items-center justify-center">
                 <p className="text-muted-foreground text-center">No QR code generated yet</p>
@@ -175,7 +192,6 @@ export function QRGenerator() {
           
           <div className="text-center space-y-2 mt-4">
             <p className="text-sm font-medium">Scan with your smartphone camera to clock in/out</p>
-            
           </div>
           
           <div className="flex space-x-2 mt-2">
@@ -183,7 +199,7 @@ export function QRGenerator() {
               <RefreshCw className="mr-2 h-4 w-4" />
               Refresh Now
             </Button>
-            <Button variant="outline" onClick={saveQrCode} disabled={!qrCodeMutation.data?.qrCodeUrl}>
+            <Button variant="outline" onClick={saveQrCode} disabled={!qrData}>
               Download
             </Button>
           </div>

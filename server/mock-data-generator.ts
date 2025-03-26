@@ -275,52 +275,63 @@ export function generateAttendance(employees: Employee[], days: number = 30): In
 export function generatePayroll(employees: Employee[], attendance: Attendance[]): InsertPayroll[] {
   const payroll: InsertPayroll[] = [];
   const today = new Date();
-  const periodStart = startOfDay(subDays(today, 30));
-  const periodEnd = startOfDay(today);
   
-  // Group attendance by employee
-  const employeeAttendance = new Map<number, Attendance[]>();
-  for (const record of attendance) {
-    if (!employeeAttendance.has(record.employeeId)) {
-      employeeAttendance.set(record.employeeId, []);
+  // Generate payrolls for the last 3 months
+  for (let monthOffset = 0; monthOffset < 3; monthOffset++) {
+    const periodStart = new Date(today.getFullYear(), today.getMonth() - monthOffset, 1);
+    const periodEnd = new Date(today.getFullYear(), today.getMonth() - monthOffset + 1, 0);
+    
+    // Group attendance by employee for this period
+    const employeeAttendance = new Map<number, Attendance[]>();
+    for (const record of attendance) {
+      if (!record.date) continue;
+      const recordDate = new Date(record.date);
+      if (recordDate >= periodStart && recordDate <= periodEnd) {
+        if (!employeeAttendance.has(record.employeeId)) {
+          employeeAttendance.set(record.employeeId, []);
+        }
+        employeeAttendance.get(record.employeeId)?.push(record);
+      }
     }
-    employeeAttendance.get(record.employeeId)?.push(record);
-  }
-  
-  // Generate payroll for each employee
-  for (const employee of employees) {
-    if (!employee.active) continue;
     
-    const employeeRecords = employeeAttendance.get(employee.id) || [];
-    const totalHours = employeeRecords.reduce((sum, record) => {
-      return sum + parseFloat(record.hoursWorked || "0");
-    }, 0);
-    
-    const grossPay = calculateGrossPay(totalHours.toString());
-    
-    // Calculate deductions
-    const ewaDeductions = employeeRecords.reduce((sum, record) => {
-      const hoursWorked = parseFloat(record.hoursWorked || "0");
-      const dailyEarnings = hoursWorked * parseFloat(employee.hourlyRate);
-      return sum + (dailyEarnings * EWA_PERCENTAGE_LIMIT);
-    }, 0);
-    
-    const taxDeductions = parseFloat(grossPay) * 0.3; // 30% tax
-    const netPay = (parseFloat(grossPay) - ewaDeductions - taxDeductions).toFixed(2);
-    
-    payroll.push({
-      employeeId: employee.id,
-      status: "draft",
-      periodStart,
-      periodEnd,
-      hoursWorked: totalHours.toFixed(2),
-      grossPay,
-      netPay,
-      ewaDeductions: ewaDeductions.toFixed(2),
-      taxDeductions: taxDeductions.toFixed(2),
-      otherDeductions: "0.00",
-      processedBy: null
-    });
+    // Generate payroll for each employee
+    for (const employee of employees) {
+      if (!employee.active) continue;
+      
+      const employeeRecords = employeeAttendance.get(employee.id) || [];
+      const totalHours = employeeRecords.reduce((sum, record) => {
+        return sum + parseFloat(record.hoursWorked || "0");
+      }, 0);
+      
+      const grossPay = calculateGrossPay(totalHours.toString());
+      
+      // Calculate deductions
+      const ewaDeductions = employeeRecords.reduce((sum, record) => {
+        const hoursWorked = parseFloat(record.hoursWorked || "0");
+        const dailyEarnings = hoursWorked * parseFloat(employee.hourlyRate);
+        return sum + (dailyEarnings * EWA_PERCENTAGE_LIMIT);
+      }, 0);
+      
+      const taxDeductions = parseFloat(grossPay) * 0.3; // 30% tax
+      const netPay = (parseFloat(grossPay) - ewaDeductions - taxDeductions).toFixed(2);
+      
+      // For past months, mark as processed
+      const isProcessed = monthOffset > 0;
+      
+      payroll.push({
+        employeeId: employee.id,
+        status: isProcessed ? "processed" : "draft",
+        periodStart,
+        periodEnd,
+        hoursWorked: totalHours.toFixed(2),
+        grossPay,
+        netPay,
+        ewaDeductions: ewaDeductions.toFixed(2),
+        taxDeductions: taxDeductions.toFixed(2),
+        otherDeductions: "0.00",
+        processedBy: isProcessed ? 1 : null // Default admin user ID for processed payrolls
+      });
+    }
   }
   
   return payroll;

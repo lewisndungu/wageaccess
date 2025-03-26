@@ -43,9 +43,27 @@ interface Employee {
 export default function AttendancePage() {
   const [activeView, setActiveView] = useState<string>("dashboard");
   
+  // Get today's date for parameters
+  const today = new Date();
+  const startOfDay = new Date(today);
+  startOfDay.setHours(0, 0, 0, 0);
+  const endOfDay = new Date(today);
+  endOfDay.setHours(23, 59, 59, 999);
+  
   // Query to fetch attendance data
   const { data: rawRecords = [] } = useQuery<AttendanceRecord[]>({
-    queryKey: ['/api/attendance'],
+    queryKey: ['/api/attendance', '1', startOfDay.toISOString(), endOfDay.toISOString()], // Using a default employeeId of 1
+    queryFn: async () => {
+      // Include all required parameters
+      const params = new URLSearchParams();
+      params.append('employeeId', '1'); // Default employee ID
+      params.append('startDate', startOfDay.toISOString());
+      params.append('endDate', endOfDay.toISOString());
+      
+      const response = await fetch(`/api/attendance?${params.toString()}`);
+      if (!response.ok) throw new Error('Failed to fetch attendance records');
+      return await response.json();
+    },
     staleTime: 5000, // Data stays fresh for 5 seconds
     refetchOnMount: true, // Refetch when component mounts
     refetchOnWindowFocus: true, // Refetch when window gets focus

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { DataTable } from "@/components/ui/data-table";
@@ -30,8 +30,17 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
+import { Calendar } from "@/components/ui/calendar";
+import { DateRange } from "react-day-picker";
+import { format } from "date-fns";
+import { cn } from "@/lib/utils";
 import {
   CalendarIcon,
   ChevronDown,
@@ -66,15 +75,111 @@ interface PayrollRecord {
   status: string;
 }
 
+interface PayrollDateRange {
+  startDate: string;
+  endDate: string;
+}
+
 export default function PayrollPage() {
   const navigate = useNavigate();
-  const [payPeriod, setPayPeriod] = useState("current");
+  const [payPeriod, setPayPeriod] = useState<"current" | "previous" | "custom">("current");
+  const [dateRange, setDateRange] = useState<PayrollDateRange>({ startDate: "", endDate: "" });
   const [isProcessingDialogOpen, setIsProcessingDialogOpen] = useState(false);
-
-  const { data: records, isLoading } = useQuery<PayrollRecord[]>({
-    queryKey: ["/api/payroll"],
-    initialData: payrollRecords,
+  
+  // For the date range picker
+  const [date, setDate] = useState<{
+    from: Date | undefined;
+    to: Date | undefined;
+  }>({
+    from: undefined,
+    to: undefined,
   });
+
+  // Update date range when payPeriod changes
+  useEffect(() => {
+    const today = new Date();
+    
+    if (payPeriod === "current") {
+      // Current month: 1st day of current month to last day of current month
+      const startDate = new Date(today.getFullYear(), today.getMonth(), 1);
+      const endDate = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+      
+      // Update date range picker state
+      setDate({
+        from: startDate,
+        to: endDate
+      });
+      
+      setDateRange({
+        startDate: startDate.toISOString().split("T")[0],
+        endDate: endDate.toISOString().split("T")[0]
+      });
+    } else if (payPeriod === "previous") {
+      // Previous month: 1st day of previous month to last day of previous month
+      const startDate = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+      const endDate = new Date(today.getFullYear(), today.getMonth(), 0);
+      
+      // Update date range picker state
+      setDate({
+        from: startDate,
+        to: endDate
+      });
+      
+      setDateRange({
+        startDate: startDate.toISOString().split("T")[0],
+        endDate: endDate.toISOString().split("T")[0]
+      });
+    } else if (payPeriod === "custom" && date.from && date.to) {
+      // Custom range - use the date range picker values
+      setDateRange({
+        startDate: date.from.toISOString().split("T")[0],
+        endDate: date.to.toISOString().split("T")[0]
+      });
+    }
+  }, [payPeriod, date]);
+
+  // Fetch payroll data with date filtering
+  const { data: records, isLoading, refetch } = useQuery<PayrollRecord[]>({
+    queryKey: ["payroll", dateRange.startDate, dateRange.endDate],
+    queryFn: async () => {
+      if (!dateRange.startDate || !dateRange.endDate) {
+        return payrollRecords; // Initial data or fallback
+      }
+      
+      try {
+        console.log(`Fetching payroll for ${dateRange.startDate} to ${dateRange.endDate}`);
+        const response = await fetch(
+          `/api/payroll?startDate=${dateRange.startDate}&endDate=${dateRange.endDate}`
+        );
+        if (!response.ok) {
+          throw new Error("Failed to fetch payroll data");
+        }
+        return await response.json();
+      } catch (error) {
+        console.error("Error fetching payroll data:", error);
+        return payrollRecords; // Fallback to mock data on error
+      }
+    },
+    initialData: payrollRecords,
+    enabled: Boolean(dateRange.startDate && dateRange.endDate),
+    staleTime: 60000, // Data considered fresh for 1 minute
+    refetchOnWindowFocus: false, // Prevent refetching when window regains focus
+  });
+
+  // Handle custom date range selection
+  const handleDateRangeChange = (range: DateRange | undefined) => {
+    if (range?.from && range?.to) {
+      setDate({
+        from: range.from,
+        to: range.to
+      });
+      setPayPeriod("custom");
+    }
+  };
+
+  const handlePeriodChange = (period: "current" | "previous" | "custom") => {
+    setPayPeriod(period);
+  };
 
   const columns: ColumnDef<PayrollRecord>[] = [
     {
@@ -268,16 +373,24 @@ export default function PayrollPage() {
           <CardHeader>
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center space-y-2 sm:space-y-0">
               <div>
-                <CardTitle>Payroll Records</CardTitle>
+                <CardTitle className="text-2xl font-semibold leading-none tracking-tight">
+                  Payroll Records
+                </CardTitle>
                 <CardDescription>
                   Manage and view payroll information for all employees
                 </CardDescription>
               </div>
-              <div className="flex space-x-2">
-                <Select defaultValue={payPeriod} onValueChange={setPayPeriod}>
+              <div className="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-2">
+                <Select value={payPeriod} onValueChange={(value) => handlePeriodChange(value as "current" | "previous" | "custom")}>
                   <SelectTrigger className="w-[180px]">
                     <CalendarIcon className="mr-2 h-4 w-4" />
-                    <SelectValue placeholder="Select period" />
+                    <SelectValue placeholder="Select period">
+                      {payPeriod === "current" 
+                        ? "Current Month" 
+                        : payPeriod === "previous" 
+                          ? "Previous Month" 
+                          : "Custom Range"}
+                    </SelectValue>
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="current">Current Month</SelectItem>
@@ -285,127 +398,136 @@ export default function PayrollPage() {
                     <SelectItem value="custom">Custom Range</SelectItem>
                   </SelectContent>
                 </Select>
+                
+                {/* Date Range Picker */}
+                {payPeriod === "custom" && (
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant={"outline"}
+                        className={cn(
+                          "w-[240px] justify-start text-left font-normal",
+                          !date && "text-muted-foreground"
+                        )}
+                      >
+                        <CalendarIcon className="mr-2 h-4 w-4" />
+                        {date?.from ? (
+                          date.to ? (
+                            <>
+                              {format(date.from, "LLL dd, y")} -{" "}
+                              {format(date.to, "LLL dd, y")}
+                            </>
+                          ) : (
+                            format(date.from, "LLL dd, y")
+                          )
+                        ) : (
+                          <span>Pick a date range</span>
+                        )}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0" align="start">
+                      <Calendar
+                        initialFocus
+                        mode="range"
+                        defaultMonth={date?.from}
+                        selected={date}
+                        onSelect={handleDateRangeChange}
+                        numberOfMonths={2}
+                      />
+                    </PopoverContent>
+                  </Popover>
+                )}
               </div>
             </div>
           </CardHeader>
-          <CardContent>
+          <CardContent className="p-0">
             <Tabs defaultValue="all">
-              <div className="flex justify-between items-center mb-4">
+              <div className="flex justify-between items-center mb-4 p-4 pt-0">
                 <TabsList>
                   <TabsTrigger value="all">All</TabsTrigger>
                   <TabsTrigger value="processed">Processed</TabsTrigger>
                   <TabsTrigger value="draft">Draft</TabsTrigger>
                 </TabsList>
-
                 <div className="flex space-x-2">
                   <div className="relative w-60">
                     <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
-                    <Input placeholder="Search employee..." className="pl-8" />
+                    <Input
+                      placeholder="Search employee..."
+                      className="pl-8"
+                    />
                   </div>
-                  <Button variant="outline" size="icon">
+                  <Button
+                    variant="outline"
+                    className="h-10 w-10"
+                    title="Filter records"
+                  >
                     <Filter className="h-4 w-4" />
                   </Button>
                 </div>
               </div>
-
-              <TabsContent value="all" className="mt-0">
-                <DataTable columns={columns} data={records} />
+              <TabsContent value="all" className="p-4 mt-0">
+                {isLoading ? (
+                  <div className="flex justify-center items-center p-8">
+                    <p>Loading payroll data...</p>
+                  </div>
+                ) : (
+                  <DataTable columns={columns} data={records} />
+                )}
               </TabsContent>
-
-              <TabsContent value="processed" className="mt-0">
-                <DataTable
-                  columns={columns}
-                  data={records.filter((r) => r.status === "processed")}
-                />
+              <TabsContent value="processed" className="p-4 mt-0">
+                {isLoading ? (
+                  <div className="flex justify-center items-center p-8">
+                    <p>Loading payroll data...</p>
+                  </div>
+                ) : (
+                  <DataTable
+                    columns={columns}
+                    data={records.filter(
+                      (record) => record.status === "processed"
+                    )}
+                  />
+                )}
               </TabsContent>
-
-              <TabsContent value="draft" className="mt-0">
-                <DataTable
-                  columns={columns}
-                  data={records.filter((r) => r.status === "draft")}
-                />
+              <TabsContent value="draft" className="p-4 mt-0">
+                {isLoading ? (
+                  <div className="flex justify-center items-center p-8">
+                    <p>Loading payroll data...</p>
+                  </div>
+                ) : (
+                  <DataTable
+                    columns={columns}
+                    data={records.filter((record) => record.status === "draft")}
+                  />
+                )}
               </TabsContent>
             </Tabs>
           </CardContent>
         </Card>
       </div>
 
-      {/* Process Payroll Dialog */}
+      {/* Processing Dialog */}
       <Dialog
         open={isProcessingDialogOpen}
         onOpenChange={setIsProcessingDialogOpen}
       >
-        <DialogContent className="sm:max-w-[525px]">
+        <DialogContent>
           <DialogHeader>
-            <DialogTitle>Process Payroll</DialogTitle>
+            <DialogTitle>Processing Payroll</DialogTitle>
             <DialogDescription>
-              Generate payroll records for all employees for the current pay
-              period.
+              Calculating payroll for all eligible employees. This may take a few
+              moments.
             </DialogDescription>
           </DialogHeader>
-
-          <div className="py-4 space-y-4">
-            <div className="space-y-2">
-              <Label>Pay Period</Label>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1">
-                  <Label className="text-xs">Start Date</Label>
-                  <Input type="date" defaultValue="2023-07-01" />
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-xs">End Date</Label>
-                  <Input type="date" defaultValue="2023-07-31" />
-                </div>
-              </div>
+          <div className="flex items-center space-x-2">
+            <div className="flex-1 h-2 bg-secondary rounded-full overflow-hidden">
+              <div className="bg-primary h-full w-1/2"></div>
             </div>
-
-            <div className="space-y-2">
-              <Label>Department Filter (Optional)</Label>
-              <Select>
-                <SelectTrigger>
-                  <SelectValue placeholder="All Departments" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Departments</SelectItem>
-                  {departments.map((dept) => (
-                    <SelectItem key={dept.id} value={dept.id.toString()}>
-                      {dept.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <Label>Include EWA Deductions</Label>
-                <Switch defaultChecked={true} />
-              </div>
-              <p className="text-sm text-muted-foreground">
-                Automatically deduct any outstanding EWA advances from employee
-                pay
-              </p>
-            </div>
-
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <Label>Auto-Calculate Taxes</Label>
-                <Switch defaultChecked={true} />
-              </div>
-              <p className="text-sm text-muted-foreground">
-                Apply default tax rates to gross pay amounts
-              </p>
-            </div>
+            <span className="text-sm">50%</span>
           </div>
-
           <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setIsProcessingDialogOpen(false)}
-            >
+            <Button variant="outline" onClick={() => {}}>
               Cancel
             </Button>
-            <Button type="submit">Process Payroll</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

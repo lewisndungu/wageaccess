@@ -2,7 +2,7 @@ import type { Express, Request, Response } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { z } from "zod";
-import { insertUserSchema, insertEmployeeSchema, insertAttendanceSchema, insertPayrollSchema, insertEwaRequestSchema } from "@shared/schema";
+import { insertUserSchema, insertEmployeeSchema, insertAttendanceSchema, insertPayrollSchema, insertEwaRequestSchema, type InsertAttendance } from "@shared/schema";
 import { faker } from '@faker-js/faker';
 import { generateEmptyAttendance } from './mock-data-generator';
 
@@ -290,69 +290,61 @@ export async function registerRoutes(app: Express): Promise<Server> {
   
   // Attendance routes
   app.get("/api/attendance", async (req, res) => {
+    const { employeeId, startDate, endDate } = req.query;
+    
+    console.log(`Attendance request params:`, {
+      employeeId,
+      startDate,
+      endDate,
+      query: req.query
+    });
+    
+    if (!employeeId || !startDate || !endDate) {
+      console.error(`Missing required parameters. Got: employeeId=${employeeId}, startDate=${startDate}, endDate=${endDate}`);
+      return res.status(400).json({ 
+        message: "Missing required parameters",
+        requiredParams: ['employeeId', 'startDate', 'endDate'],
+        providedParams: req.query
+      });
+    }
+    
     try {
-      console.log("GET /api/attendance request received");
-      const date = req.query.date ? new Date(req.query.date as string) : new Date();
-      const employeeId = req.query.employeeId ? parseInt(req.query.employeeId as string) : undefined;
+      console.log(`Fetching attendance for employee ${employeeId} from ${startDate} to ${endDate}`);
       
-      // Get attendance records based on date and optional employee filter
-      let attendanceRecords;
-      if (employeeId) {
-        attendanceRecords = await storage.getAttendanceForEmployee(employeeId);
-        // Filter by date if both employeeId and date are provided
-        if (req.query.date) {
-          const queryDate = new Date(req.query.date as string);
-          attendanceRecords = attendanceRecords.filter(record => {
-            if (!record.date) return false;
-            const recordDate = new Date(record.date);
-            return recordDate.getFullYear() === queryDate.getFullYear() &&
-                   recordDate.getMonth() === queryDate.getMonth() &&
-                   recordDate.getDate() === queryDate.getDate();
-          });
-        }
-      } else {
-        attendanceRecords = await storage.getAttendanceForDate(date);
+      const parsedEmployeeId = Number(employeeId);
+      if (isNaN(parsedEmployeeId)) {
+        throw new Error(`Invalid employeeId: ${employeeId}`);
       }
       
-      console.log(`Found ${attendanceRecords.length} attendance records`);
+      // Validate dates
+      const parsedStartDate = new Date(startDate as string);
+      const parsedEndDate = new Date(endDate as string);
+      if (isNaN(parsedStartDate.getTime()) || isNaN(parsedEndDate.getTime())) {
+        throw new Error(`Invalid date format: startDate=${startDate}, endDate=${endDate}`);
+      }
       
-      // Enhance the attendance records with employee details
-      const enhancedRecords = await Promise.all(
-        attendanceRecords.map(async (record) => {
-          // Get the employee details including the user and department
-          const employee = await storage.getEmployee(record.employeeId);
-          if (!employee) {
-            console.log(`Employee ${record.employeeId} not found`);
-            return {
-              ...record,
-              employeeName: 'Unknown Employee',
-              department: 'Unknown Department'
-            };
-          }
-          
-          // Get user and department separately
-          const user = await storage.getUser(employee.userId);
-          const department = await storage.getDepartment(employee.departmentId);
-          
-          // Log the found employee details
-          console.log(`Found employee ${employee.id}: User=${user?.name}, Dept=${department?.name}`);
-          
-          // Return the enhanced record with employee name and department
-          return {
-            ...record,
-            employeeName: user?.name || 'Unknown Employee',
-            department: department?.name || 'Unknown Department'
-          };
-        })
+      const attendance = await storage.getAttendanceByEmployeeAndDateRange(
+        parsedEmployeeId,
+        parsedStartDate,
+        parsedEndDate
       );
       
-      console.log(`Returning ${enhancedRecords.length} enhanced records`);
+      // Enhance the records with additional info for the frontend
+      const enhancedRecords = await Promise.all(attendance.map(async record => {
+        const employee = await storage.getEmployeeWithDetails(record.employeeId);
+        return {
+          ...record,
+          employeeName: employee ? employee.user.name : 'Unknown Employee',
+          department: employee ? employee.department.name : 'Unknown Department'
+        };
+      }));
       
+      console.log(`Found ${enhancedRecords.length} attendance records`);
       return res.status(200).json(enhancedRecords);
     } catch (error) {
-      console.error("Error fetching attendance records:", error);
+      console.error("Error fetching attendance:", error);
       return res.status(500).json({ 
-        message: "Failed to fetch attendance records", 
+        message: "Internal server error", 
         error: error instanceof Error ? error.message : "Unknown error" 
       });
     }
@@ -488,12 +480,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
       
-      // In a real implementation, you would:
-      // 1. Validate the company ID
-      // 2. Generate a secure QR code with cryptographic signatures
-      // 3. Store the QR code data in a database for validation when scanned
-      
-      // For this demo, we'll generate a simple QR code with dummy data
+      // Generate QR code data
       const qrData = {
         companyId,
         timestamp,
@@ -501,16 +488,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         exp: new Date(timestamp + expiresIn * 1000).toISOString()
       };
       
-      // Create a data URL for a QR code (in a real app, use a QR code generation library)
-      // Here we're just creating a placeholder image URL
-      const baseUrl = `${req.protocol}://${req.get('host')}`;
-      const qrCodeUrl = `${baseUrl}/api/qr-placeholder?data=${encodeURIComponent(JSON.stringify(qrData))}`;
-      
       // Calculate expiration time
       const expiresAt = new Date(timestamp + expiresIn * 1000).toISOString();
       
       return res.status(200).json({
-        qrCodeUrl,
+        data: qrData,
         expiresAt,
       });
     } catch (error) {
@@ -568,6 +550,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const now = timestamp ? new Date(timestamp) : new Date();
       const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
       
+      // Logging to help debug
+      console.log(`Processing ${action} for employee ${employeeId} at time ${now.toISOString()}`);
+      console.log(`Today's date: ${today.toISOString()}`);
+      
       // Check for existing attendance record for today
       const existingRecords = await storage.getAttendanceForEmployee(employeeId);
       const todayRecord = existingRecords.find(record => {
@@ -577,6 +563,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
                recordDate.getMonth() === today.getMonth() &&
                recordDate.getDate() === today.getDate();
       });
+      
+      if (todayRecord) {
+        console.log(`Found existing record for today: ${JSON.stringify(todayRecord)}`);
+      } else {
+        console.log(`No existing record found for employee ${employeeId} today`);
+      }
       
       // Define standard work schedule (configurable in a real app)
       const scheduledStartTimeMinutes = 9 * 60; // 9:00 AM in minutes since midnight
@@ -599,6 +591,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
             hoursWorked: "0", // Will be updated on clock-out
             ...(location ? { geoLocation: JSON.stringify(location) } : {})
           });
+          
+          console.log(`Updated record with clock-in: ${JSON.stringify(attendance)}`);
         } else if (action === 'clockOut' && todayRecord.clockInTime && !todayRecord.clockOutTime) {
           // Calculate hours worked for payroll calculations
           const clockIn = new Date(todayRecord.clockInTime);
@@ -610,6 +604,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
             hoursWorked: hoursWorked.toFixed(2),
             ...(location ? { geoLocation: JSON.stringify(location) } : {})
           });
+          
+          console.log(`Updated record with clock-out: ${JSON.stringify(attendance)}`);
         } else {
           return res.status(400).json({ 
             message: action === 'clockIn' 
@@ -621,7 +617,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // Create new attendance record for clock in
         const status = determineAttendanceStatus(now, scheduledStartTimeMinutes, lateWindowMinutes);
         
-        attendance = await storage.createAttendance({
+        // Ensure date and clockInTime are properly set
+        const newAttendance: InsertAttendance = {
           employeeId,
           date: today,
           clockInTime: now,
@@ -631,7 +628,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
           geoLocation: location ? JSON.stringify(location) : null,
           approvedBy: null,
           notes: `Self-logged via app: ${action}`
-        });
+        };
+        
+        console.log(`Creating new attendance record: ${JSON.stringify(newAttendance)}`);
+        attendance = await storage.createAttendance(newAttendance);
+        console.log(`Created new record: ${JSON.stringify(attendance)}`);
       } else {
         return res.status(400).json({ message: "Cannot clock out without clocking in first" });
       }
@@ -652,6 +653,60 @@ export async function registerRoutes(app: Express): Promise<Server> {
       return res.status(201).json(attendance);
     } catch (error) {
       return res.status(500).json({ message: "Failed to create attendance record" });
+    }
+  });
+  
+  // Update an attendance record
+  app.patch("/api/attendance/:id", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      
+      if (isNaN(id)) {
+        return res.status(400).json({ message: "Invalid attendance ID" });
+      }
+      
+      const updatedAttendance = await storage.updateAttendance(id, req.body);
+      
+      return res.status(200).json(updatedAttendance);
+    } catch (error) {
+      console.error("Error updating attendance record:", error);
+      return res.status(500).json({ message: "Failed to update attendance record" });
+    }
+  });
+  
+  // Delete an attendance record
+  app.delete("/api/attendance/:id", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      
+      if (isNaN(id)) {
+        return res.status(400).json({ message: "Invalid attendance ID" });
+      }
+      
+      const deleted = await storage.deleteAttendance(id);
+      
+      if (deleted) {
+        return res.status(200).json({ message: "Attendance record deleted successfully" });
+      } else {
+        return res.status(404).json({ message: "Attendance record not found" });
+      }
+    } catch (error) {
+      console.error("Error deleting attendance record:", error);
+      return res.status(500).json({ message: "Failed to delete attendance record" });
+    }
+  });
+  
+  // Get all attendance records
+  app.get("/api/attendance/all-records", async (req, res) => {
+    try {
+      // Get all attendance records
+      const allRecords = Array.from(storage.getAllAttendance().values());
+      
+      // Return all records
+      return res.status(200).json(allRecords);
+    } catch (error) {
+      console.error("Error fetching all attendance records:", error);
+      return res.status(500).json({ message: "Failed to fetch attendance records" });
     }
   });
   
@@ -822,18 +877,69 @@ export async function registerRoutes(app: Express): Promise<Server> {
   
   // Payroll routes
   app.get("/api/payroll", async (req, res) => {
-    if (req.query.startDate && req.query.endDate) {
-      const startDate = new Date(req.query.startDate as string);
-      const endDate = new Date(req.query.endDate as string);
+    try {
+      let startDate: Date, endDate: Date;
+      
+      if (req.query.startDate && req.query.endDate) {
+        startDate = new Date(req.query.startDate as string);
+        endDate = new Date(req.query.endDate as string);
+      } else {
+        // Return current month's payroll by default
+        const now = new Date();
+        startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+        endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+      }
+      
+      // Create a cache key based on the query parameters
+      const cacheKey = `payroll:${startDate.toISOString()}:${endDate.toISOString()}`;
+      
+      // Simple in-memory cache
+      const cache: Record<string, { data: any; timestamp: number }> = (global as any).payrollCache 
+        || ((global as any).payrollCache = {});
+      
+      // Check if we have a recent cached response (valid for 1 minute)
+      const cachedResponse = cache[cacheKey];
+      if (cachedResponse && Date.now() - cachedResponse.timestamp < 60000) {
+        console.log(`Using cached payroll data for ${startDate.toISOString()} to ${endDate.toISOString()}`);
+        return res.status(200).json(cachedResponse.data);
+      }
+      
+      console.log(`Fetching payroll from ${startDate.toISOString()} to ${endDate.toISOString()}`);
+      
       const payrollRecords = await storage.getPayrollForPeriod(startDate, endDate);
-      return res.status(200).json(payrollRecords);
-    } else {
-      // Return current month's payroll by default
-      const now = new Date();
-      const startDate = new Date(now.getFullYear(), now.getMonth(), 1);
-      const endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-      const payrollRecords = await storage.getPayrollForPeriod(startDate, endDate);
-      return res.status(200).json(payrollRecords);
+      
+      // Transform the payroll data to include employee names and departments
+      const transformedRecords = await Promise.all(payrollRecords.map(async record => {
+        const employee = await storage.getEmployeeWithDetails(record.employeeId);
+        
+        return {
+          id: record.id,
+          employeeId: record.employeeId,
+          employeeName: employee ? employee.user.name : 'Unknown Employee',
+          department: employee ? employee.department.name : 'Unknown Department',
+          periodStart: record.periodStart,
+          periodEnd: record.periodEnd,
+          hoursWorked: Number(record.hoursWorked) || 0,
+          hourlyRate: employee ? Number(employee.hourlyRate) || 0 : 0,
+          grossPay: Number(record.grossPay) || 0,
+          ewaDeductions: Number(record.ewaDeductions) || 0,
+          taxDeductions: Number(record.taxDeductions) || 0,
+          otherDeductions: Number(record.otherDeductions) || 0,
+          netPay: Number(record.netPay) || 0,
+          status: record.status
+        };
+      }));
+      
+      // Cache the result
+      cache[cacheKey] = {
+        data: transformedRecords,
+        timestamp: Date.now()
+      };
+      
+      return res.status(200).json(transformedRecords);
+    } catch (error) {
+      console.error("Error fetching payroll records:", error);
+      return res.status(500).json({ message: "Failed to fetch payroll records" });
     }
   });
   
@@ -871,6 +977,55 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
     
     return res.status(200).json(payroll);
+  });
+  
+  // Process payroll endpoint
+  app.post("/api/payroll/process", async (req, res) => {
+    try {
+      const payrollData = req.body;
+      
+      if (!payrollData || !payrollData.employeePayrolls || !Array.isArray(payrollData.employeePayrolls)) {
+        return res.status(400).json({ error: "Invalid payroll data format" });
+      }
+      
+      // Generate a unique reference number for this payroll run
+      const referenceNumber = `PR-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+      
+      // Process each employee's payroll and store in database
+      const createdPayrolls = [];
+      for (const employeePayroll of payrollData.employeePayrolls) {
+        console.log(`Processing payroll for employee: ${employeePayroll.name}`);
+        
+        // Create a payroll record for this employee
+        const payroll = await storage.createPayroll({
+          employeeId: employeePayroll.employeeId,
+          periodStart: new Date(payrollData.payPeriodStart),
+          periodEnd: new Date(payrollData.payPeriodEnd),
+          hoursWorked: employeePayroll.hoursWorked.toString(),
+          grossPay: employeePayroll.grossPay.toString(),
+          netPay: employeePayroll.netPay.toString(),
+          ewaDeductions: employeePayroll.ewaDeductions.toString(),
+          taxDeductions: (employeePayroll.paye + employeePayroll.nhif + employeePayroll.nssf + employeePayroll.housingLevy).toString(),
+          otherDeductions: (employeePayroll.loanDeductions + employeePayroll.otherDeductions).toString(),
+          status: "processed",
+          processedBy: 1 // Default admin user ID
+        });
+        
+        createdPayrolls.push(payroll);
+      }
+      
+      // Return the processed payroll with the reference number
+      res.status(200).json({
+        ...payrollData,
+        id: referenceNumber,
+        status: "processed",
+        processedAt: new Date().toISOString(),
+        payrolls: createdPayrolls
+      });
+    } catch (error) {
+      console.error("Error processing payroll:", error);
+      res.status(500).json({ error: "Failed to process payroll" });
+    }
   });
   
   // EWA routes
@@ -1245,6 +1400,192 @@ export async function registerRoutes(app: Express): Promise<Server> {
         success: false, 
         message: "Failed to execute mock control action" 
       });
+    }
+  });
+
+  // Health check endpoint
+  app.get("/api/health", (_req, res) => {
+    res.status(200).json({ status: "ok", timestamp: new Date().toISOString() });
+  });
+
+  // Payment details endpoint
+  app.get("/api/employees/:id/payment-details", async (req, res) => {
+    try {
+      const employeeId = parseInt(req.params.id);
+      
+      if (isNaN(employeeId)) {
+        return res.status(400).json({ error: "Invalid employee ID" });
+      }
+      
+      // Get the employee record
+      const employee = await storage.getEmployee(employeeId);
+      
+      if (!employee) {
+        return res.status(404).json({ error: "Employee not found" });
+      }
+      
+      // In a real implementation, this would retrieve the actual payment details from the database
+      // For this implementation, we'll generate some mock data based on the employee ID
+      
+      // Determine if this employee uses bank transfer or mobile money (M-Pesa)
+      const usesMpesa = employeeId % 2 === 0;
+      
+      let paymentDetails;
+      
+      if (usesMpesa) {
+        // Some employees get paid via M-Pesa
+        paymentDetails = {
+          paymentMethod: "mpesa",
+          mpesaNumber: `07${Math.floor(10000000 + Math.random() * 90000000)}`,
+        };
+      } else {
+        // Others get paid via bank transfer
+        const banks = ["Equity Bank", "KCB", "Co-operative Bank", "NCBA", "Stanbic Bank"];
+        paymentDetails = {
+          paymentMethod: "bank",
+          bankName: banks[Math.floor(Math.random() * banks.length)],
+          accountNumber: Math.floor(10000000 + Math.random() * 90000000).toString(),
+        };
+      }
+      
+      res.status(200).json(paymentDetails);
+    } catch (error) {
+      console.error("Error fetching employee payment details:", error);
+      res.status(500).json({ error: "Failed to fetch employee payment details" });
+    }
+  });
+
+  // Employee deductions endpoint
+  app.get("/api/employees/:id/deductions", async (req, res) => {
+    try {
+      const employeeId = parseInt(req.params.id);
+      
+      if (isNaN(employeeId)) {
+        return res.status(400).json({ error: "Invalid employee ID" });
+      }
+      
+      // Get the employee record
+      const employee = await storage.getEmployee(employeeId);
+      
+      if (!employee) {
+        return res.status(404).json({ error: "Employee not found" });
+      }
+      
+      // In a real implementation, this would retrieve the actual deductions from the database
+      // For this implementation, we'll generate some mock data
+      
+      // Generate a random number of deductions (0-3)
+      const numDeductions = Math.floor(Math.random() * 4);
+      const deductions = [];
+      
+      const deductionTypes = [
+        { type: "insurance", name: "Health Insurance", minAmount: 1000, maxAmount: 5000 },
+        { type: "pension", name: "Pension Contribution", minAmount: 2000, maxAmount: 8000 },
+        { type: "union", name: "Union Dues", minAmount: 500, maxAmount: 1500 },
+        { type: "welfare", name: "Staff Welfare", minAmount: 300, maxAmount: 1000 }
+      ];
+      
+      // Randomly select deductions
+      const selectedTypes: number[] = [];
+      for (let i = 0; i < numDeductions; i++) {
+        let index;
+        do {
+          index = Math.floor(Math.random() * deductionTypes.length);
+        } while (selectedTypes.includes(index));
+        
+        selectedTypes.push(index);
+        const deductionType = deductionTypes[index];
+        
+        deductions.push({
+          id: i + 1,
+          employeeId,
+          type: deductionType.type,
+          name: deductionType.name,
+          amount: Math.floor(deductionType.minAmount + Math.random() * (deductionType.maxAmount - deductionType.minAmount)),
+          isActive: true
+        });
+      }
+      
+      res.status(200).json(deductions);
+    } catch (error) {
+      console.error("Error fetching employee deductions:", error);
+      res.status(500).json({ error: "Failed to fetch employee deductions" });
+    }
+  });
+
+  // Active employee loans endpoint
+  app.get("/api/loans/employee/:id/active", async (req, res) => {
+    try {
+      const employeeId = parseInt(req.params.id);
+      
+      if (isNaN(employeeId)) {
+        return res.status(400).json({ error: "Invalid employee ID" });
+      }
+      
+      // Get the employee record
+      const employee = await storage.getEmployee(employeeId);
+      
+      if (!employee) {
+        return res.status(404).json({ error: "Employee not found" });
+      }
+      
+      // In a real implementation, this would retrieve the actual loans from the database
+      // For this implementation, we'll generate some mock data
+      
+      // Determine if this employee has any loans (30% chance)
+      const hasLoans = Math.random() < 0.3;
+      
+      if (!hasLoans) {
+        return res.status(200).json([]);
+      }
+      
+      // Generate 1-2 active loans
+      const numLoans = Math.floor(Math.random() * 2) + 1;
+      const loans = [];
+      
+      const loanTypes = [
+        { type: "personal", name: "Personal Loan", minAmount: 50000, maxAmount: 300000, termMonths: 12 },
+        { type: "emergency", name: "Emergency Loan", minAmount: 10000, maxAmount: 50000, termMonths: 6 },
+        { type: "education", name: "Education Loan", minAmount: 100000, maxAmount: 500000, termMonths: 24 },
+        { type: "home", name: "Home Improvement", minAmount: 200000, maxAmount: 1000000, termMonths: 36 }
+      ];
+      
+      // Randomly select loans
+      const selectedTypes: number[] = [];
+      for (let i = 0; i < numLoans; i++) {
+        let index;
+        do {
+          index = Math.floor(Math.random() * loanTypes.length);
+        } while (selectedTypes.includes(index));
+        
+        selectedTypes.push(index);
+        const loanType = loanTypes[index];
+        
+        // Generate a random loan amount
+        const principal = Math.floor(loanType.minAmount + Math.random() * (loanType.maxAmount - loanType.minAmount));
+        
+        // Calculate a simple monthly payment (principal / term)
+        const monthlyPayment = Math.ceil(principal / loanType.termMonths);
+        
+        loans.push({
+          id: i + 1,
+          employeeId,
+          type: loanType.type,
+          name: loanType.name,
+          principal,
+          balance: Math.floor(principal * (0.3 + Math.random() * 0.7)), // 30-100% remaining
+          monthlyPayment,
+          termMonths: loanType.termMonths,
+          isActive: true,
+          startDate: new Date(Date.now() - (Math.random() * 10000000000)).toISOString(),
+          nextPaymentDate: new Date(Date.now() + (Math.random() * 2592000000)).toISOString() // Within next 30 days
+        });
+      }
+      
+      res.status(200).json(loans);
+    } catch (error) {
+      console.error("Error fetching employee loans:", error);
+      res.status(500).json({ error: "Failed to fetch employee loans" });
     }
   });
 

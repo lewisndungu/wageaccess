@@ -149,3 +149,9 @@ export const queryClient = new QueryClient({
     },
   },
 });
+
+// Expose queryClient globally for debugging purposes
+if (typeof window !== 'undefined') {
+  (window as any)._queryClient = queryClient;
+  console.log('QueryClient exposed globally for debugging as window._queryClient');
+}

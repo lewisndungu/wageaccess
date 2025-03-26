@@ -181,9 +181,17 @@ export function OTPForm({ onSuccess }: OTPFormProps) {
           variant: "destructive",
         });
         
+        // Reset the form even on error
+        setOtp('');
+        setGeneratedOtp(null);
+        
         // Invalidate queries to refresh data anyway
         queryClient.invalidateQueries({ queryKey: ['/api/attendance'] });
         queryClient.invalidateQueries({ queryKey: ['/api/attendance/recent-events'] });
+        
+        // Call success callback - consider this operation "successful" from a UX perspective
+        // as the employee is already clocked in which is the desired state
+        onSuccess?.();
       } else if (errorMessage.includes("Already clocked out")) {
         toast({
           title: "Already Clocked Out",
@@ -191,9 +199,16 @@ export function OTPForm({ onSuccess }: OTPFormProps) {
           variant: "destructive",
         });
         
+        // Reset the form even on error
+        setOtp('');
+        setGeneratedOtp(null);
+        
         // Invalidate queries to refresh data anyway
         queryClient.invalidateQueries({ queryKey: ['/api/attendance'] });
         queryClient.invalidateQueries({ queryKey: ['/api/attendance/recent-events'] });
+        
+        // Call success callback 
+        onSuccess?.();
       } else if (errorMessage.includes("expired")) {
         toast({
           title: "OTP Expired",

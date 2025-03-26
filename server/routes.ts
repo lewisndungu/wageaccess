@@ -1563,6 +1563,86 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Chat API Endpoints
+  app.post('/api/chat/message', async (req, res) => {
+    try {
+      const { message, userId } = req.body;
+      
+      if (!message) {
+        return res.status(400).json({ error: 'Message is required' });
+      }
+      
+      const response = await chatService.processMessage(message, userId);
+      res.json(response);
+    } catch (error) {
+      console.error('Error processing chat message:', error);
+      res.status(500).json({ error: 'Failed to process message' });
+    }
+  });
+
+  app.get('/api/chat/history/:userId', async (req, res) => {
+    try {
+      const { userId } = req.params;
+      const history = await chatService.getHistory(userId);
+      res.json(history);
+    } catch (error) {
+      console.error('Error fetching chat history:', error);
+      res.status(500).json({ error: 'Failed to fetch chat history' });
+    }
+  });
+
+  app.post('/api/chat/upload', async (req, res) => {
+    try {
+      if (!req.file) {
+        return res.status(400).json({ error: 'No file uploaded' });
+      }
+      
+      const { userId } = req.body;
+      const result = await chatService.processFile(req.file, userId);
+      res.json(result);
+    } catch (error) {
+      console.error('Error processing uploaded file:', error);
+      res.status(500).json({ error: 'Failed to process file' });
+    }
+  });
+
+  app.post('/api/chat/import-employees', async (req, res) => {
+    try {
+      const { data, userId } = req.body;
+      const result = await chatService.importEmployees(data, userId);
+      res.json(result);
+    } catch (error) {
+      console.error('Error importing employees:', error);
+      res.status(500).json({ error: 'Failed to import employees' });
+    }
+  });
+
+  app.get('/api/chat/search-employee', async (req, res) => {
+    try {
+      const { query, userId } = req.query;
+      if (!query) {
+        return res.status(400).json({ error: 'Search query is required' });
+      }
+      
+      const results = await chatService.searchEmployee(query.toString(), userId.toString());
+      res.json(results);
+    } catch (error) {
+      console.error('Error searching for employee:', error);
+      res.status(500).json({ error: 'Failed to search for employee' });
+    }
+  });
+
+  app.post('/api/chat/calculate-payroll', async (req, res) => {
+    try {
+      const { employeeIds, userId } = req.body;
+      const result = await chatService.calculatePayroll(employeeIds, userId);
+      res.json(result);
+    } catch (error) {
+      console.error('Error calculating payroll:', error);
+      res.status(500).json({ error: 'Failed to calculate payroll' });
+    }
+  });
+
   const httpServer = createServer(app);
   return httpServer;
 }

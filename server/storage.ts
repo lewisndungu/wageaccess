@@ -732,3 +732,88 @@ export class MemStorage implements IStorage {
 }
 
 export const storage = new MemStorage();
+
+// Chat storage schema
+interface ChatMessage {
+  id: string;
+  userId: string;
+  type: string;
+  content: string;
+  timestamp: Date;
+  metadata?: any;
+}
+
+interface ChatHistory {
+  userId: string;
+  messages: ChatMessage[];
+  commands: string[];
+  searches: string[];
+}
+
+// Chat messages collection - use the storage instance instead of direct db reference
+const chatMessages = new MemCollection<ChatMessage>('chat_messages');
+const chatHistories = new MemCollection<ChatHistory>('chat_history');
+
+// Chat storage functions
+export async function saveMessage(message: ChatMessage): Promise<ChatMessage> {
+  message.id = message.id || generateId();
+  await chatMessages.insertOne(message);
+  return message;
+}
+
+export async function getMessagesByUser(userId: string, limit = 50): Promise<ChatMessage[]> {
+  const messages = await chatMessages.find({ userId });
+  return messages
+    .sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime())
+    .slice(0, limit);
+}
+
+export async function saveUserChatHistory(userId: string, history: Partial<ChatHistory>): Promise<void> {
+  const existingHistory = await chatHistories.findOne({ userId });
+  
+  if (existingHistory) {
+    await chatHistories.updateOne(
+      { userId }, 
+      { ...existingHistory, ...history }
+    );
+  } else {
+    await chatHistories.insertOne({
+      userId,
+      messages: [],
+      commands: [],
+      searches: [],
+      ...history
+    });
+  }
+}
+
+export async function getUserChatHistory(userId: string): Promise<ChatHistory | null> {
+  return await chatHistories.findOne({ userId });
+}
+
+export async function saveCommand(userId: string, command: string): Promise<void> {
+  const history = await getUserChatHistory(userId) || { userId, messages: [], commands: [], searches: [] };
+  
+  // Don't add duplicate consecutive commands
+  if (history.commands.length > 0 && history.commands[history.commands.length - 1] === command) {
+    return;
+  }
+  
+  const updatedCommands = [...history.commands, command].slice(-20); // Keep last 20 commands
+  
+  await saveUserChatHistory(userId, { commands: updatedCommands });
+}
+
+export async function saveSearch(userId: string, search: string): Promise<void> {
+  const history = await getUserChatHistory(userId) || { userId, messages: [], commands: [], searches: [] };
+  
+  // Remove duplicate if exists
+  const existingIndex = history.searches.findIndex(s => s.toLowerCase() === search.toLowerCase());
+  if (existingIndex !== -1) {
+    history.searches.splice(existingIndex, 1);
+  }
+  
+  const updatedSearches = [search, ...history.searches].slice(0, 10); // Keep last 10 searches
+  
+  await saveUserChatHistory(userId, { searches: updatedSearches });
+}

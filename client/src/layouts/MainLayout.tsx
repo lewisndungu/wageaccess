@@ -10,7 +10,8 @@ import { GlobalHeader } from "@/components/system/GlobalHeader";
 import { 
   SearchIcon, MenuIcon, BellIcon, User, LayoutDashboard, 
   Users, Clock, DollarSign, CreditCard, LogIn, UserCog, 
-  HelpCircle, BadgeDollarSign, ArrowRight
+  HelpCircle, BadgeDollarSign, ArrowRight,
+  MessageCircle
 } from "lucide-react";
 
 // Error boundary component
@@ -179,6 +180,14 @@ export default function MainLayout({ children }: MainLayoutProps) {
                 icon={<LogIn size={18} />} 
                 label="Self-Log" 
                 active={location.pathname === '/attendance/self-log'} 
+              />
+            </li>
+            <li>
+              <SidebarLink 
+                to="/chat" 
+                icon={<MessageCircle size={18} />} 
+                label="Chat" 
+                active={location.pathname === '/chat'} 
               />
             </li>
             <li className="pt-4 mt-4 border-t border-gray-200 dark:border-gray-800">

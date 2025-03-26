@@ -22,6 +22,7 @@ import ManagementReportingPage from "@/pages/ewa/management-reporting";
 import SelfServicePage from "@/pages/ewa/self-service";
 import ProfilePage from "@/pages/profile";
 import NotFound from "@/pages/not-found";
+import ChatInterface from "./components/chat/ChatInterface";
 
 // This component uses context hooks and will only be rendered inside their providers
 function SystemComponents() {
@@ -98,6 +99,7 @@ function App() {
                   <Route path="/" element={<MainLayout><Dashboard /></MainLayout>} />
                   <Route path="/dashboard" element={<MainLayout><Dashboard /></MainLayout>} />
                   <Route path="/employees" element={<MainLayout><EmployeesPage /></MainLayout>} />
+                  <Route path="/chat" element={<MainLayout><ChatInterface /></MainLayout>} />
                   <Route path="/employees/:id" element={<MainLayout><EmployeeDetailPage /></MainLayout>} />
                   <Route path="/attendance" element={<MainLayout><AttendancePage /></MainLayout>} />
                   <Route path="/attendance/self-log" element={<MainLayout><SelfLogPage /></MainLayout>} />

@@ -1,10 +1,17 @@
 import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
+import { createServer } from 'http';
+import { Server } from 'socket.io';
+import { calculateKenyanPayroll } from './payroll-utils';
+import { createChatService } from './chat-service';
 
 const app = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
+
+// Create chat service
+export const chatService = createChatService();
 
 app.use((req, res, next) => {
   const start = Date.now();

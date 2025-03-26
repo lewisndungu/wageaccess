@@ -5,8 +5,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { UserProvider } from "@/context/UserContext";
 import { SystemProvider, useSystem, SystemNotification } from "@/context/SystemContext";
 import { ThemeProvider } from "@/components/ui/theme-provider";
-
-import MainLayout from "@/layouts/MainLayout";
+import MainLayout, { AppErrorBoundary } from "@/layouts/MainLayout";
 import Dashboard from "@/pages/dashboard";
 import EmployeesPage from "@/pages/employees/index";
 import EmployeeDetailPage from "@/pages/employees/detail";
@@ -23,6 +22,16 @@ import ManagementReportingPage from "@/pages/ewa/management-reporting";
 import SelfServicePage from "@/pages/ewa/self-service";
 import ProfilePage from "@/pages/profile";
 import NotFound from "@/pages/not-found";
+
+// This component uses context hooks and will only be rendered inside their providers
+function SystemComponents() {
+  return (
+    <>
+      <SystemNotifications />
+      <LoadingOverlay />
+    </>
+  );
+}
 
 // System-wide notifications component
 function SystemNotifications() {
@@ -107,16 +116,17 @@ function App() {
     <ThemeProvider defaultTheme="light" storageKey="jahazii-theme">
       <BrowserRouter>
         <QueryClientProvider client={queryClient}>
-          <UserProvider>
-            <SystemProvider>
-              <MainLayout>
-                <AppRoutes />
-              </MainLayout>
-              <SystemNotifications />
-              <LoadingOverlay />
-              <Toaster />
-            </SystemProvider>
-          </UserProvider>
+          <AppErrorBoundary>
+            <UserProvider>
+              <SystemProvider>
+                <MainLayout>
+                  <AppRoutes />
+                </MainLayout>
+                <SystemComponents />
+                <Toaster />
+              </SystemProvider>
+            </UserProvider>
+          </AppErrorBoundary>
         </QueryClientProvider>
       </BrowserRouter>
     </ThemeProvider>

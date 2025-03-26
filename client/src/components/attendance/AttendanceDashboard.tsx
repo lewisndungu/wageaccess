@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import type { ChangeEvent } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { 
   Card, 
@@ -44,7 +45,6 @@ import {
   ResponsiveContainer,
 } from "@/components/ui/chart";
 import { ColumnDef } from "@tanstack/react-table";
-import { attendanceRecords, employees, formatDate, formatTime } from "@/lib/mock-data";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
   ArrowDown,
@@ -64,6 +64,29 @@ import {
 } from "lucide-react";
 import { DatePicker } from "@/components/ui/date-picker";
 
+// Helper functions for date/time formatting
+const formatDate = (dateString: string | undefined): string => {
+  if (!dateString) return '-';
+  const date = new Date(dateString);
+  return date.toLocaleDateString('en-US', {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric'
+  });
+};
+
+const formatTime = (dateString: string | undefined): string => {
+  if (!dateString) return '-';
+  const date = new Date(dateString);
+  return date.toLocaleTimeString('en-US', {
+    hour: '2-digit',
+    minute: '2-digit'
+  });
+};
+
+// Constants
+const WORK_START_HOUR = 8; // Work day starts at 8 AM
+
 // Define the interface for attendance records
 interface AttendanceRecord {
   id: number;
@@ -74,7 +97,7 @@ interface AttendanceRecord {
   clockInTime: string | null;
   clockOutTime: string | null;
   status: string;
-  hoursWorked: number;
+  hoursWorked: string;
 }
 
 // Define the interface for department attendance data
@@ -103,7 +126,25 @@ interface TrendData {
   rate: number;
 }
 
-export function AttendanceDashboard() {
+// Define the interface for lateness stats
+interface LatenessStats {
+  avgLateness: string;
+  maxLateness: string;
+  latenessRate: number;
+}
+
+interface AttendanceDashboardProps {
+  records: AttendanceRecord[];
+  employees: {
+    id: number;
+    name: string;
+    department: string;
+    position: string;
+    profileImage?: string;
+  }[];
+}
+
+export function AttendanceDashboard({ records, employees }: AttendanceDashboardProps) {
   // State for date range and view type
   const [startDate, setStartDate] = useState<Date | undefined>(new Date());
   const [endDate, setEndDate] = useState<Date | undefined>(new Date());
@@ -112,15 +153,97 @@ export function AttendanceDashboard() {
   const [searchQuery, setSearchQuery] = useState("");
   
   // Query to fetch attendance records
-  const { data: records, isLoading: isLoadingRecords } = useQuery<AttendanceRecord[]>({
+  const { data: recordsData, isLoading: isLoadingRecords } = useQuery<AttendanceRecord[]>({
     queryKey: ['/api/attendance', startDate, endDate, viewType],
-    initialData: attendanceRecords,
+    queryFn: async () => {
+      const params = new URLSearchParams();
+      if (startDate) params.append('date', startDate.toISOString());
+      const response = await fetch(`/api/attendance?${params.toString()}`);
+      if (!response.ok) throw new Error('Failed to fetch attendance records');
+      const data = await response.json();
+      
+      // Enhance attendance records with employee data if needed
+      return data.map((record: any) => {
+        // If record already has employeeName and department, use those
+        if (record.employeeName && record.department) {
+          return record;
+        }
+        
+        // Otherwise, find the employee from the list and add their details
+        const employee = employees.find(emp => emp.id === record.employeeId);
+        return {
+          ...record,
+          employeeName: employee?.name || 'Unknown Employee',
+          department: employee?.department || 'Unknown Department'
+        };
+      });
+    },
+    refetchInterval: 10000, // Refetch every 10 seconds
+    staleTime: 5000, // Data stays fresh for 5 seconds
+    placeholderData: records.length > 0 ? records : [], // Use props data as placeholder if available
+    enabled: !!employees.length // Only run query when employees are available
   });
   
   // Query to fetch employee list  
   const { data: employeeList, isLoading: isLoadingEmployees } = useQuery({
     queryKey: ['/api/employees/active'],
-    initialData: employees,
+    queryFn: async () => {
+      const response = await fetch('/api/employees/active');
+      if (!response.ok) throw new Error('Failed to fetch employees');
+      return response.json();
+    },
+    refetchInterval: 30000, // Refetch every 30 seconds
+    staleTime: 15000, // Data stays fresh for 15 seconds
+    placeholderData: employees // Use props data as placeholder
+  });
+
+  // Query to fetch recent attendance events
+  const { data: recentEvents } = useQuery({
+    queryKey: ['/api/attendance/recent-events'],
+    queryFn: async () => {
+      const response = await fetch('/api/attendance/recent-events');
+      if (!response.ok) throw new Error('Failed to fetch recent events');
+      return response.json();
+    },
+    refetchInterval: 5000, // Refetch every 5 seconds
+    staleTime: 2000, // Data stays fresh for 2 seconds
+    initialData: []
+  });
+
+  // Query to fetch dashboard statistics
+  const { data: dashboardStats } = useQuery({
+    queryKey: ['/api/statistics/dashboard'],
+    queryFn: async () => {
+      const response = await fetch('/api/statistics/dashboard');
+      if (!response.ok) throw new Error('Failed to fetch dashboard statistics');
+      return response.json();
+    },
+    refetchInterval: 60000, // Refetch every minute
+    staleTime: 30000, // Data stays fresh for 30 seconds
+    initialData: {
+      employeeCount: { total: 0, active: 0, inactive: 0, change: "0%" },
+      attendance: { rate: "0%", change: "0%" },
+      payroll: { expected: "KES 0", change: "0%" },
+      ewa: { total: "KES 0", pending: 0, change: "0%" }
+    }
+  });
+
+  // Use provided records data during initial load
+  const displayRecords = (isLoadingRecords && records.length > 0 ? records : recordsData) || [];
+  
+  // Fallback to the passed employees prop if query hasn't loaded yet
+  const employeesData = employeeList && employeeList.length > 0 ? employeeList : (employees || []);
+
+  // Map employee data to a format that works with the component
+  const mappedEmployees = employeesData.map((emp: any) => {
+    // Handle different employee data structures
+    return {
+      id: emp.id,
+      name: emp.user?.name || emp.name || 'Unknown',
+      department: typeof emp.department === 'object' ? emp.department.name : (emp.department || 'Unknown'),
+      position: emp.position || 'Unknown',
+      profileImage: emp.user?.profileImage || emp.profileImage || null
+    };
   });
 
   // Function to calculate rate change (needs to be defined before metrics)
@@ -128,90 +251,40 @@ export function AttendanceDashboard() {
     return currentRate - previousRate;
   }
   
-  // Calculate attendance rate
-  const attendanceRate = calculateAttendanceRate(records);
-  const previousRate = calculatePreviousAttendanceRate();
-  
-  // Function to calculate lateness statistics
-  function calculateLatenessStats(records: AttendanceRecord[]) {
-    const lateRecords = records.filter(r => r.status === 'late');
-    
-    if (lateRecords.length === 0) {
-      return {
-        avgLateness: '0 min',
-        maxLateness: '0 min',
-        latenessRate: '0%'
-      };
-    }
-    
-    // Calculate average lateness in minutes
-    const sumLateMinutes = lateRecords.reduce((sum, record) => {
-      if (!record.clockInTime) return sum;
-      
-      const clockIn = new Date(record.clockInTime);
-      const scheduledStartTime = new Date(clockIn);
-      // Set scheduled start time to 9:00 AM
-      scheduledStartTime.setHours(9, 0, 0, 0);
-      
-      // Calculate minutes late
-      const minutesLate = Math.floor((clockIn.getTime() - scheduledStartTime.getTime()) / (1000 * 60));
-      return sum + minutesLate;
-    }, 0);
-    
-    const avgLateness = Math.round(sumLateMinutes / lateRecords.length);
-    
-    // Find maximum lateness
-    let maxLateness = 0;
-    lateRecords.forEach(record => {
-      if (!record.clockInTime) return;
-      
-      const clockIn = new Date(record.clockInTime);
-      const scheduledStartTime = new Date(clockIn);
-      scheduledStartTime.setHours(9, 0, 0, 0);
-      
-      const minutesLate = Math.floor((clockIn.getTime() - scheduledStartTime.getTime()) / (1000 * 60));
-      maxLateness = Math.max(maxLateness, minutesLate);
-    });
-    
-    // Calculate lateness rate
-    const latenessRate = Math.round((lateRecords.length / records.length) * 100);
-    
-    return {
-      avgLateness: `${avgLateness} min`,
-      maxLateness: `${maxLateness} min`,
-      latenessRate: `${latenessRate}%`
-    };
-  }
-  
   // Calculate lateness statistics
-  const latenessStats = calculateLatenessStats(records);
+  const latenessStats = calculateLatenessStats(displayRecords);
+  
+  // Calculate attendance percentage
+  const attendancePercentage = calculateAttendanceRate(displayRecords);
+  const previousRate = calculatePreviousAttendanceRate();
   
   // Calculate metrics based on the records
   const metrics = {
-    totalEmployees: employeeList.length,
-    present: records.filter(r => r.status === 'present').length,
-    late: records.filter(r => r.status === 'late').length,
-    absent: records.filter(r => r.status === 'absent').length,
-    avgCheckIn: calculateAverageCheckInTime(records),
-    attendanceRate: attendanceRate,
-    previousRate: previousRate,
-    rateChange: calculateRateChange(attendanceRate, previousRate),
+    totalEmployees: dashboardStats.employeeCount.active,
+    present: displayRecords.filter(r => r.status === 'present').length,
+    late: displayRecords.filter(r => r.status === 'late').length,
+    absent: displayRecords.filter(r => r.status === 'absent').length,
+    avgCheckIn: calculateAverageCheckInTime(displayRecords),
+    attendanceRate: parseInt(dashboardStats.attendance.rate),
+    previousRate: calculatePreviousAttendanceRate(),
+    rateChange: parseFloat(dashboardStats.attendance.change),
     avgLateness: latenessStats.avgLateness,
     maxLateness: latenessStats.maxLateness,
-    latenessRate: latenessStats.latenessRate
+    latenessRate: latenessStats.latenessRate,
+    totalHours: displayRecords.reduce((acc, record) => acc + parseFloat(record.hoursWorked || "0"), 0).toFixed(2)
   };
 
   // Generate department attendance data
-  const departmentData = generateDepartmentData(records, employeeList);
+  const departmentData = generateDepartmentData(displayRecords, employeesData);
   
   // Generate time distribution data
-  const timeDistributionData = generateTimeDistributionData(records);
+  const timeDistributionData = generateTimeDistributionData(displayRecords);
   
   // Generate trend data
   const trendData = generateTrendData(7); // Last 7 days
 
   // Filter records based on search query and department
-  const filteredRecords = records.filter(record => {
+  const filteredRecords = displayRecords.filter(record => {
     const matchesSearch = searchQuery === "" || 
       record.employeeName.toLowerCase().includes(searchQuery.toLowerCase()) ||
       record.employeeId.toString().includes(searchQuery);
@@ -229,7 +302,8 @@ export function AttendanceDashboard() {
       header: "Employee",
       cell: ({ row }) => {
         const record = row.original;
-        const employee = employeeList.find(e => e.id === record.employeeId);
+        const employee = mappedEmployees.find((e: { id: number; }) => e.id === record.employeeId);
+          
         return (
           <div className="flex items-center">
             <Avatar className="h-8 w-8 mr-2">
@@ -269,7 +343,10 @@ export function AttendanceDashboard() {
     {
       accessorKey: "hoursWorked",
       header: "Hours",
-      cell: ({ row }) => row.original.hoursWorked.toFixed(2),
+      cell: ({ row }) => {
+        const hours = parseFloat(row.original.hoursWorked || "0");
+        return hours.toFixed(2);
+      },
     },
   ];
 
@@ -330,11 +407,18 @@ export function AttendanceDashboard() {
   function generateDepartmentData(records: AttendanceRecord[], employees: any[]): DepartmentAttendance[] {
     const departments: { [key: string]: DepartmentAttendance } = {};
     
+    if (!employees || employees.length === 0) {
+      return [];
+    }
+    
     // Group employees by department first
     employees.forEach(emp => {
-      if (!departments[emp.department]) {
-        departments[emp.department] = {
-          name: emp.department,
+      let departmentName = typeof emp.department === 'object' ? emp.department.name : emp.department;
+      if (!departmentName) return; // Skip employees without department
+      
+      if (!departments[departmentName]) {
+        departments[departmentName] = {
+          name: departmentName,
           present: 0,
           absent: 0,
           late: 0,
@@ -342,12 +426,12 @@ export function AttendanceDashboard() {
           percentage: 0
         };
       }
-      departments[emp.department].total++;
+      departments[departmentName].total++;
     });
     
     // Count attendance status by department
     records.forEach(record => {
-      if (departments[record.department]) {
+      if (record.department && departments[record.department]) {
         if (record.status === 'present') {
           departments[record.department].present++;
         } else if (record.status === 'late') {
@@ -361,7 +445,7 @@ export function AttendanceDashboard() {
     // Calculate percentages
     Object.keys(departments).forEach(dept => {
       const { present, late, total } = departments[dept];
-      departments[dept].percentage = Math.round(((present + late) / total) * 100);
+      departments[dept].percentage = total > 0 ? Math.round(((present + late) / total) * 100) : 0;
     });
     
     return Object.values(departments);
@@ -427,6 +511,36 @@ export function AttendanceDashboard() {
     console.log(`Exporting in ${format} format...`);
     // Implementation would go here in a real application
   };
+
+  // Function to calculate lateness statistics
+  function calculateLatenessStats(records: AttendanceRecord[]): LatenessStats {
+    const lateRecords = records.filter(r => r.status === 'late' && r.clockInTime);
+    
+    if (lateRecords.length === 0) {
+      return {
+        avgLateness: '0 min',
+        maxLateness: '0 min',
+        latenessRate: 0
+      };
+    }
+
+    const expectedStartTime = WORK_START_HOUR * 60; // Convert to minutes
+    const latenessDurations = lateRecords.map(record => {
+      const clockIn = new Date(record.clockInTime as string);
+      const clockInMinutes = clockIn.getHours() * 60 + clockIn.getMinutes();
+      return clockInMinutes - expectedStartTime;
+    });
+
+    const avgLateness = Math.round(latenessDurations.reduce((a, b) => a + b, 0) / latenessDurations.length);
+    const maxLateness = Math.max(...latenessDurations);
+    const latenessRate = Math.round((lateRecords.length / records.length) * 100);
+
+    return {
+      avgLateness: `${avgLateness} min`,
+      maxLateness: `${maxLateness} min`,
+      latenessRate
+    };
+  }
 
   // Render the dashboard
   return (
@@ -561,7 +675,7 @@ export function AttendanceDashboard() {
                     placeholder="Search employee..." 
                     className="pl-8" 
                     value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSearchQuery(e.target.value)}
                   />
                 </div>
                 <div className="flex items-center gap-2">
@@ -761,7 +875,6 @@ export function AttendanceDashboard() {
                             outerRadius={80}
                             dataKey="value"
                             nameKey="name"
-                            colorKey="key"
                             label={({ name, percent }: {name: string, percent: number}) => 
                               `${name}: ${(percent * 100).toFixed(0)}%`
                             }

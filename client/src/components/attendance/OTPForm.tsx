@@ -3,13 +3,11 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp";
 import { toast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { useQuery } from "@tanstack/react-query";
-import { employees } from "@/lib/mock-data";
-import { Search, Clock, Users, AlertCircle } from "lucide-react";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { Search, Clock } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 
@@ -17,31 +15,72 @@ interface OTPFormProps {
   onSuccess?: () => void;
 }
 
+interface VerifyOTPResponse {
+  success: boolean;
+  message?: string;
+  attendance?: any;
+}
+
+interface GenerateOTPResponse {
+  otp: string;
+}
+
+interface Employee {
+  id: number;
+  employeeNumber: string;
+  userId: number;
+  departmentId: number;
+  position: string;
+  status: string;
+  hourlyRate: string | number;
+  startDate: string;
+  active: boolean | null;
+  phoneNumber: string | null;
+  emergencyContact: string | null;
+  address: string | null;
+  user?: {
+    id: number;
+    name: string;
+    username: string;
+    profileImage: string | null;
+    role: string;
+  };
+  department?: {
+    id: number;
+    name: string;
+    description: string | null;
+  };
+  // For backward compatibility
+  name?: string;
+  profileImage?: string;
+}
+
 export function OTPForm({ onSuccess }: OTPFormProps) {
   const [otp, setOtp] = useState('');
   const [employeeId, setEmployeeId] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
-  const [isGenerating, setIsGenerating] = useState(false);
-  const [isVerifying, setIsVerifying] = useState(false);
   const [generatedOtp, setGeneratedOtp] = useState<string | null>(null);
   const [clockAction, setClockAction] = useState<'clockIn' | 'clockOut'>('clockIn');
   const [currentTime, setCurrentTime] = useState('');
   const [otpExpiryTime, setOtpExpiryTime] = useState<Date | null>(null);
   const [remainingTime, setRemainingTime] = useState<number>(0);
 
-  // Fetch employees
-  const { data: employeeList } = useQuery({
+  // Fetch employees from server
+  const { data: employeeList = [], isLoading: isLoadingEmployees } = useQuery<Employee[]>({
     queryKey: ['/api/employees/active'],
-    initialData: employees,
   });
 
   // Filter employees based on search query
   const filteredEmployees = searchQuery
-    ? employeeList.filter(emp => 
-        emp.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        emp.employeeNumber.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        emp.department.toLowerCase().includes(searchQuery.toLowerCase())
-      )
+    ? employeeList.filter(emp => {
+        const employeeName = emp.user?.name || emp.name || '';
+        const employeeNumber = emp.employeeNumber || '';
+        const departmentName = typeof emp.department === 'object' ? emp.department.name || '' : (emp.department || '');
+        
+        return employeeName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          employeeNumber.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          departmentName.toLowerCase().includes(searchQuery.toLowerCase());
+      })
     : [];
 
   // Selected employee details
@@ -74,6 +113,105 @@ export function OTPForm({ onSuccess }: OTPFormProps) {
     return `${minutes}:${seconds.toString().padStart(2, '0')}`;
   };
 
+  // Generate OTP mutation
+  const generateOtpMutation = useMutation({
+    mutationFn: async () => {
+      const response = await apiRequest<GenerateOTPResponse>('POST', '/api/attendance/otp', { 
+        employeeId: parseInt(employeeId) 
+      });
+      return response;
+    },
+    onSuccess: (data) => {
+      setGeneratedOtp(data.otp);
+      const expiryTime = new Date();
+      expiryTime.setMinutes(expiryTime.getMinutes() + 15);
+      setOtpExpiryTime(expiryTime);
+      
+      toast({
+        title: "OTP Generated",
+        description: `OTP for ${selectedEmployee?.user?.name || selectedEmployee?.name || 'Employee'} has been generated.`,
+      });
+    },
+    onError: (error) => {
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to generate OTP",
+        variant: "destructive",
+      });
+    }
+  });
+
+  // Verify OTP mutation
+  const verifyOtpMutation = useMutation({
+    mutationFn: async () => {
+      const response = await apiRequest<VerifyOTPResponse>('POST', '/api/attendance/verify-otp', {
+        code: otp,
+        action: clockAction
+      });
+      return response;
+    },
+    onSuccess: (data) => {
+      toast({
+        title: "Success",
+        description: `${selectedEmployee?.user?.name || selectedEmployee?.name || 'Employee'} has been clocked ${clockAction === 'clockIn' ? 'in' : 'out'} successfully at ${currentTime}.`,
+      });
+
+      // Reset form
+      setOtp('');
+      setGeneratedOtp(null);
+      setOtpExpiryTime(null);
+      setEmployeeId('');  // Reset employee selection too
+
+      // Call success callback if provided
+      onSuccess?.();
+
+      // Invalidate queries to refresh attendance data
+      queryClient.invalidateQueries({ queryKey: ['/api/attendance'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/attendance/recent-events'] });
+    },
+    onError: (error) => {
+      const errorMessage = error instanceof Error ? error.message : "Failed to verify OTP";
+      console.error("OTP verification error:", errorMessage);
+      
+      // Check for specific error messages from the API
+      if (errorMessage.includes("Already clocked in")) {
+        toast({
+          title: "Already Clocked In",
+          description: `${selectedEmployee?.user?.name || selectedEmployee?.name || 'Employee'} has already clocked in for today.`,
+          variant: "destructive",
+        });
+        
+        // Invalidate queries to refresh data anyway
+        queryClient.invalidateQueries({ queryKey: ['/api/attendance'] });
+        queryClient.invalidateQueries({ queryKey: ['/api/attendance/recent-events'] });
+      } else if (errorMessage.includes("Already clocked out")) {
+        toast({
+          title: "Already Clocked Out",
+          description: `${selectedEmployee?.user?.name || selectedEmployee?.name || 'Employee'} has already clocked out for today.`,
+          variant: "destructive",
+        });
+        
+        // Invalidate queries to refresh data anyway
+        queryClient.invalidateQueries({ queryKey: ['/api/attendance'] });
+        queryClient.invalidateQueries({ queryKey: ['/api/attendance/recent-events'] });
+      } else if (errorMessage.includes("expired")) {
+        toast({
+          title: "OTP Expired",
+          description: "The OTP code has expired. Please generate a new one.",
+          variant: "destructive",
+        });
+        setOtp('');
+        setGeneratedOtp(null); 
+      } else {
+        toast({
+          title: "Error",
+          description: errorMessage,
+          variant: "destructive",
+        });
+      }
+    }
+  });
+
   const handleGenerateOtp = async () => {
     if (!employeeId) {
       toast({
@@ -84,117 +222,28 @@ export function OTPForm({ onSuccess }: OTPFormProps) {
       return;
     }
     
-    setIsGenerating(true);
-    
-    try {
-      // In a real implementation, we would call the server API
-      // Mock successful OTP generation for now
-      const mockOtp = Math.floor(100000 + Math.random() * 900000).toString();
-      
-      // Set mock expiry time - 15 minutes from now
-      const expiryTime = new Date();
-      expiryTime.setMinutes(expiryTime.getMinutes() + 15);
-      setOtpExpiryTime(expiryTime);
-      
-      setGeneratedOtp(mockOtp);
-      
-      toast({
-        title: "OTP Generated",
-        description: `OTP for ${selectedEmployee?.name} has been generated.`,
-      });
-      
-      // In a real app, we would call this API
-      // const response = await apiRequest('POST', '/api/attendance/otp', { 
-      //   employeeId: parseInt(employeeId) 
-      // });
-      // const data = await response.json();
-      // setGeneratedOtp(data.otp);
-    } catch (error) {
-      toast({
-        title: "Error",
-        description: error instanceof Error ? error.message : "Failed to generate OTP",
-        variant: "destructive",
-      });
-    } finally {
-      setIsGenerating(false);
-    }
+    generateOtpMutation.mutate();
   };
   
   const handleVerifyOtp = async () => {
-    if (!otp || otp.length !== 6) {
+    if (!otp || !employeeId) {
       toast({
         title: "Error",
-        description: "Please enter a valid OTP",
+        description: "Please enter OTP and select an employee",
         variant: "destructive",
       });
       return;
     }
-    
-    if (!employeeId) {
-      toast({
-        title: "Error",
-        description: "Please select an employee",
-        variant: "destructive",
-      });
-      return;
-    }
-    
-    if (generatedOtp !== otp) {
-      toast({
-        title: "Invalid OTP",
-        description: "The OTP you entered is incorrect",
-        variant: "destructive",
-      });
-      return;
-    }
-    
-    if (remainingTime <= 0) {
-      toast({
-        title: "OTP Expired",
-        description: "This OTP has expired. Please generate a new one",
-        variant: "destructive",
-      });
-      return;
-    }
-    
-    setIsVerifying(true);
-    
+
     try {
-      // In a real implementation, we would call the API
-      // Mock successful verification for now
-      // const response = await apiRequest('POST', '/api/attendance/verify-otp', {
-      //   code: otp,
-      //   employeeId: parseInt(employeeId),
-      //   action: clockAction
-      // });
-      
-      // Add a slight delay to simulate API call
-      await new Promise(resolve => setTimeout(resolve, 800));
-      
-      toast({
-        title: "Success",
-        description: `${selectedEmployee?.name} has been clocked ${clockAction === 'clockIn' ? 'in' : 'out'} successfully at ${currentTime}.`,
-      });
-      
-      // Reset form
-      setOtp('');
-      setGeneratedOtp(null);
-      setOtpExpiryTime(null);
-      
-      // Call success callback if provided
-      onSuccess?.();
-      
-      // Invalidate queries to refresh attendance data
-      queryClient.invalidateQueries({ queryKey: ['/api/attendance'] });
-      queryClient.invalidateQueries({ queryKey: ['/api/attendance/recent-events'] });
+      verifyOtpMutation.mutate();
     } catch (error) {
+      console.error("Verification error:", error);
       toast({
         title: "Error",
-        description: error instanceof Error ? error.message : "Failed to verify OTP",
+        description: "An unexpected error occurred during verification",
         variant: "destructive",
       });
-    } finally {
-      setIsVerifying(false);
     }
   };
 
@@ -236,11 +285,11 @@ export function OTPForm({ onSuccess }: OTPFormProps) {
                       <div className="flex items-center">
                         <Avatar className="h-8 w-8 mr-2">
                           <AvatarImage src={emp.profileImage} alt={emp.name} />
-                          <AvatarFallback>{emp.name.charAt(0)}</AvatarFallback>
+                          <AvatarFallback>{(emp.user?.name || emp.name || '').charAt(0)}</AvatarFallback>
                         </Avatar>
                         <div>
-                          <p className="text-sm font-medium">{emp.name}</p>
-                          <p className="text-xs text-muted-foreground">{emp.department} • #{emp.employeeNumber}</p>
+                          <p className="text-sm font-medium">{emp.user?.name || emp.name || 'Unknown'}</p>
+                          <p className="text-xs text-muted-foreground">{typeof emp.department === 'object' ? emp.department.name : emp.department} • #{emp.employeeNumber}</p>
                         </div>
                       </div>
                     </li>
@@ -260,17 +309,17 @@ export function OTPForm({ onSuccess }: OTPFormProps) {
             <div className="border p-4 rounded-md bg-card mt-2">
               <div className="flex items-center">
                 <Avatar className="h-12 w-12 mr-3">
-                  <AvatarImage src={selectedEmployee.profileImage} alt={selectedEmployee.name} />
-                  <AvatarFallback>{selectedEmployee.name.charAt(0)}</AvatarFallback>
+                  <AvatarImage src={selectedEmployee.profileImage} alt={selectedEmployee.user?.name || selectedEmployee.name || 'Employee'} />
+                  <AvatarFallback>{(selectedEmployee.user?.name || selectedEmployee.name || '').charAt(0)}</AvatarFallback>
                 </Avatar>
                 <div>
                   <div className="flex items-center">
-                    <h3 className="font-medium">{selectedEmployee.name}</h3>
+                    <h3 className="font-medium">{selectedEmployee.user?.name || selectedEmployee.name || 'Unknown'}</h3>
                     <Badge variant="outline" className="ml-2 text-xs">
                       #{selectedEmployee.employeeNumber}
                     </Badge>
                   </div>
-                  <p className="text-sm text-muted-foreground">{selectedEmployee.department}</p>
+                  <p className="text-sm text-muted-foreground">{typeof selectedEmployee.department === 'object' ? selectedEmployee.department.name : selectedEmployee.department}</p>
                   <p className="text-xs mt-1">Current time: {currentTime}</p>
                 </div>
               </div>
@@ -289,9 +338,9 @@ export function OTPForm({ onSuccess }: OTPFormProps) {
                 <Button 
                   size="sm" 
                   onClick={handleGenerateOtp} 
-                  disabled={isGenerating}
+                  disabled={generateOtpMutation.isPending}
                 >
-                  {isGenerating ? "Generating..." : "Generate OTP"}
+                  {generateOtpMutation.isPending ? "Generating..." : "Generate OTP"}
                 </Button>
               </div>
             </div>
@@ -299,7 +348,7 @@ export function OTPForm({ onSuccess }: OTPFormProps) {
           
           {generatedOtp && (
             <div className="p-5 border rounded-md bg-primary/5 text-center">
-              <p className="font-medium text-sm mb-2">Generated OTP for {selectedEmployee?.name}:</p>
+              <p className="font-medium text-sm mb-2">Generated OTP for {selectedEmployee?.user?.name || selectedEmployee?.name || 'Employee'}:</p>
               <p className="text-3xl font-bold tracking-wider text-primary">{generatedOtp}</p>
               <div className="flex items-center justify-center text-xs mt-2 text-muted-foreground">
                 <Clock className="h-3 w-3 mr-1" />
@@ -361,9 +410,9 @@ export function OTPForm({ onSuccess }: OTPFormProps) {
         <Button 
           className="w-full" 
           onClick={handleVerifyOtp} 
-          disabled={!otp || otp.length !== 6 || !employeeId || isVerifying}
+          disabled={!otp || otp.length !== 6 || !employeeId || verifyOtpMutation.isPending}
         >
-          {isVerifying ? "Verifying..." : `Verify & ${clockAction === 'clockIn' ? 'Clock In' : 'Clock Out'}`}
+          {verifyOtpMutation.isPending ? "Verifying..." : `Verify & ${clockAction === 'clockIn' ? 'Clock In' : 'Clock Out'}`}
         </Button>
       </CardFooter>
     </Card>

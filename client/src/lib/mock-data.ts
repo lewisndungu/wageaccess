@@ -152,64 +152,75 @@ export const employees = [
   }
 ];
 
-// Attendance records
-export const attendanceRecords = [
-  {
-    id: 1,
-    employeeId: 1,
-    employeeName: "James Mwangi",
-    department: "IT Department",
-    date: "2023-07-12",
-    clockInTime: "2023-07-12T08:05:00",
-    clockOutTime: "2023-07-12T17:10:00",
-    status: "present",
-    hoursWorked: 9.08
-  },
-  {
-    id: 2,
-    employeeId: 2,
-    employeeName: "Lucy Njeri",
-    department: "Marketing",
-    date: "2023-07-12",
-    clockInTime: "2023-07-12T08:45:00",
-    clockOutTime: "2023-07-12T17:30:00",
-    status: "late",
-    hoursWorked: 8.75
-  },
-  {
-    id: 3,
-    employeeId: 3,
-    employeeName: "David Ochieng",
-    department: "Finance",
-    date: "2023-07-12",
-    clockInTime: "2023-07-12T08:02:00",
-    clockOutTime: "2023-07-12T17:15:00",
-    status: "present",
-    hoursWorked: 9.22
-  },
-  {
-    id: 4,
-    employeeId: 4,
-    employeeName: "Sarah Kimani",
-    department: "HR",
-    date: "2023-07-12",
-    clockInTime: null,
-    clockOutTime: null,
-    status: "absent",
-    hoursWorked: 0
-  },
-  {
-    id: 5,
-    employeeId: 5,
-    employeeName: "Peter Ndegwa",
-    department: "Operations",
-    date: "2023-07-12",
-    clockInTime: "2023-07-12T07:55:00",
-    clockOutTime: "2023-07-12T17:05:00",
-    status: "present",
-    hoursWorked: 9.17
+// Helper functions
+function generateRandomTime(baseHour: number, variance: number = 30): string {
+  const date = new Date();
+  const minutes = Math.floor(Math.random() * variance);
+  date.setHours(baseHour, minutes, 0, 0);
+  return date.toISOString();
+}
+
+function generateAttendanceStatus(clockInTime: string | null): 'present' | 'late' | 'absent' {
+  if (!clockInTime) return 'absent';
+  const clockIn = new Date(clockInTime);
+  const expectedStart = new Date(clockIn);
+  expectedStart.setHours(8, 30, 0, 0);
+  
+  return clockIn > expectedStart ? 'late' : 'present';
+}
+
+function calculateHoursWorked(clockIn: string | null, clockOut: string | null): number {
+  if (!clockIn || !clockOut) return 0;
+  const start = new Date(clockIn);
+  const end = new Date(clockOut);
+  return Number(((end.getTime() - start.getTime()) / (1000 * 60 * 60)).toFixed(2));
+}
+
+// Generate dynamic attendance records for the last 7 days
+export const attendanceRecords = (() => {
+  const records: any[] = [];
+  const employees = [
+    { id: 1, name: "James Mwangi", department: "IT Department" },
+    { id: 2, name: "Lucy Njeri", department: "Marketing" },
+    { id: 3, name: "David Ochieng", department: "Finance" },
+    { id: 4, name: "Sarah Kimani", department: "HR" },
+    { id: 5, name: "Peter Ndegwa", department: "Operations" }
+  ];
+  
+  const today = new Date();
+  
+  for (let i = 0; i < 7; i++) {
+    const date = new Date(today);
+    date.setDate(date.getDate() - i);
+    
+    // Skip weekends
+    if (date.getDay() === 0 || date.getDay() === 6) continue;
+    
+    employees.forEach((emp, index) => {
+      // 10% chance of being absent
+      const isAbsent = Math.random() < 0.1;
+      
+      const clockInTime = isAbsent ? null : generateRandomTime(8);
+      const clockOutTime = clockInTime ? generateRandomTime(17) : null;
+      const status = generateAttendanceStatus(clockInTime);
+      const hoursWorked = calculateHoursWorked(clockInTime, clockOutTime);
+      
+      records.push({
+        id: records.length + 1,
+        employeeId: emp.id,
+        employeeName: emp.name,
+        department: emp.department,
+        date: date.toISOString().split('T')[0],
+        clockInTime,
+        clockOutTime,
+        status,
+        hoursWorked
+      });
+    });
   }
-];
+  
+  return records;
+})();
 
 // Payroll records
 export const payrollRecords = [

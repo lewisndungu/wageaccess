@@ -2,35 +2,42 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { EmployeeTable } from "@/components/dashboard/EmployeeTable";
-import { employees } from "@/lib/mock-data";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Upload, Search, Filter, UserPlus } from "lucide-react";
-
-// Define type to match the EmployeeTable component's expected props
-interface Employee {
-  id: number;
-  employeeNumber: string;
-  name: string;
-  department: string;
-  position: string;
-  contact: string;
-  email: string;
-  status: "present" | "absent" | "late";
-  profileImage?: string;
-}
+import type { BasicEmployee } from "@/types/employee";
 
 export default function EmployeesPage() {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState("list");
   
-  const { data: employeeData, isLoading } = useQuery({
+  const { data: employeeData, isLoading, error } = useQuery<BasicEmployee[]>({
     queryKey: ['/api/employees/active'],
-    initialData: employees as unknown as Employee[]
   });
+
+  // Show loading state
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-[200px]">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+      </div>
+    );
+  }
+
+  // Show error state
+  if (error) {
+    return (
+      <div className="flex flex-col items-center justify-center h-[200px] space-y-4">
+        <p className="text-destructive">Failed to load employees</p>
+        <Button onClick={() => window.location.reload()} variant="outline">
+          Try Again
+        </Button>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -73,7 +80,7 @@ export default function EmployeesPage() {
             </Button>
           </div>
           
-          <EmployeeTable data={employeeData} isLoading={isLoading} />
+          <EmployeeTable data={employeeData || []} isLoading={isLoading} />
         </TabsContent>
         
         <TabsContent value="import">

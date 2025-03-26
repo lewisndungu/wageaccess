@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { employees, formatCurrency, formatDate } from "@/lib/mock-data";
+import { formatDate } from "@/lib/date-utils";
+import { formatCurrency } from "@/lib/format-utils";
 import { ChevronLeft, DownloadIcon, User, Phone, Mail, MapPin, Calendar, DollarSign, Briefcase, BadgeCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -10,6 +11,35 @@ import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { DataTable } from "@/components/ui/data-table";
 import { ColumnDef } from "@tanstack/react-table";
+
+// Define Employee interface with all required properties
+interface EmployeeDetails {
+  id: number;
+  employeeNumber: string;
+  userId: number;
+  departmentId: number;
+  position: string;
+  status: string; 
+  hourlyRate: string | number;
+  startDate: string;
+  active: boolean | null;
+  phoneNumber: string | null;
+  emergencyContact: string | null;
+  address: string | null;
+  user: {
+    id: number;
+    name: string;
+    username: string;
+    email?: string;
+    profileImage: string | null;
+    role: string;
+  };
+  department: {
+    id: number;
+    name: string;
+    description: string | null;
+  };
+}
 
 interface AttendanceRecord {
   id: number;
@@ -42,10 +72,27 @@ export default function EmployeeDetailPage() {
   const employeeId = parseInt(params.id || "0");
   const navigate = useNavigate();
   
-  const { data: employee, isLoading } = useQuery({
+  const { data: employee, isLoading } = useQuery<EmployeeDetails>({
     queryKey: [`/api/employees/${employeeId}`],
-    enabled: !isNaN(employeeId),
-    initialData: employees.find(e => e.id === employeeId)
+    enabled: !isNaN(employeeId)
+  });
+  
+  // Get attendance records for this employee
+  const { data: attendanceData = [] } = useQuery<AttendanceRecord[]>({
+    queryKey: [`/api/attendance/employee/${employeeId}`],
+    enabled: !isNaN(employeeId) && !!employee
+  });
+  
+  // Get payroll records for this employee
+  const { data: payrollData = [] } = useQuery<PayrollRecord[]>({
+    queryKey: [`/api/payroll/employee/${employeeId}`],
+    enabled: !isNaN(employeeId) && !!employee
+  });
+  
+  // Get EWA requests for this employee
+  const { data: ewaRequestsData = [] } = useQuery<EWARequest[]>({
+    queryKey: [`/api/ewa/requests/employee/${employeeId}`],
+    enabled: !isNaN(employeeId) && !!employee
   });
   
   const [activeTab, setActiveTab] = useState("personal");
@@ -67,7 +114,85 @@ export default function EmployeeDetailPage() {
     }
   };
   
-  // Mock attendance records
+  const formatAddressOrContact = (value: any): string => {
+    if (!value) return 'N/A';
+    
+    // If the value is a string that looks like JSON, try to parse it
+    if (typeof value === 'string' && (value.startsWith('{') || value.startsWith('['))) {
+      try {
+        const parsedValue = JSON.parse(value);
+        
+        // Handle address object
+        if (parsedValue.street && parsedValue.city) {
+          let formattedAddress = parsedValue.street;
+          
+          if (parsedValue.city) {
+            formattedAddress += `, ${parsedValue.city}`;
+          }
+          
+          if (parsedValue.postalCode) {
+            formattedAddress += ` ${parsedValue.postalCode}`;
+          }
+          
+          if (parsedValue.country) {
+            formattedAddress += `, ${parsedValue.country}`;
+          } else {
+            formattedAddress += ', Kenya';
+          }
+          
+          return formattedAddress;
+        }
+        // Handle emergency contact object
+        else if (parsedValue.name && (parsedValue.phone || parsedValue.phoneNumber)) {
+          return `${parsedValue.name} (${parsedValue.relationship || 'Contact'}) - ${parsedValue.phone || parsedValue.phoneNumber}`;
+        }
+        // Fallback for other objects
+        return JSON.stringify(parsedValue);
+      } catch (e) {
+        console.error("Error parsing JSON:", e);
+        return value.toString();
+      }
+    }
+    
+    // If it's already an object (not a string)
+    if (typeof value === 'object' && value !== null) {
+      try {
+        // Handle address object
+        if (value.street && value.city) {
+          let formattedAddress = value.street;
+          
+          if (value.city) {
+            formattedAddress += `, ${value.city}`;
+          }
+          
+          if (value.postalCode) {
+            formattedAddress += ` ${value.postalCode}`;
+          }
+          
+          if (value.country) {
+            formattedAddress += `, ${value.country}`;
+          } else {
+            formattedAddress += ', Kenya';
+          }
+          
+          return formattedAddress;
+        }
+        // Handle emergency contact object
+        else if (value.name && (value.phone || value.phoneNumber)) {
+          return `${value.name} (${value.relationship || 'Contact'}) - ${value.phone || value.phoneNumber}`;
+        }
+        // Fallback for other objects
+        return JSON.stringify(value);
+      } catch (e) {
+        console.error("Error processing object:", e);
+        return 'Invalid format';
+      }
+    }
+    
+    return value.toString();
+  };
+  
+  // Attendance records columns
   const attendanceColumns: ColumnDef<AttendanceRecord>[] = [
     {
       accessorKey: "date",
@@ -92,54 +217,13 @@ export default function EmployeeDetailPage() {
     {
       accessorKey: "hoursWorked",
       header: "Hours",
-      cell: ({ row }) => row.original.hoursWorked.toFixed(2),
+      cell: ({ row }) => typeof row.original.hoursWorked === 'number' ? 
+        row.original.hoursWorked.toFixed(2) : 
+        parseFloat(row.original.hoursWorked).toFixed(2),
     },
   ];
   
-  const attendanceData: AttendanceRecord[] = [
-    {
-      id: 1,
-      date: "2023-07-10",
-      clockInTime: "2023-07-10T08:05:00",
-      clockOutTime: "2023-07-10T17:10:00",
-      status: "present",
-      hoursWorked: 9.08
-    },
-    {
-      id: 2,
-      date: "2023-07-11",
-      clockInTime: "2023-07-11T08:10:00",
-      clockOutTime: "2023-07-11T17:05:00",
-      status: "present",
-      hoursWorked: 8.92
-    },
-    {
-      id: 3,
-      date: "2023-07-12",
-      clockInTime: "2023-07-12T08:45:00",
-      clockOutTime: "2023-07-12T17:15:00",
-      status: "late",
-      hoursWorked: 8.5
-    },
-    {
-      id: 4,
-      date: "2023-07-13",
-      clockInTime: null,
-      clockOutTime: null,
-      status: "absent",
-      hoursWorked: 0
-    },
-    {
-      id: 5,
-      date: "2023-07-14",
-      clockInTime: "2023-07-14T08:02:00",
-      clockOutTime: "2023-07-14T17:00:00",
-      status: "present",
-      hoursWorked: 8.97
-    }
-  ];
-  
-  // Mock payroll records
+  // Payroll records columns
   const payrollColumns: ColumnDef<PayrollRecord>[] = [
     {
       accessorKey: "periodStart",
@@ -181,37 +265,7 @@ export default function EmployeeDetailPage() {
     },
   ];
   
-  const payrollData: PayrollRecord[] = [
-    {
-      id: 1,
-      periodStart: "2023-06-01",
-      periodEnd: "2023-06-30",
-      hoursWorked: 176,
-      grossPay: 211200,
-      netPay: 169000,
-      status: "processed"
-    },
-    {
-      id: 2,
-      periodStart: "2023-05-01",
-      periodEnd: "2023-05-31",
-      hoursWorked: 184,
-      grossPay: 220800,
-      netPay: 176600,
-      status: "processed"
-    },
-    {
-      id: 3,
-      periodStart: "2023-04-01",
-      periodEnd: "2023-04-30",
-      hoursWorked: 168,
-      grossPay: 201600,
-      netPay: 161300,
-      status: "processed"
-    }
-  ];
-  
-  // Mock EWA requests
+  // EWA requests columns
   const ewaColumns: ColumnDef<EWARequest>[] = [
     {
       accessorKey: "requestDate",
@@ -243,27 +297,6 @@ export default function EmployeeDetailPage() {
       },
     }
   ];
-  
-  const ewaData: EWARequest[] = [
-    {
-      id: 1,
-      requestDate: "2023-07-05",
-      amount: 15000,
-      status: "disbursed"
-    },
-    {
-      id: 2,
-      requestDate: "2023-06-15",
-      amount: 20000,
-      status: "disbursed"
-    },
-    {
-      id: 3,
-      requestDate: "2023-05-20",
-      amount: 10000,
-      status: "disbursed"
-    }
-  ];
 
   return (
     <div className="space-y-6">
@@ -280,12 +313,12 @@ export default function EmployeeDetailPage() {
         <Card className="lg:col-span-1 shadow-glass dark:shadow-glass-dark">
           <CardHeader className="pb-0 flex flex-col items-center text-center">
             <Avatar className="h-24 w-24 mb-2">
-              <AvatarImage src={employee.profileImage} alt={employee.name} />
+              <AvatarImage src={employee.user.profileImage || undefined} alt={employee.user.name} />
               <AvatarFallback>
                 <User className="h-10 w-10" />
               </AvatarFallback>
             </Avatar>
-            <CardTitle className="text-xl">{employee.name}</CardTitle>
+            <CardTitle className="text-xl">{employee.user.name}</CardTitle>
             <CardDescription className="flex items-center mt-1">
               <Badge className="mr-2 bg-primary/10 text-primary hover:bg-primary/20">
                 {employee.employeeNumber}
@@ -301,15 +334,15 @@ export default function EmployeeDetailPage() {
               </div>
               <div className="flex items-center">
                 <BadgeCheck className="h-4 w-4 mr-2 text-gray-500" />
-                <span className="text-sm">{employee.department}</span>
+                <span className="text-sm">{employee.department.name}</span>
               </div>
               <div className="flex items-center">
                 <Phone className="h-4 w-4 mr-2 text-gray-500" />
-                <span className="text-sm">{employee.contact}</span>
+                <span className="text-sm">{employee.phoneNumber || 'N/A'}</span>
               </div>
               <div className="flex items-center">
                 <Mail className="h-4 w-4 mr-2 text-gray-500" />
-                <span className="text-sm">{employee.email}</span>
+                <span className="text-sm">{employee.user.email || employee.user.username}</span>
               </div>
               <div className="flex items-center">
                 <Calendar className="h-4 w-4 mr-2 text-gray-500" />
@@ -317,11 +350,11 @@ export default function EmployeeDetailPage() {
               </div>
               <div className="flex items-center">
                 <DollarSign className="h-4 w-4 mr-2 text-gray-500" />
-                <span className="text-sm">Rate: {formatCurrency(employee.hourlyRate)}/hr</span>
+                <span className="text-sm">Rate: {formatCurrency(typeof employee.hourlyRate === 'string' ? parseFloat(employee.hourlyRate) : employee.hourlyRate)}/hr</span>
               </div>
               <div className="flex items-center">
                 <MapPin className="h-4 w-4 mr-2 text-gray-500" />
-                <span className="text-sm">{employee.address}</span>
+                <span className="text-sm">{formatAddressOrContact(employee.address)}</span>
               </div>
             </div>
             
@@ -350,7 +383,7 @@ export default function EmployeeDetailPage() {
                 <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-1">
                     <p className="text-sm font-medium text-muted-foreground">Full Name</p>
-                    <p>{employee.name}</p>
+                    <p>{employee.user.name}</p>
                   </div>
                   <div className="space-y-1">
                     <p className="text-sm font-medium text-muted-foreground">Employee ID</p>
@@ -358,19 +391,19 @@ export default function EmployeeDetailPage() {
                   </div>
                   <div className="space-y-1">
                     <p className="text-sm font-medium text-muted-foreground">Email</p>
-                    <p>{employee.email}</p>
+                    <p>{employee.user.email || employee.user.username}</p>
                   </div>
                   <div className="space-y-1">
                     <p className="text-sm font-medium text-muted-foreground">Phone</p>
-                    <p>{employee.contact}</p>
+                    <p>{employee.phoneNumber || 'N/A'}</p>
                   </div>
                   <div className="space-y-1">
                     <p className="text-sm font-medium text-muted-foreground">Address</p>
-                    <p>{employee.address}</p>
+                    <p>{formatAddressOrContact(employee.address)}</p>
                   </div>
                   <div className="space-y-1">
                     <p className="text-sm font-medium text-muted-foreground">Emergency Contact</p>
-                    <p>{employee.emergencyContact}</p>
+                    <p>{formatAddressOrContact(employee.emergencyContact)}</p>
                   </div>
                 </CardContent>
               </Card>
@@ -382,7 +415,7 @@ export default function EmployeeDetailPage() {
                 <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-1">
                     <p className="text-sm font-medium text-muted-foreground">Department</p>
-                    <p>{employee.department}</p>
+                    <p>{employee.department.name}</p>
                   </div>
                   <div className="space-y-1">
                     <p className="text-sm font-medium text-muted-foreground">Position</p>
@@ -502,7 +535,7 @@ export default function EmployeeDetailPage() {
                   </Button>
                 </CardHeader>
                 <CardContent>
-                  <DataTable columns={ewaColumns} data={ewaData} />
+                  <DataTable columns={ewaColumns} data={ewaRequestsData} />
                 </CardContent>
               </Card>
             </TabsContent>

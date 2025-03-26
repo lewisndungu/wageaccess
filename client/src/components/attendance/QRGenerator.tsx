@@ -3,14 +3,20 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "@/hooks/use-toast";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { RotateCw, RefreshCw } from "lucide-react";
+import { apiRequest } from "@/lib/queryClient";
 
 interface QRCodePayload {
   companyId: string;
   timestamp: number;
   location?: { lat: number; lng: number };
   expiresIn: number; // seconds
+}
+
+interface QRResponse {
+  qrCodeUrl: string;
+  expiresAt: string;
 }
 
 interface ClockEvent {
@@ -20,27 +26,19 @@ interface ClockEvent {
 }
 
 export function QRGenerator() {
-  const [qrCode, setQrCode] = useState('');
   const [useLocation, setUseLocation] = useState(false);
-  const [refreshInterval, setRefreshInterval] = useState(10); // seconds
-  const [qrLoading, setQrLoading] = useState(false);
+  const [refreshInterval, setRefreshInterval] = useState(30); // seconds
   const [timer, setTimer] = useState(refreshInterval);
 
-  // For WebSocket connection to get real-time clock events
-  const [wsConnected, setWsConnected] = useState(false);
-
   // Fetch recent clock events
-  const { data: clockEvents } = useQuery({
+  const { data: clockEvents = [] } = useQuery<ClockEvent[]>({
     queryKey: ['/api/attendance/recent-events'],
-    initialData: [],
     refetchInterval: 10000, // Refresh every 10 seconds
   });
 
-  // Generate new QR code
-  const generateQrCode = async () => {
-    setQrLoading(true);
-    
-    try {
+  // Generate QR code mutation
+  const qrCodeMutation = useMutation({
+    mutationFn: async () => {
       // Create QR code payload
       const payload: QRCodePayload = {
         companyId: "JAHAZII_COMPANY",
@@ -71,23 +69,26 @@ export function QRGenerator() {
         });
       }
       
-      // In a real implementation, we would fetch from the server
-      // For now, create a QR code using an external service
-      const dataString = encodeURIComponent(JSON.stringify(payload));
-      const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${dataString}`;
-      setQrCode(qrUrl);
-      
+      // Call API to generate QR code
+      const response = await apiRequest<QRResponse>('POST', '/api/attendance/generate-qr', payload);
+      return response;
+    },
+    onSuccess: () => {
       // Reset timer
       setTimer(refreshInterval);
-    } catch (error) {
+    },
+    onError: (error) => {
       toast({
         title: "Error",
-        description: "Failed to generate QR code",
+        description: error instanceof Error ? error.message : "Failed to generate QR code",
         variant: "destructive",
       });
-    } finally {
-      setQrLoading(false);
     }
+  });
+
+  // Generate new QR code
+  const generateQrCode = () => {
+    qrCodeMutation.mutate();
   };
   
   // QR code timer countdown
@@ -112,7 +113,6 @@ export function QRGenerator() {
     };
   }, [refreshInterval]);
   
-  
   // Format timestamp for display
   const formatEventTime = (timestamp: string) => {
     return new Date(timestamp).toLocaleTimeString([], { 
@@ -123,8 +123,10 @@ export function QRGenerator() {
   
   // Handle save QR code
   const saveQrCode = () => {
+    if (!qrCodeMutation.data?.qrCodeUrl) return;
+    
     const link = document.createElement('a');
-    link.href = qrCode;
+    link.href = qrCodeMutation.data.qrCodeUrl;
     link.download = `jahazii-attendance-qr-${Date.now()}.png`;
     document.body.appendChild(link);
     link.click();
@@ -150,16 +152,20 @@ export function QRGenerator() {
       <CardContent className="space-y-4">
         <div className="flex flex-col items-center space-y-4">
           <div className="border border-gray-200 dark:border-gray-700 p-3 rounded-xl bg-white relative">
-            {qrLoading ? (
+            {qrCodeMutation.isPending ? (
               <div className="h-[250px] w-[250px] flex items-center justify-center">
                 <RotateCw className="h-10 w-10 text-primary animate-spin" />
               </div>
-            ) : (
+            ) : qrCodeMutation.data?.qrCodeUrl ? (
               <img 
-                src={qrCode} 
+                src={qrCodeMutation.data.qrCodeUrl} 
                 alt="QR Code for self-log" 
                 className="h-[250px] w-[250px]"
               />
+            ) : (
+              <div className="h-[250px] w-[250px] flex items-center justify-center">
+                <p className="text-muted-foreground text-center">No QR code generated yet</p>
+              </div>
             )}
             
             <div className="absolute -bottom-3 left-1/2 transform -translate-x-1/2 bg-primary text-primary-foreground px-3 py-1 rounded-full text-sm">
@@ -173,9 +179,12 @@ export function QRGenerator() {
           </div>
           
           <div className="flex space-x-2 mt-2">
-            <Button className="w-full" onClick={generateQrCode} disabled={qrLoading}>
+            <Button className="w-full" onClick={generateQrCode} disabled={qrCodeMutation.isPending}>
               <RefreshCw className="mr-2 h-4 w-4" />
               Refresh Now
+            </Button>
+            <Button variant="outline" onClick={saveQrCode} disabled={!qrCodeMutation.data?.qrCodeUrl}>
+              Download
             </Button>
           </div>
         </div>

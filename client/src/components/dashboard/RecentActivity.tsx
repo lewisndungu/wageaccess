@@ -14,12 +14,16 @@ interface Activity {
 interface RecentActivityProps {
   filter?: string;
   limit?: number;
+  activities?: Activity[];
 }
 
-export function RecentActivity({ filter, limit = 5 }: RecentActivityProps) {
-  const { data: activities, isLoading } = useQuery<Activity[]>({
+export function RecentActivity({ filter, limit = 5, activities }: RecentActivityProps) {
+  const { data: fetchedActivities, isLoading } = useQuery<Activity[]>({
     queryKey: ['/api/activities'],
+    enabled: !activities // Only fetch if activities aren't provided
   });
+  
+  const activityData = activities || fetchedActivities || [];
   
   const getIconColorClass = (type: string) => {
     switch (type) {
@@ -38,13 +42,12 @@ export function RecentActivity({ filter, limit = 5 }: RecentActivityProps) {
     }
   };
 
-  const filteredActivities = activities
-    ? filter
-      ? activities.filter(activity => activity.type === filter)
-      : activities
-    : [];
+  const filteredActivities = filter
+    ? activityData.filter(activity => activity.type === filter)
+    : activityData;
     
   const displayActivities = filteredActivities.slice(0, limit);
+  const loading = isLoading && !activities;
 
   return (
     <Card className="bg-white dark:bg-gray-800 rounded-xl shadow-glass dark:shadow-glass-dark h-full relative z-0">
@@ -59,7 +62,7 @@ export function RecentActivity({ filter, limit = 5 }: RecentActivityProps) {
         </div>
       </CardHeader>
       <CardContent className="p-4">
-        {isLoading ? (
+        {loading ? (
           <div className="space-y-4">
             {[...Array(3)].map((_, i) => (
               <div key={i} className="flex items-start space-x-3 pb-4 animate-pulse">
@@ -73,23 +76,29 @@ export function RecentActivity({ filter, limit = 5 }: RecentActivityProps) {
           </div>
         ) : (
           <div className="overflow-y-auto max-h-96 pr-2">
-            {displayActivities.map((activity) => (
-              <div 
-                key={activity.id} 
-                className="flex items-start space-x-3 pb-4 mb-4 border-b border-gray-200 dark:border-gray-700 last:border-0 last:mb-0 last:pb-0"
-              >
-                <div className={`p-2 rounded-full ${getIconColorClass(activity.type)}`}>
-                  <i className={`ri-${activity.icon}`}></i>
-                </div>
-                <div className="flex-1">
-                  <div className="flex items-start justify-between">
-                    <p className="font-medium">{activity.title}</p>
-                    <span className="text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap">{activity.time}</span>
+            {displayActivities.length > 0 ? (
+              displayActivities.map((activity) => (
+                <div 
+                  key={activity.id} 
+                  className="flex items-start space-x-3 pb-4 mb-4 border-b border-gray-200 dark:border-gray-700 last:border-0 last:mb-0 last:pb-0"
+                >
+                  <div className={`p-2 rounded-full ${getIconColorClass(activity.type)}`}>
+                    <i className={`ri-${activity.icon}`}></i>
                   </div>
-                  <p className="text-sm text-gray-600 dark:text-gray-400">{activity.description}</p>
+                  <div className="flex-1">
+                    <div className="flex items-start justify-between">
+                      <p className="font-medium">{activity.title}</p>
+                      <span className="text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap">{activity.time}</span>
+                    </div>
+                    <p className="text-sm text-gray-600 dark:text-gray-400">{activity.description}</p>
+                  </div>
                 </div>
+              ))
+            ) : (
+              <div className="text-center py-8 text-gray-500">
+                No recent activities to display
               </div>
-            ))}
+            )}
           </div>
         )}
       </CardContent>

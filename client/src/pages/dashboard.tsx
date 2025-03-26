@@ -5,48 +5,59 @@ import { MetricCard } from "@/components/dashboard/MetricCard";
 import { QuickActions, useQuickActions } from "@/components/dashboard/QuickActions";
 import { RecentActivity } from "@/components/dashboard/RecentActivity";
 import { EmployeeTable } from "@/components/dashboard/EmployeeTable";
-import { dashboardStats, employees, recentActivities } from "@/lib/mock-data";
 import { Button } from "@/components/ui/button";
 import { Filter, UserPlus } from "lucide-react";
+import type { BasicEmployee } from "@/types/employee";
 
-// Define the Employee type to match what EmployeeTable expects
-interface Employee {
+// Define types for dashboard stats
+interface DashboardStats {
+  employeeCount: {
+    total: number;
+    active: number;
+    inactive: number;
+    change: string;
+  };
+  attendance: {
+    rate: string;
+    change: string;
+  };
+  payroll: {
+    expected: string;
+    change: string;
+  };
+  ewa: {
+    total: string;
+    pending: number;
+    change: string;
+  };
+}
+
+// Define Activity type
+interface Activity {
   id: number;
-  employeeNumber: string;
-  name: string;
-  department: string;
-  position: string;
-  contact: string;
-  email: string;
-  status: "present" | "absent" | "late";
-  profileImage?: string;
+  type: "employee" | "ewa" | "attendance" | "payroll" | "self-log";
+  title: string;
+  description: string;
+  time: string;
+  icon: string;
 }
 
 export default function Dashboard() {
-  const { data: stats } = useQuery({
-    queryKey: ['/api/statistics/dashboard'],
-    initialData: dashboardStats
+  const { data: stats = {
+    employeeCount: { total: 0, active: 0, inactive: 0, change: "+0%" },
+    attendance: { rate: "0%", change: "+0%" },
+    payroll: { expected: "KES 0", change: "+0%" },
+    ewa: { total: "0", pending: 0, change: "+0%" }
+  }} = useQuery<DashboardStats>({
+    queryKey: ['/api/statistics/dashboard']
   });
   
-  // Map the employees data to ensure all fields match the expected Employee type
-  const { data: employeeData } = useQuery<Employee[]>({
-    queryKey: ['/api/employees/active'],
-    initialData: employees.map(emp => ({
-      id: emp.id,
-      employeeNumber: emp.employeeNumber,
-      name: emp.name,
-      department: emp.department,
-      position: emp.position,
-      contact: emp.contact,
-      email: emp.email,
-      status: emp.status as "present" | "absent" | "late",
-      profileImage: emp.profileImage
-    }))
+  const { data: employeeData = [] } = useQuery<BasicEmployee[]>({
+    queryKey: ['/api/employees/active']
   });
   
-  const { data: activities } = useQuery({
-    queryKey: ['/api/activities'],
-    initialData: recentActivities
+  const { data: activities = [] } = useQuery<Activity[]>({
+    queryKey: ['/api/activities']
   });
   
   const { defaultActions } = useQuickActions();
@@ -141,7 +152,7 @@ export default function Dashboard() {
               <Button variant="link" className="text-primary hover:text-primary/80">View All</Button>
             </Link>
           </div>
-          <RecentActivity />
+          <RecentActivity activities={activities} />
         </section>
       </div>
       

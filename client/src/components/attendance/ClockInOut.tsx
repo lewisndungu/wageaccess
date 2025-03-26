@@ -7,29 +7,51 @@ import { Badge } from "@/components/ui/badge";
 import { Clock, MapPin } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { useQuery } from "@tanstack/react-query";
-import { employees } from "@/lib/mock-data";
+import { useQuery, useMutation } from "@tanstack/react-query";
 
 interface ClockInOutProps {
   onSuccess?: () => void;
 }
 
+interface Employee {
+  id: number;
+  employeeNumber: string;
+  name: string;
+  department: string;
+  profileImage?: string;
+  user?: {
+    name: string;
+    profileImage?: string;
+  };
+}
+
 export function ClockInOut({ onSuccess }: ClockInOutProps) {
   const [employeeId, setEmployeeId] = useState<string>("");
   const [isClockingIn, setIsClockingIn] = useState(true);
-  const [isProcessing, setIsProcessing] = useState(false);
   const [useGeoLocation, setUseGeoLocation] = useState(false);
   const [currentLocation, setCurrentLocation] = useState<{lat: number, lng: number} | null>(null);
 
-  const { data: employeeList } = useQuery({
+  const { data: employeeList = [] } = useQuery<Employee[]>({
     queryKey: ['/api/employees/active'],
-    initialData: employees,
   });
 
   // Get selected employee
   const selectedEmployee = employeeId 
     ? employeeList.find(emp => emp.id.toString() === employeeId) 
     : null;
+
+  // Get employee name and department safely
+  const getEmployeeName = (employee: any) => {
+    if (!employee) return '';
+    return employee.user?.name || employee.name || 'Unknown';
+  };
+
+  const getEmployeeDepartment = (employee: any) => {
+    if (!employee) return '';
+    return typeof employee.department === 'object' 
+      ? employee.department.name 
+      : (employee.department || 'Unknown');
+  };
 
   // Store offline clock events
   const [offlineEvents, setOfflineEvents] = useState<Array<{
@@ -95,6 +117,56 @@ export function ClockInOut({ onSuccess }: ClockInOutProps) {
     setIsSyncing(false);
   };
 
+  // Clock attendance mutation
+  const clockMutation = useMutation({
+    mutationFn: async (payload: {
+      employeeId: number;
+      action: 'clockIn' | 'clockOut';
+      timestamp: string;
+      location: {lat: number, lng: number} | null;
+    }) => {
+      return apiRequest('POST', '/api/attendance/clock', payload);
+    },
+    onSuccess: () => {
+      toast({
+        title: "Success",
+        description: `${getEmployeeName(selectedEmployee)} has been clocked ${isClockingIn ? 'in' : 'out'} successfully.`,
+      });
+
+      // Invalidate attendance queries to refresh data
+      queryClient.invalidateQueries({ queryKey: ['/api/attendance'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/attendance/recent-events'] });
+      
+      // Call success callback if provided
+      onSuccess?.();
+      
+      // Reset state
+      setEmployeeId("");
+      setCurrentLocation(null);
+    },
+    onError: (error) => {
+      console.error("API error:", error);
+      
+      // Format the timestamp properly
+      const now = new Date();
+      const timestamp = now.toISOString();
+      
+      // Store the event for later processing
+      setOfflineEvents(prev => [...prev, {
+        employeeId: parseInt(employeeId),
+        action: isClockingIn ? 'clockIn' : 'clockOut' as const,
+        timestamp: timestamp,
+        location: currentLocation,
+        retryCount: 0
+      }]);
+      
+      toast({
+        title: "Temporary Offline Mode",
+        description: `Your ${isClockingIn ? 'clock in' : 'clock out'} has been saved locally and will be synchronized when connection is restored.`,
+      });
+    }
+  });
+
   // Clock in/out handler with offline support
   const handleClockAction = async () => {
     if (!employeeId) {
@@ -106,7 +178,6 @@ export function ClockInOut({ onSuccess }: ClockInOutProps) {
       return;
     }
 
-    setIsProcessing(true);
     let locationData: {lat: number, lng: number} | null = null;
 
     try {
@@ -147,54 +218,20 @@ export function ClockInOut({ onSuccess }: ClockInOutProps) {
       const timestamp = now.toISOString();
 
       // Construct payload with type safety for location data
-      const payload: {
-        employeeId: number;
-        action: 'clockIn' | 'clockOut';
-        timestamp: string;
-        location: {lat: number, lng: number} | null;
-      } = {
+      const payload = {
         employeeId: parseInt(employeeId),
-        action: isClockingIn ? 'clockIn' : 'clockOut',
+        action: isClockingIn ? 'clockIn' as const : 'clockOut' as const,
         timestamp: timestamp,
         location: locationData
       };
 
-      try {
-        // Send request to API
-        await apiRequest('POST', '/api/attendance/clock', payload);
-
-        toast({
-          title: "Success",
-          description: `Employee has been clocked ${isClockingIn ? 'in' : 'out'} successfully.`,
-        });
-
-        // Invalidate attendance queries to refresh data
-        queryClient.invalidateQueries({ queryKey: ['/api/attendance'] });
-        queryClient.invalidateQueries({ queryKey: ['/api/attendance/recent-events'] });
-        
-        // Call success callback if provided
-        onSuccess?.();
-      } catch (apiError) {
-        console.error("API error:", apiError);
-        
-        // Store the event for later processing
-        setOfflineEvents(prev => [...prev, {
-          employeeId: parseInt(employeeId),
-          action: isClockingIn ? 'clockIn' : 'clockOut',
-          timestamp: timestamp,
-          location: locationData,
-          retryCount: 0
-        }]);
-        
-        toast({
-          title: "Temporary Offline Mode",
-          description: `Your ${isClockingIn ? 'clock in' : 'clock out'} has been saved locally and will be synchronized when connection is restored.`,
-        });
-      }
+      // Call mutation to clock in/out
+      clockMutation.mutate(payload);
       
-      // Reset state
-      setEmployeeId("");
-      setCurrentLocation(null);
+      // If we have offline events, try to sync them
+      if (offlineEvents.length > 0 && !isSyncing) {
+        syncOfflineEvents();
+      }
     } catch (error) {
       console.error("Clock action error:", error);
       toast({
@@ -204,13 +241,6 @@ export function ClockInOut({ onSuccess }: ClockInOutProps) {
           : "Failed to process attendance: Unknown error",
         variant: "destructive",
       });
-    } finally {
-      setIsProcessing(false);
-      
-      // If we have offline events, try to sync them
-      if (offlineEvents.length > 0 && !isSyncing) {
-        syncOfflineEvents();
-      }
     }
   };
 
@@ -249,21 +279,21 @@ export function ClockInOut({ onSuccess }: ClockInOutProps) {
           <div className="border p-3 rounded-md bg-primary/5">
             <div className="flex items-center">
               <div className="w-10 h-10 rounded-full bg-primary/20 flex items-center justify-center mr-3">
-                {selectedEmployee.profileImage ? (
+                {selectedEmployee.profileImage || (selectedEmployee.user && selectedEmployee.user.profileImage) ? (
                   <img 
-                    src={selectedEmployee.profileImage} 
-                    alt={selectedEmployee.name} 
+                    src={selectedEmployee.profileImage || (selectedEmployee.user?.profileImage || '')} 
+                    alt={getEmployeeName(selectedEmployee)} 
                     className="w-full h-full rounded-full object-cover"
                   />
                 ) : (
                   <span className="text-primary font-medium">
-                    {selectedEmployee.name.charAt(0)}
+                    {getEmployeeName(selectedEmployee).charAt(0)}
                   </span>
                 )}
               </div>
               <div>
-                <p className="font-medium">{selectedEmployee.name}</p>
-                <p className="text-sm text-muted-foreground">{selectedEmployee.department}</p>
+                <p className="font-medium">{getEmployeeName(selectedEmployee)}</p>
+                <p className="text-sm text-muted-foreground">{getEmployeeDepartment(selectedEmployee)}</p>
               </div>
             </div>
           </div>
@@ -312,9 +342,9 @@ export function ClockInOut({ onSuccess }: ClockInOutProps) {
         <Button 
           className="w-full" 
           onClick={handleClockAction} 
-          disabled={!employeeId || isProcessing}
+          disabled={!employeeId || clockMutation.isPending}
         >
-          {isProcessing ? "Processing..." : `Confirm ${isClockingIn ? 'Clock In' : 'Clock Out'}`}
+          {clockMutation.isPending ? "Processing..." : `Confirm ${isClockingIn ? 'Clock In' : 'Clock Out'}`}
         </Button>
       </CardFooter>
     </Card>

@@ -3,6 +3,29 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { z } from "zod";
 import { insertUserSchema, insertEmployeeSchema, insertAttendanceSchema, insertPayrollSchema, insertEwaRequestSchema } from "@shared/schema";
+import { faker } from '@faker-js/faker';
+import { generateEmptyAttendance } from './mock-data-generator';
+
+// Define a type for the enhanced employee object sent to the client
+interface EnhancedEmployee {
+  id: number;
+  employeeNumber: string;
+  userId: number;
+  departmentId: number;
+  position: string;
+  status: string;
+  hourlyRate: string | number;
+  startDate: string | Date;
+  active: boolean | null;
+  phoneNumber: string | null;
+  emergencyContact: string | object | null;
+  address: string | object | null;
+  // Additional fields for frontend
+  name: string;
+  email: string;
+  profileImage: string | null;
+  department: string;
+}
 
 // Helper to validate request body
 function validateBody<T extends z.ZodType>(schema: T) {
@@ -17,6 +40,17 @@ function validateBody<T extends z.ZodType>(schema: T) {
       return res.status(500).json({ message: "Internal server error" });
     }
   };
+}
+
+// Determine attendance status based on clock-in time (reusable helper function)
+function determineAttendanceStatus(clockInTime: Date, scheduledStartTimeMinutes: number, lateWindowMinutes: number): string {
+  const clockInMinutes = clockInTime.getHours() * 60 + clockInTime.getMinutes();
+  
+  if (clockInMinutes <= scheduledStartTimeMinutes + lateWindowMinutes) {
+    return 'present'; // Within grace period (e.g., 9:00 AM - 9:15 AM)
+  } else {
+    return 'late'; // After grace period (e.g., after 9:15 AM)
+  }
 }
 
 export async function registerRoutes(app: Express): Promise<Server> {
@@ -65,12 +99,122 @@ export async function registerRoutes(app: Express): Promise<Server> {
   
   app.get("/api/employees/active", async (_req, res) => {
     const employees = await storage.getAllActiveEmployees();
-    return res.status(200).json(employees);
+    
+    // Transform the employee data to parse JSON strings and include user/department details
+    const transformedEmployees = await Promise.all(employees.map(async employee => {
+      // Get user details
+      const user = await storage.getUser(employee.userId);
+      
+      // Get department details
+      const department = await storage.getDepartment(employee.departmentId);
+      
+      // Process address and emergency contact fields
+      let addressObj = employee.address;
+      let emergencyContactObj = employee.emergencyContact;
+      
+      // Parse the address field if it's a JSON string
+      if (typeof addressObj === 'string' && 
+          (addressObj.startsWith('{') || addressObj.startsWith('['))) {
+        try {
+          addressObj = JSON.parse(addressObj);
+        } catch (e) {
+          console.error(`Failed to parse address for employee ${employee.id}: ${e}`);
+        }
+      }
+      
+      // Parse the emergencyContact field if it's a JSON string
+      if (typeof emergencyContactObj === 'string' && 
+          (emergencyContactObj.startsWith('{') || emergencyContactObj.startsWith('['))) {
+        try {
+          emergencyContactObj = JSON.parse(emergencyContactObj);
+        } catch (e) {
+          console.error(`Failed to parse emergencyContact for employee ${employee.id}: ${e}`);
+        }
+      }
+      
+      // Create a complete enhanced employee object
+      return {
+        id: employee.id,
+        employeeNumber: employee.employeeNumber,
+        userId: employee.userId,
+        departmentId: employee.departmentId,
+        position: employee.position,
+        status: employee.status,
+        hourlyRate: employee.hourlyRate,
+        startDate: employee.startDate,
+        active: employee.active,
+        phoneNumber: employee.phoneNumber,
+        address: addressObj,
+        emergencyContact: emergencyContactObj,
+        // Additional fields for frontend
+        name: user ? user.name : 'Unknown',
+        email: user ? user.email || user.username : 'Unknown',
+        profileImage: user && user.profileImage ? user.profileImage : faker.image.avatar(),
+        department: department ? department.name : 'Unknown'
+      };
+    }));
+    
+    return res.status(200).json(transformedEmployees);
   });
   
   app.get("/api/employees/inactive", async (_req, res) => {
     const employees = await storage.getAllInactiveEmployees();
-    return res.status(200).json(employees);
+    
+    // Transform the employee data to parse JSON strings and include user/department details
+    const transformedEmployees = await Promise.all(employees.map(async employee => {
+      // Get user details
+      const user = await storage.getUser(employee.userId);
+      
+      // Get department details
+      const department = await storage.getDepartment(employee.departmentId);
+      
+      // Process address and emergency contact fields
+      let addressObj = employee.address;
+      let emergencyContactObj = employee.emergencyContact;
+      
+      // Parse the address field if it's a JSON string
+      if (typeof addressObj === 'string' && 
+          (addressObj.startsWith('{') || addressObj.startsWith('['))) {
+        try {
+          addressObj = JSON.parse(addressObj);
+        } catch (e) {
+          console.error(`Failed to parse address for employee ${employee.id}: ${e}`);
+        }
+      }
+      
+      // Parse the emergencyContact field if it's a JSON string
+      if (typeof emergencyContactObj === 'string' && 
+          (emergencyContactObj.startsWith('{') || emergencyContactObj.startsWith('['))) {
+        try {
+          emergencyContactObj = JSON.parse(emergencyContactObj);
+        } catch (e) {
+          console.error(`Failed to parse emergencyContact for employee ${employee.id}: ${e}`);
+        }
+      }
+      
+      // Create a complete enhanced employee object
+      return {
+        id: employee.id,
+        employeeNumber: employee.employeeNumber,
+        userId: employee.userId,
+        departmentId: employee.departmentId,
+        position: employee.position,
+        status: employee.status,
+        hourlyRate: employee.hourlyRate,
+        startDate: employee.startDate,
+        active: employee.active,
+        phoneNumber: employee.phoneNumber,
+        address: addressObj,
+        emergencyContact: emergencyContactObj,
+        // Additional fields for frontend
+        name: user ? user.name : 'Unknown',
+        email: user ? user.email || user.username : 'Unknown',
+        profileImage: user && user.profileImage ? user.profileImage : faker.image.avatar(),
+        department: department ? department.name : 'Unknown'
+      };
+    }));
+    
+    return res.status(200).json(transformedEmployees);
   });
   
   app.get("/api/employees/:id", async (req, res) => {
@@ -86,7 +230,37 @@ export async function registerRoutes(app: Express): Promise<Server> {
       return res.status(404).json({ message: "Employee not found" });
     }
     
-    return res.status(200).json(employee);
+    // Parse JSON strings in the employee object
+    const transformedEmployee = { ...employee };
+    
+    // Parse the address field if it's a JSON string
+    if (typeof transformedEmployee.address === 'string' && 
+        (transformedEmployee.address.startsWith('{') || transformedEmployee.address.startsWith('['))) {
+      try {
+        transformedEmployee.address = JSON.parse(transformedEmployee.address);
+      } catch (e) {
+        // If parsing fails, keep the original string
+        console.error(`Failed to parse address for employee ${employee.id}: ${e}`);
+      }
+    }
+    
+    // Parse the emergencyContact field if it's a JSON string
+    if (typeof transformedEmployee.emergencyContact === 'string' && 
+        (transformedEmployee.emergencyContact.startsWith('{') || transformedEmployee.emergencyContact.startsWith('['))) {
+      try {
+        transformedEmployee.emergencyContact = JSON.parse(transformedEmployee.emergencyContact);
+      } catch (e) {
+        // If parsing fails, keep the original string
+        console.error(`Failed to parse emergencyContact for employee ${employee.id}: ${e}`);
+      }
+    }
+    
+    // Add avatar URL if no profile image exists
+    if (transformedEmployee.user && !transformedEmployee.user.profileImage) {
+      transformedEmployee.user.profileImage = faker.image.avatar();
+    }
+    
+    return res.status(200).json(transformedEmployee);
   });
   
   app.post("/api/employees", validateBody(insertEmployeeSchema), async (req, res) => {
@@ -116,9 +290,72 @@ export async function registerRoutes(app: Express): Promise<Server> {
   
   // Attendance routes
   app.get("/api/attendance", async (req, res) => {
-    const date = req.query.date ? new Date(req.query.date as string) : new Date();
-    const attendanceRecords = await storage.getAttendanceForDate(date);
-    return res.status(200).json(attendanceRecords);
+    try {
+      console.log("GET /api/attendance request received");
+      const date = req.query.date ? new Date(req.query.date as string) : new Date();
+      const employeeId = req.query.employeeId ? parseInt(req.query.employeeId as string) : undefined;
+      
+      // Get attendance records based on date and optional employee filter
+      let attendanceRecords;
+      if (employeeId) {
+        attendanceRecords = await storage.getAttendanceForEmployee(employeeId);
+        // Filter by date if both employeeId and date are provided
+        if (req.query.date) {
+          const queryDate = new Date(req.query.date as string);
+          attendanceRecords = attendanceRecords.filter(record => {
+            if (!record.date) return false;
+            const recordDate = new Date(record.date);
+            return recordDate.getFullYear() === queryDate.getFullYear() &&
+                   recordDate.getMonth() === queryDate.getMonth() &&
+                   recordDate.getDate() === queryDate.getDate();
+          });
+        }
+      } else {
+        attendanceRecords = await storage.getAttendanceForDate(date);
+      }
+      
+      console.log(`Found ${attendanceRecords.length} attendance records`);
+      
+      // Enhance the attendance records with employee details
+      const enhancedRecords = await Promise.all(
+        attendanceRecords.map(async (record) => {
+          // Get the employee details including the user and department
+          const employee = await storage.getEmployee(record.employeeId);
+          if (!employee) {
+            console.log(`Employee ${record.employeeId} not found`);
+            return {
+              ...record,
+              employeeName: 'Unknown Employee',
+              department: 'Unknown Department'
+            };
+          }
+          
+          // Get user and department separately
+          const user = await storage.getUser(employee.userId);
+          const department = await storage.getDepartment(employee.departmentId);
+          
+          // Log the found employee details
+          console.log(`Found employee ${employee.id}: User=${user?.name}, Dept=${department?.name}`);
+          
+          // Return the enhanced record with employee name and department
+          return {
+            ...record,
+            employeeName: user?.name || 'Unknown Employee',
+            department: department?.name || 'Unknown Department'
+          };
+        })
+      );
+      
+      console.log(`Returning ${enhancedRecords.length} enhanced records`);
+      
+      return res.status(200).json(enhancedRecords);
+    } catch (error) {
+      console.error("Error fetching attendance records:", error);
+      return res.status(500).json({ 
+        message: "Failed to fetch attendance records", 
+        error: error instanceof Error ? error.message : "Unknown error" 
+      });
+    }
   });
   
   // Automatic absence detection - mark employees who haven't clocked in as absent
@@ -194,19 +431,112 @@ export async function registerRoutes(app: Express): Promise<Server> {
     const events = await Promise.all(
       attendanceRecords.map(async (record) => {
         const employeeWithDetails = await storage.getEmployeeWithDetails(record.employeeId);
-        const user = employeeWithDetails ? employeeWithDetails.user : null;
+        if (!employeeWithDetails || !employeeWithDetails.user) {
+          return null;
+        }
+
+        // Determine the most recent event (clock in or out)
+        let event = 'Clock In';
+        let time = record.clockInTime;
+        
+        if (record.clockOutTime) {
+          const clockInTime = record.clockInTime ? new Date(record.clockInTime).getTime() : 0;
+          const clockOutTime = new Date(record.clockOutTime).getTime();
+          
+          if (clockOutTime > clockInTime) {
+            event = 'Clock Out';
+            time = record.clockOutTime;
+          }
+        }
+
         return {
           id: record.id,
           employeeId: record.employeeId,
-          employeeName: user ? user.name : 'Unknown Employee',
-          event: record.clockInTime ? 'Clock In' : 'Clock Out',
-          time: record.clockInTime || record.clockOutTime,
-          status: record.status
+          employeeName: employeeWithDetails.user.name,
+          employeeAvatar: employeeWithDetails.user.profileImage,
+          department: employeeWithDetails.department?.name || 'Unknown Department',
+          event,
+          time,
+          status: record.status,
+          clockInTime: record.clockInTime,
+          clockOutTime: record.clockOutTime,
+          hoursWorked: record.hoursWorked
         };
       })
     );
+
+    // Filter out null values and sort by most recent
+    const validEvents = events
+      .filter((event): event is NonNullable<typeof event> => event !== null)
+      .sort((a, b) => {
+        const timeA = new Date(a.time || 0).getTime();
+        const timeB = new Date(b.time || 0).getTime();
+        return timeB - timeA;
+      });
     
-    return res.status(200).json(events);
+    return res.status(200).json(validEvents);
+  });
+  
+  // QR Code generation endpoint for attendance
+  app.post("/api/attendance/generate-qr", async (req, res) => {
+    try {
+      const { companyId, timestamp, location, expiresIn } = req.body;
+      
+      if (!companyId || !timestamp || !expiresIn) {
+        return res.status(400).json({
+          message: "Missing required fields: companyId, timestamp, and expiresIn are required"
+        });
+      }
+      
+      // In a real implementation, you would:
+      // 1. Validate the company ID
+      // 2. Generate a secure QR code with cryptographic signatures
+      // 3. Store the QR code data in a database for validation when scanned
+      
+      // For this demo, we'll generate a simple QR code with dummy data
+      const qrData = {
+        companyId,
+        timestamp,
+        location: location || null,
+        exp: new Date(timestamp + expiresIn * 1000).toISOString()
+      };
+      
+      // Create a data URL for a QR code (in a real app, use a QR code generation library)
+      // Here we're just creating a placeholder image URL
+      const baseUrl = `${req.protocol}://${req.get('host')}`;
+      const qrCodeUrl = `${baseUrl}/api/qr-placeholder?data=${encodeURIComponent(JSON.stringify(qrData))}`;
+      
+      // Calculate expiration time
+      const expiresAt = new Date(timestamp + expiresIn * 1000).toISOString();
+      
+      return res.status(200).json({
+        qrCodeUrl,
+        expiresAt,
+      });
+    } catch (error) {
+      console.error("Error generating QR code:", error);
+      return res.status(500).json({
+        message: "Failed to generate QR code",
+        error: error instanceof Error ? error.message : "Unknown error"
+      });
+    }
+  });
+  
+  // Placeholder endpoint to serve a dummy QR code image
+  app.get("/api/qr-placeholder", (req, res) => {
+    // Create a simple SVG QR code placeholder
+    const svgQrCode = `
+      <svg xmlns="http://www.w3.org/2000/svg" width="250" height="250" viewBox="0 0 250 250">
+        <rect width="250" height="250" fill="white" />
+        <rect x="50" y="50" width="150" height="150" fill="black" />
+        <rect x="70" y="70" width="110" height="110" fill="white" />
+        <rect x="90" y="90" width="70" height="70" fill="black" />
+        <text x="125" y="135" font-family="Arial" font-size="12" text-anchor="middle" fill="white">QR CODE</text>
+      </svg>
+    `;
+    
+    res.setHeader('Content-Type', 'image/svg+xml');
+    res.send(svgQrCode);
   });
   
   app.get("/api/attendance/employee/:id", async (req, res) => {
@@ -255,24 +585,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Calculate current time in minutes since midnight for comparison
       const currentTimeMinutes = now.getHours() * 60 + now.getMinutes();
       
-      // Determine attendance status based on clock-in time
-      const determineAttendanceStatus = (clockInTime: Date): string => {
-        const clockInMinutes = clockInTime.getHours() * 60 + clockInTime.getMinutes();
-        
-        if (clockInMinutes <= scheduledStartTimeMinutes + lateWindowMinutes) {
-          return 'present'; // Within grace period (9:00 AM - 9:15 AM)
-        } else {
-          return 'late'; // After grace period (after 9:15 AM)
-        }
-      };
-      
       let attendance;
       
       if (todayRecord) {
         // Update existing record
         if (action === 'clockIn' && !todayRecord.clockInTime) {
           // Determine status based on clock-in time
-          const status = determineAttendanceStatus(now);
+          const status = determineAttendanceStatus(now, scheduledStartTimeMinutes, lateWindowMinutes);
           
           attendance = await storage.updateAttendance(todayRecord.id, {
             clockInTime: now,
@@ -300,7 +619,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       } else if (action === 'clockIn') {
         // Create new attendance record for clock in
-        const status = determineAttendanceStatus(now);
+        const status = determineAttendanceStatus(now, scheduledStartTimeMinutes, lateWindowMinutes);
         
         attendance = await storage.createAttendance({
           employeeId,
@@ -365,57 +684,140 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
   
   app.post("/api/attendance/verify-otp", async (req, res) => {
-    const { code, action } = req.body;
-    
-    if (!code || !action) {
-      return res.status(400).json({ message: "OTP code and action are required" });
-    }
-    
-    const otpCode = await storage.getOtpCode(code);
-    
-    if (!otpCode) {
-      return res.status(404).json({ message: "Invalid OTP code" });
-    }
-    
-    if (otpCode.used) {
-      return res.status(400).json({ message: "OTP code has already been used" });
-    }
-    
-    if (new Date() > otpCode.expiresAt) {
-      return res.status(400).json({ message: "OTP code has expired" });
-    }
-    
-    // Mark OTP as used
-    await storage.updateOtpCode(otpCode.id, { used: true });
-    
-    // Create attendance record with status based on time
-    const now = new Date();
-    
-    // Define standard work schedule (configurable in a real app)
-    const scheduledStartTimeMinutes = 9 * 60; // 9:00 AM in minutes since midnight
-    const lateWindowMinutes = 15; // 15 minute grace period
-    
-    // Determine attendance status based on clock-in time
-    let status = 'present';
-    if (action === 'clockIn') {
-      const clockInMinutes = now.getHours() * 60 + now.getMinutes();
-      if (clockInMinutes > scheduledStartTimeMinutes + lateWindowMinutes) {
-        status = 'late';
+    try {
+      const { code, action } = req.body;
+      
+      if (!code || !action) {
+        return res.status(400).json({ message: "OTP code and action are required" });
       }
+      
+      // Find the OTP code
+      const otpCode = await storage.getOtpCodeByCode(code);
+      
+      if (!otpCode) {
+        return res.status(400).json({ message: "Invalid OTP code" });
+      }
+      
+      // Check if OTP is expired
+      const now = new Date();
+      if (now > otpCode.expiresAt) {
+        return res.status(400).json({ message: "OTP code has expired" });
+      }
+      
+      // Check if OTP has been used
+      if (otpCode.used) {
+        return res.status(400).json({ message: "OTP code has already been used" });
+      }
+      
+      // Get the employee with details (includes user and department info)
+      const employee = await storage.getEmployeeWithDetails(otpCode.employeeId);
+      
+      if (!employee) {
+        return res.status(404).json({ message: "Employee not found" });
+      }
+      
+      // Clear attendance cache to ensure we get fresh data
+      storage.clearTodayAttendanceCache?.();
+      
+      // Get today's date (reset to start of day)
+      const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      
+      // Check for existing attendance record for today
+      const existingRecords = await storage.getAttendanceForEmployee(otpCode.employeeId);
+      const todayRecord = existingRecords.find(record => {
+        if (!record.date) return false;
+        const recordDate = new Date(record.date);
+        return recordDate.getFullYear() === today.getFullYear() &&
+               recordDate.getMonth() === today.getMonth() &&
+               recordDate.getDate() === today.getDate();
+      });
+      
+      // Define standard work schedule (configurable in a real app)
+      const scheduledStartTimeMinutes = 9 * 60; // 9:00 AM in minutes since midnight
+      const lateWindowMinutes = 15; // 15 minute grace period
+      
+      let attendance;
+      
+      if (action === 'clockIn') {
+        // Check if the employee has already clocked in today
+        // Only consider a valid clock-in if there's an actual clockInTime value
+        if (todayRecord && todayRecord.clockInTime !== null) {
+          return res.status(400).json({ message: "Already clocked in for today" });
+        }
+        
+        const status = determineAttendanceStatus(now, scheduledStartTimeMinutes, lateWindowMinutes);
+        
+        if (todayRecord) {
+          // Update existing record with clock in
+          attendance = await storage.updateAttendance(todayRecord.id, {
+            clockInTime: now,
+            status: status,
+            hoursWorked: "0",
+            notes: `Self-logged via OTP: ${action}`
+          });
+        } else {
+          // Create new attendance record
+          attendance = await storage.createAttendance({
+            employeeId: otpCode.employeeId,
+            date: today,
+            clockInTime: now,
+            clockOutTime: null,
+            status: status,
+            hoursWorked: "0",
+            geoLocation: null,
+            approvedBy: null,
+            notes: `Self-logged via OTP: ${action}`
+          });
+        }
+      } else if (action === 'clockOut') {
+        if (!todayRecord) {
+          return res.status(400).json({ message: "No clock-in record found for today" });
+        }
+        
+        if (!todayRecord.clockInTime) {
+          return res.status(400).json({ message: "Cannot clock out without clocking in first" });
+        }
+        
+        if (todayRecord.clockOutTime) {
+          return res.status(400).json({ message: "Already clocked out for today" });
+        }
+        
+        // Calculate hours worked
+        const clockIn = new Date(todayRecord.clockInTime);
+        const hoursWorked = (now.getTime() - clockIn.getTime()) / (1000 * 60 * 60);
+        
+        attendance = await storage.updateAttendance(todayRecord.id, {
+          clockOutTime: now,
+          hoursWorked: hoursWorked.toFixed(2),
+          notes: `Self-logged via OTP: ${action}`
+        });
+      }
+      
+      // Mark OTP as used
+      await storage.updateOtpCode(otpCode.id, { used: true });
+      
+      // Clear today's attendance cache again to force refresh
+      storage.clearTodayAttendanceCache?.();
+      
+      // Return success with employee details included
+      return res.status(200).json({ 
+        success: true, 
+        attendance,
+        employee: {
+          id: employee.id,
+          name: employee.user.name,
+          department: employee.department.name,
+          profileImage: employee.user.profileImage
+        }
+      });
+    } catch (error) {
+      console.error("Error in verify-otp:", error);
+      return res.status(500).json({ 
+        success: false,
+        message: "Failed to process attendance", 
+        error: error instanceof Error ? error.message : "Unknown error" 
+      });
     }
-    
-    const attendance = await storage.createAttendance({
-      employeeId: otpCode.employeeId,
-      date: now,
-      status: status,
-      ...(action === 'clockIn' ? { clockInTime: now, clockOutTime: null } : { clockOutTime: now, clockInTime: null }),
-      hoursWorked: "0", // Will be updated on clock-out if needed
-      geoLocation: null,
-      approvedBy: null,
-      notes: `Self-logged via OTP: ${action}`
-    });
-    
-    return res.status(200).json({ success: true, attendance });
   });
   
   // Payroll routes
@@ -786,6 +1188,64 @@ export async function registerRoutes(app: Express): Promise<Server> {
     ];
     
     return res.status(200).json(activities);
+  });
+
+  // Mock control endpoint - for development only 
+  app.post("/api/dev/mock-control", async (req, res) => {
+    const { action } = req.body;
+    
+    if (!action) {
+      return res.status(400).json({ message: "Action is required" });
+    }
+    
+    try {
+      switch (action) {
+        case "reset-attendance":
+          // Get all active employees
+          const employees = await storage.getAllActiveEmployees();
+          
+          // Delete today's attendance records
+          await storage.deleteTodayAttendance();
+          
+          // Generate empty attendance records
+          const emptyRecords = generateEmptyAttendance(employees);
+          
+          // Insert the empty records
+          for (const record of emptyRecords) {
+            await storage.createAttendance(record);
+          }
+          
+          storage.clearTodayAttendanceCache?.();
+          
+          return res.status(200).json({ 
+            success: true, 
+            message: "Attendance data reset successfully" 
+          });
+          
+        case "toggle-mocking":
+          const mockingEnabled = req.body.enabled;
+          
+          if (mockingEnabled === undefined) {
+            return res.status(400).json({ message: "Enabled flag is required" });
+          }
+          
+          // You can store this in your storage system if needed
+          return res.status(200).json({ 
+            success: true, 
+            mockingEnabled,
+            message: `Mocking ${mockingEnabled ? 'enabled' : 'disabled'}` 
+          });
+          
+        default:
+          return res.status(400).json({ message: `Unknown action: ${action}` });
+      }
+    } catch (error) {
+      console.error("Mock control error:", error);
+      return res.status(500).json({ 
+        success: false, 
+        message: "Failed to execute mock control action" 
+      });
+    }
   });
 
   const httpServer = createServer(app);

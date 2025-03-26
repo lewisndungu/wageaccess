@@ -15,27 +15,35 @@ interface ClockEvent {
   timestamp: string;
 }
 
+interface AttendanceStats {
+  totalClockIns: number;
+  totalClockOuts: number;
+  averageClockInTime: string;
+  uniqueEmployees: number;
+  todayCount: number;
+  absenceCount: number;
+}
+
 export default function SelfLogPage() {
   const [tabValue, setTabValue] = useState("qr");
   
-  // Mock usage statistics from API
-  const stats = {
-    totalClockIns: 42,
-    totalClockOuts: 38,
-    averageClockInTime: "08:32 AM",
-    uniqueEmployees: 12,
-    todayCount: 7,
-  };
+  // Fetch attendance statistics from API
+  const { data: stats } = useQuery<AttendanceStats>({
+    queryKey: ['/api/attendance/stats'],
+    initialData: {
+      totalClockIns: 0,
+      totalClockOuts: 0,
+      averageClockInTime: "--:--",
+      uniqueEmployees: 0,
+      todayCount: 0,
+      absenceCount: 0
+    }
+  });
   
-  // Fetch recent clock events - in real app would come from API
+  // Fetch recent clock events from API
   const { data: recentEvents, refetch: refetchEvents } = useQuery<ClockEvent[]>({
     queryKey: ['/api/attendance/recent-events'],
-    // Mock data
-    initialData: [
-      { employeeName: "James Mwangi", action: 'in', timestamp: new Date(Date.now() - 20 * 60000).toISOString() },
-      { employeeName: "Lucy Njeri", action: 'in', timestamp: new Date(Date.now() - 35 * 60000).toISOString() },
-      { employeeName: "David Ochieng", action: 'in', timestamp: new Date(Date.now() - 55 * 60000).toISOString() },
-    ],
+    initialData: [],
     refetchInterval: 30000, // Refresh every 30 seconds
   });
   
@@ -76,9 +84,11 @@ export default function SelfLogPage() {
               View Records
             </Link>
           </Button>
-          <Button>
-            <Clock className="mr-2 h-4 w-4" />
-            Manual Entry
+          <Button asChild>
+            <Link to="/attendance/manual">
+              <Clock className="mr-2 h-4 w-4" />
+              Manual Entry
+            </Link>
           </Button>
         </div>
       </div>
@@ -133,7 +143,7 @@ export default function SelfLogPage() {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-muted-foreground text-sm">Today's Absence</p>
-                  <p className="text-2xl font-bold">3</p>
+                  <p className="text-2xl font-bold">{stats.absenceCount}</p>
                 </div>
                 <div className="h-10 w-10 bg-red-100 rounded-full flex items-center justify-center">
                   <svg className="h-5 w-5 text-red-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">

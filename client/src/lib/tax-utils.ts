@@ -161,7 +161,11 @@ export function calculateEarnedWage(
  * @param amount - Amount to format
  * @returns Formatted string with KES symbol
  */
-export function formatKES(amount: number): string {
+export function formatKES(amount: number | undefined | null): string {
+  if (amount === undefined || amount === null) {
+    return "KES 0";
+  }
+  
   return `KES ${amount.toLocaleString('en-KE', { 
     minimumFractionDigits: 0,
     maximumFractionDigits: 0

@@ -52,7 +52,6 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { ColumnDef } from "@tanstack/react-table";
-import { attendanceRecords, employees, formatDate, formatTime } from "@/lib/mock-data";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
   AlertCircle,
@@ -76,8 +75,9 @@ import {
 } from "lucide-react";
 import { DatePicker } from "@/components/ui/date-picker";
 import { toast } from "@/hooks/use-toast";
+import { formatDate } from '@/lib/date-utils';
+import { formatTime } from '@/lib/date-utils';
 
-// Define interfaces
 interface Employee {
   id: number;
   employeeNumber: string;
@@ -90,6 +90,11 @@ interface Employee {
   profileImage?: string;
 }
 
+interface Department {
+  id: number;
+  name: string;
+}
+
 interface AttendanceRecord {
   id: number;
   employeeId: number;
@@ -99,12 +104,7 @@ interface AttendanceRecord {
   clockInTime: string | null;
   clockOutTime: string | null;
   status: string;
-  hoursWorked: number;
-}
-
-interface Department {
-  id: number;
-  name: string;
+  hoursWorked: string;
 }
 
 interface AttendanceCorrection {
@@ -112,10 +112,9 @@ interface AttendanceCorrection {
   employeeId: number;
   employeeName: string;
   date: string;
-  originalClockIn: string | null;
-  originalClockOut: string | null;
-  newClockIn: string | null;
-  newClockOut: string | null;
+  type: 'clock_in' | 'clock_out';
+  originalTime: string | null;
+  correctedTime: string;
   reason: string;
   status: 'pending' | 'approved' | 'rejected';
   requestedBy: string;
@@ -124,14 +123,14 @@ interface AttendanceCorrection {
 
 export function ManagerControls() {
   // State for various operations
-  const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
-  const [selectedDepartment, setSelectedDepartment] = useState<string>("");
+  const [selectedDate, setSelectedDate] = useState<Date>(new Date());
+  const [selectedDepartment, setSelectedDepartment] = useState<string>('all');
   const [selectedStatus, setSelectedStatus] = useState<string>("present");
   const [selectedEmployees, setSelectedEmployees] = useState<number[]>([]);
   const [manualReason, setManualReason] = useState<string>("");
   const [bulkReason, setBulkReason] = useState<string>("");
-  const [searchQuery, setSearchQuery] = useState<string>("");
-  const [showCurrentlyCheckedIn, setShowCurrentlyCheckedIn] = useState<boolean>(true);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [showCurrentlyCheckedIn, setShowCurrentlyCheckedIn] = useState(true);
   const [selectedTab, setSelectedTab] = useState<string>("manual");
   const [selectedAttendanceId, setSelectedAttendanceId] = useState<number | null>(null);
   const [selectedCorrectionId, setSelectedCorrectionId] = useState<number | null>(null);
@@ -145,40 +144,51 @@ export function ManagerControls() {
   // Form states for correction
   const [newClockIn, setNewClockIn] = useState<string>("");
   const [newClockOut, setNewClockOut] = useState<string>("");
-  const [correctionReason, setCorrectionReason] = useState<string>("");
+  const [correctionReason, setCorrectionReason] = useState('');
   
   // Filter states for shift tracker
-  const [shiftDepartmentFilter, setShiftDepartmentFilter] = useState<string>("all");
+  const [shiftDepartmentFilter, setShiftDepartmentFilter] = useState('all');
   const [isLoadingSubmit, setIsLoadingSubmit] = useState<boolean>(false);
 
-  // Query to fetch employee list
-  const { data: employeeList } = useQuery<Employee[]>({
+  // Query to fetch employees
+  const { data: employeeList = [] } = useQuery<Employee[]>({
     queryKey: ['/api/employees/active'],
-    initialData: employees as unknown as Employee[],
   });
-  
+
   // Query to fetch departments
-  const { data: departments } = useQuery<Department[]>({
+  const { data: departments = [] } = useQuery<Department[]>({
     queryKey: ['/api/departments'],
-    initialData: extractDepartments(employees),
   });
   
   // Query to fetch attendance records
-  const { data: records } = useQuery<AttendanceRecord[]>({
+  const { data: rawRecords = [], isLoading: isLoadingRecords } = useQuery<AttendanceRecord[]>({
     queryKey: ['/api/attendance', selectedDate],
-    initialData: attendanceRecords,
+  });
+  
+  // Enhanced records with employee data
+  const records = rawRecords.map(record => {
+    // If record already has employeeName and department, use those
+    if (record.employeeName && record.department) {
+      return record;
+    }
+    
+    // Otherwise, find the employee from the list and add their details
+    const employee = employeeList.find(emp => emp.id === record.employeeId);
+    return {
+      ...record,
+      employeeName: employee?.name || 'Unknown Employee',
+      department: employee?.department || 'Unknown Department'
+    };
   });
   
   // Query to fetch attendance corrections
-  const { data: corrections } = useQuery<AttendanceCorrection[]>({
+  const { data: corrections = [] } = useQuery<AttendanceCorrection[]>({
     queryKey: ['/api/attendance/corrections'],
-    initialData: generateMockCorrections(),
   });
   
   // Query to fetch currently checked in employees
-  const { data: checkedInEmployees } = useQuery<AttendanceRecord[]>({
+  const { data: checkedInEmployees = [] } = useQuery<AttendanceRecord[]>({
     queryKey: ['/api/attendance/checked-in'],
-    initialData: records.filter(r => r.clockInTime && !r.clockOutTime),
     refetchInterval: showCurrentlyCheckedIn ? 30000 : false,
   });
 
@@ -212,54 +222,6 @@ export function ManagerControls() {
       id: index + 1,
       name
     }));
-  }
-
-  // Function to generate mock attendance corrections for demo
-  function generateMockCorrections(): AttendanceCorrection[] {
-    return [
-      {
-        id: 1,
-        employeeId: 1,
-        employeeName: "James Mwangi",
-        date: "2023-07-12",
-        originalClockIn: "2023-07-12T08:05:00",
-        originalClockOut: "2023-07-12T17:10:00",
-        newClockIn: "2023-07-12T08:00:00",
-        newClockOut: "2023-07-12T17:10:00",
-        reason: "Employee forgot to clock in on time",
-        status: 'pending',
-        requestedBy: "HR Manager",
-        requestedAt: "2023-07-12T18:30:00"
-      },
-      {
-        id: 2,
-        employeeId: 2,
-        employeeName: "Lucy Njeri",
-        date: "2023-07-11",
-        originalClockIn: "2023-07-11T08:45:00",
-        originalClockOut: "2023-07-11T17:30:00",
-        newClockIn: "2023-07-11T08:30:00",
-        newClockOut: "2023-07-11T17:30:00",
-        reason: "System error during clock-in",
-        status: 'approved',
-        requestedBy: "Department Manager",
-        requestedAt: "2023-07-11T18:15:00"
-      },
-      {
-        id: 3,
-        employeeId: 3,
-        employeeName: "David Ochieng",
-        date: "2023-07-10",
-        originalClockIn: "2023-07-10T09:20:00",
-        originalClockOut: "2023-07-10T18:00:00",
-        newClockIn: "2023-07-10T08:30:00",
-        newClockOut: "2023-07-10T18:00:00",
-        reason: "Employee was in a client meeting but couldn't clock in",
-        status: 'rejected',
-        requestedBy: "Department Manager",
-        requestedAt: "2023-07-10T19:00:00"
-      }
-    ];
   }
 
   // Function to handle toggling employee selection in bulk mode
@@ -569,12 +531,12 @@ export function ManagerControls() {
     {
       accessorKey: "originalClockIn",
       header: "Original In",
-      cell: ({ row }) => formatTime(row.original.originalClockIn || ""),
+      cell: ({ row }) => formatTime(row.original.originalTime || ""),
     },
     {
-      accessorKey: "newClockIn",
-      header: "New In",
-      cell: ({ row }) => formatTime(row.original.newClockIn || ""),
+      accessorKey: "correctedTime",
+      header: "Corrected Time",
+      cell: ({ row }) => formatTime(row.original.correctedTime || ""),
     },
     {
       accessorKey: "reason",
@@ -720,11 +682,10 @@ export function ManagerControls() {
                     <div className="flex">
                       <DatePicker 
                         date={selectedDate} 
-                        setDate={setSelectedDate}
+                        setDate={(date) => date && setSelectedDate(date)}
                       />
                     </div>
                   </div>
-                  
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <Label htmlFor="clockIn">Clock In Time</Label>
@@ -810,7 +771,7 @@ export function ManagerControls() {
                     <Label htmlFor="bulk-date" className="mb-2 block">Date</Label>
                     <DatePicker 
                       date={selectedDate} 
-                      setDate={setSelectedDate}
+                      setDate={(date) => date && setSelectedDate(date)}
                     />
                   </div>
                 </div>
@@ -974,11 +935,11 @@ export function ManagerControls() {
                                 <div className="mt-1.5 text-xs">
                                   <p>
                                     <span className="font-semibold">From: </span>
-                                    {formatTime(correction.originalClockIn || "")} - {formatTime(correction.originalClockOut || "")}
+                                    {formatTime(correction.originalTime || "")}
                                   </p>
                                   <p>
                                     <span className="font-semibold">To: </span>
-                                    {formatTime(correction.newClockIn || "")} - {formatTime(correction.newClockOut || "")}
+                                    {formatTime(correction.correctedTime || "")}
                                   </p>
                                 </div>
                                 <p className="mt-1.5 text-xs italic">"{correction.reason}"</p>
@@ -1139,7 +1100,7 @@ export function ManagerControls() {
                           
                           <div>
                             <p className="text-sm text-muted-foreground">Hours Worked</p>
-                            <p className="font-medium">{record.hoursWorked.toFixed(2)} hours</p>
+                            <p className="font-medium">{Number(record.hoursWorked).toFixed(2)} hours</p>
                           </div>
                           
                           <div>
@@ -1199,14 +1160,14 @@ export function ManagerControls() {
                         <div className="grid grid-cols-2 gap-4 mb-4">
                           <div className="bg-muted p-3 rounded-md">
                             <p className="text-xs font-medium mb-1">Original Time</p>
-                            <p className="text-sm">In: {formatTime(correction.originalClockIn || "")}</p>
-                            <p className="text-sm">Out: {formatTime(correction.originalClockOut || "")}</p>
+                            <p className="text-sm">In: {formatTime(correction.originalTime || "")}</p>
+                            <p className="text-sm">Out: {formatTime(correction.correctedTime || "")}</p>
                           </div>
                           
                           <div className="bg-primary/5 border border-primary/20 p-3 rounded-md">
                             <p className="text-xs font-medium mb-1">Requested Change</p>
-                            <p className="text-sm">In: {formatTime(correction.newClockIn || "")}</p>
-                            <p className="text-sm">Out: {formatTime(correction.newClockOut || "")}</p>
+                            <p className="text-sm">In: {formatTime(correction.correctedTime || "")}</p>
+                            <p className="text-sm">Out: {formatTime(correction.correctedTime || "")}</p>
                           </div>
                         </div>
                         

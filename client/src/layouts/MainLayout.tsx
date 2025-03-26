@@ -1,4 +1,5 @@
 import { useState, useEffect, ReactNode } from "react";
+import * as React from "react";
 import { Link, useLocation } from "react-router-dom";
 import { useUser } from "@/context/UserContext";
 import { useSystem } from "@/context/SystemContext";
@@ -11,6 +12,41 @@ import {
   Users, Clock, DollarSign, CreditCard, LogIn, UserCog, 
   HelpCircle, BadgeDollarSign, ArrowRight
 } from "lucide-react";
+
+// Error boundary component
+export class AppErrorBoundary extends React.Component<{ children: ReactNode, fallback?: ReactNode }> {
+  state = { hasError: false, error: null as Error | null };
+  
+  static getDerivedStateFromError(error: Error) {
+    return { hasError: true, error };
+  }
+  
+  componentDidCatch(error: Error, info: React.ErrorInfo) {
+    console.error("Error caught by boundary:", error, info);
+  }
+  
+  render() {
+    if (this.state.hasError) {
+      return this.props.fallback || (
+        <div className="flex flex-col items-center justify-center min-h-screen p-6 bg-gray-100 dark:bg-gray-900">
+          <div className="w-full max-w-md p-8 space-y-6 bg-white dark:bg-gray-800 rounded-lg shadow-md">
+            <h1 className="text-xl font-bold text-center text-red-600 dark:text-red-400">
+              Something went wrong
+            </h1>
+            <p className="text-gray-700 dark:text-gray-300">
+              {this.state.error?.message || "An unexpected error occurred"}
+            </p>
+            <Button className="w-full" onClick={() => window.location.reload()}>
+              Refresh the page
+            </Button>
+          </div>
+        </div>
+      );
+    }
+    
+    return this.props.children;
+  }
+}
 
 interface SidebarLinkProps {
   to: string;
@@ -262,7 +298,9 @@ export default function MainLayout({ children }: MainLayoutProps) {
             location.pathname.startsWith('/ewa')) && (
             <GlobalHeader />
           )}
-          {children}
+          <AppErrorBoundary>
+            {children}
+          </AppErrorBoundary>
         </main>
         
         {/* Footer */}

@@ -2,27 +2,36 @@ import { useState } from "react";
 import { DataTable } from "@/components/ui/data-table";
 import { useNavigate } from "react-router-dom";
 import { ColumnDef } from "@tanstack/react-table";
-import { User } from "lucide-react";
+import { User, Phone } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Card } from "@/components/ui/card";
+import type { BasicEmployee } from "@/types/employee";
 
-interface Employee {
-  id: number;
-  employeeNumber: string;
-  name: string;
-  department: string;
-  position: string;
-  contact: string;
-  email: string;
-  status: "present" | "absent" | "late";
-  profileImage?: string;
-}
+// Utility function to safely parse JSON strings
+const parseJsonField = (jsonString: string | null | undefined) => {
+  if (!jsonString) return null;
+  
+  try {
+    return JSON.parse(jsonString);
+  } catch (error) {
+    console.error("Error parsing JSON:", error);
+    return null;
+  }
+};
+
+// Format phone number to display
+const formatPhoneNumber = (phoneNumber: string | null | undefined) => {
+  if (!phoneNumber) return "N/A";
+  
+  // Return the formatted phone number
+  return phoneNumber;
+};
 
 interface EmployeeTableProps {
-  data: Employee[];
+  data: BasicEmployee[];
   isLoading?: boolean;
 }
 
@@ -30,11 +39,11 @@ export function EmployeeTable({ data, isLoading }: EmployeeTableProps) {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState("active");
   
-  const handleViewProfile = (employee: Employee) => {
+  const handleViewProfile = (employee: BasicEmployee) => {
     navigate(`/employees/${employee.id}`);
   };
   
-  const columns: ColumnDef<Employee>[] = [
+  const columns: ColumnDef<BasicEmployee>[] = [
     {
       accessorKey: "name",
       header: "Employee",
@@ -71,18 +80,27 @@ export function EmployeeTable({ data, isLoading }: EmployeeTableProps) {
     {
       accessorKey: "contact",
       header: "Contact",
+      cell: ({ row }) => {
+        const employee = row.original;
+        const phoneNumber = employee.phoneNumber || "N/A";
+        
+        return (
+          <div className="flex items-center">
+            <Phone className="h-3 w-3 mr-1 text-muted-foreground" />
+            <span className="text-sm">{formatPhoneNumber(phoneNumber)}</span>
+          </div>
+        );
+      }
     },
     {
       accessorKey: "status",
       header: "Status",
       cell: ({ row }) => {
         const status = row.original.status;
-        if (status === "present") {
-          return <Badge className="bg-[#10B981]/20 text-[#10B981] hover:bg-[#10B981]/20">Present</Badge>;
-        } else if (status === "late") {
-          return <Badge className="bg-[#F59E0B]/20 text-[#F59E0B] hover:bg-[#F59E0B]/20">Late</Badge>;
+        if (status === "active") {
+          return <Badge className="bg-[#10B981]/20 text-[#10B981] hover:bg-[#10B981]/20">Active</Badge>;
         } else {
-          return <Badge className="bg-[#EF4444]/20 text-[#EF4444] hover:bg-[#EF4444]/20">Absent</Badge>;
+          return <Badge className="bg-[#EF4444]/20 text-[#EF4444] hover:bg-[#EF4444]/20">Inactive</Badge>;
         }
       },
     },
@@ -123,14 +141,14 @@ export function EmployeeTable({ data, isLoading }: EmployeeTableProps) {
     },
   ];
 
+  // Filter data based on active tab
   const filteredData = activeTab === "active" 
-    ? data
-    : [];
-  
-  // If we had actual data:
-  // const filteredData = activeTab === "active" 
-  //  ? data.filter(employee => employee.isActive) 
-  //  : data.filter(employee => !employee.isActive);
+    ? data.filter(employee => employee.status === "active")
+    : data.filter(employee => employee.status === "inactive");
+
+  // Get counts for the tabs
+  const activeCount = data.filter(employee => employee.status === "active").length;
+  const inactiveCount = data.filter(employee => employee.status === "inactive").length;
 
   return (
     <Card className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-800 overflow-hidden">
@@ -141,13 +159,13 @@ export function EmployeeTable({ data, isLoading }: EmployeeTableProps) {
               value="active"
               className="data-[state=active]:border-b-2 data-[state=active]:border-primary data-[state=active]:text-primary rounded-none border-b-2 border-transparent px-4 py-2"
             >
-              Active (220)
+              Active ({activeCount})
             </TabsTrigger>
             <TabsTrigger 
               value="inactive"
               className="data-[state=active]:border-b-2 data-[state=active]:border-primary data-[state=active]:text-primary rounded-none border-b-2 border-transparent px-4 py-2"
             >
-              Inactive (28)
+              Inactive ({inactiveCount})
             </TabsTrigger>
           </TabsList>
         </div>

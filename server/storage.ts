@@ -57,6 +57,11 @@ export interface IStorage {
     startDate: Date,
     endDate: Date
   ): Promise<Attendance[]>;
+  getAllAttendance(): Promise<Attendance[]>;
+  getAllAttendanceByDateRange(
+    startDate: Date,
+    endDate: Date
+  ): Promise<Attendance[]>;
   
   // Payroll operations
   getPayroll(id: number): Promise<Payroll | undefined>;
@@ -453,8 +458,24 @@ export class MemStorage implements IStorage {
   }
 
   // Get all attendance records
-  getAllAttendance(): Map<number, Attendance> {
-    return this.attendance;
+  getAllAttendance(): Promise<Attendance[]> {
+    console.log('getAllAttendance called, returning:', this.attendance.size, 'records');
+    return Promise.resolve(Array.from(this.attendance.values()));
+  }
+
+  async getAllAttendanceByDateRange(
+    startDate: Date,
+    endDate: Date
+  ): Promise<Attendance[]> {
+    console.log(`getAllAttendanceByDateRange called with dates: ${startDate} to ${endDate}`);
+    const attendance = Array.from(this.attendance.values());
+    const filtered = attendance.filter(record => {
+      if (!record.date) return false;
+      const recordDate = new Date(record.date);
+      return recordDate >= startDate && recordDate <= endDate;
+    });
+    console.log(`Filtered down to ${filtered.length} records`);
+    return filtered;
   }
 
   // Payroll operations

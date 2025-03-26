@@ -152,56 +152,38 @@ export function AttendanceDashboard({ records, employees }: AttendanceDashboardP
   const [selectedDepartment, setSelectedDepartment] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState("");
   
-  // Query to fetch attendance records
-  const { data: recordsData, isLoading: isLoadingRecords } = useQuery<AttendanceRecord[]>({
-    queryKey: ['/api/attendance', startDate, endDate, viewType],
-    queryFn: async () => {
-      const params = new URLSearchParams();
-      
-      // Ensure all required parameters are included
-      if (employees && employees.length > 0) {
-        params.append('employeeId', employees[0].id.toString()); // Use first employee as default
-      } else {
-        params.append('employeeId', '1'); // Fallback employee ID
-      }
-      
-      if (startDate) params.append('startDate', startDate.toISOString());
-      if (endDate) {
-        params.append('endDate', endDate.toISOString());
-      } else if (startDate) {
-        // If no end date, use the same date as start
-        params.append('endDate', startDate.toISOString());
-      }
-      
-      // Add view type as an additional parameter if needed
-      if (viewType) params.append('viewType', viewType);
-      
-      const response = await fetch(`/api/attendance?${params.toString()}`);
-      if (!response.ok) throw new Error('Failed to fetch attendance records');
-      const data = await response.json();
-      
-      // Enhance attendance records with employee data if needed
-      return data.map((record: any) => {
-        // If record already has employeeName and department, use those
-        if (record.employeeName && record.department) {
-          return record;
-        }
-        
-        // Otherwise, find the employee from the list and add their details
-        const employee = employees.find(emp => emp.id === record.employeeId);
-        return {
-          ...record,
-          employeeName: employee?.name || 'Unknown Employee',
-          department: employee?.department || 'Unknown Department'
-        };
-      });
-    },
-    refetchInterval: 10000, // Refetch every 10 seconds
-    staleTime: 5000, // Data stays fresh for 5 seconds
-    placeholderData: records.length > 0 ? records : [], // Use props data as placeholder if available
-    enabled: !!employees.length // Only run query when employees are available
+  // Use the provided records directly instead of making a separate query
+  // Filter the records based on date range
+  const filteredRecords = records.filter(record => {
+    const recordDate = new Date(record.date);
+    
+    // Apply date range filter
+    if (startDate && endDate) {
+      return recordDate >= startDate && recordDate <= endDate;
+    } else if (startDate) {
+      return recordDate >= startDate;
+    }
+    
+    return true;
+  }).filter(record => {
+    // Apply department filter
+    if (selectedDepartment && selectedDepartment !== 'all') {
+      return record.department === selectedDepartment;
+    }
+    return true;
+  }).filter(record => {
+    // Apply search query filter
+    if (searchQuery) {
+      const query = searchQuery.toLowerCase();
+      return (
+        record.employeeName.toLowerCase().includes(query) ||
+        record.department.toLowerCase().includes(query) ||
+        record.status.toLowerCase().includes(query)
+      );
+    }
+    return true;
   });
-  
+
   // Query to fetch employee list  
   const { data: employeeList, isLoading: isLoadingEmployees } = useQuery({
     queryKey: ['/api/employees/active'],
@@ -246,8 +228,8 @@ export function AttendanceDashboard({ records, employees }: AttendanceDashboardP
     }
   });
 
-  // Use provided records data during initial load
-  const displayRecords = (isLoadingRecords && records.length > 0 ? records : recordsData) || [];
+  // Use the filtered records as display records
+  const displayRecords = filteredRecords || [];
   
   // Fallback to the passed employees prop if query hasn't loaded yet
   const employeesData = employeeList && employeeList.length > 0 ? employeeList : (employees || []);
@@ -300,18 +282,6 @@ export function AttendanceDashboard({ records, employees }: AttendanceDashboardP
   
   // Generate trend data
   const trendData = generateTrendData(7); // Last 7 days
-
-  // Filter records based on search query and department
-  const filteredRecords = displayRecords.filter(record => {
-    const matchesSearch = searchQuery === "" || 
-      record.employeeName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      record.employeeId.toString().includes(searchQuery);
-    
-    const matchesDepartment = selectedDepartment === "all" || 
-      record.department === selectedDepartment;
-    
-    return matchesSearch && matchesDepartment;
-  });
 
   // Define columns for the attendance table
   const columns: ColumnDef<AttendanceRecord>[] = [
@@ -724,7 +694,7 @@ export function AttendanceDashboard({ records, employees }: AttendanceDashboardP
               </div>
               
               {/* Data Table */}
-              <DataTable columns={columns} data={filteredRecords} />
+              <DataTable columns={columns} data={displayRecords} />
               
               {/* Charts Section */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">

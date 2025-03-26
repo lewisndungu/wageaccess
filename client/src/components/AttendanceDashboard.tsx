@@ -41,7 +41,7 @@ const AttendanceDashboard: React.FC = () => {
       setDebugInfo(prev => prev + '\n' + debugMsg);
       
       try {
-        const response = await fetch(`/api/attendance?${params.toString()}`);
+        const response = await fetch(`/api/attendance/all-records?${params.toString()}`);
         const responseText = await response.text();
         
         if (!response.ok) {

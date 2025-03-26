@@ -2,9 +2,10 @@ import type { Express, Request, Response } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { z } from "zod";
-import { insertUserSchema, insertEmployeeSchema, insertAttendanceSchema, insertPayrollSchema, insertEwaRequestSchema, type InsertAttendance } from "@shared/schema";
+import { insertUserSchema, insertEmployeeSchema, insertAttendanceSchema, insertPayrollSchema, insertEwaRequestSchema, type InsertAttendance, type Attendance } from "@shared/schema";
 import { faker } from '@faker-js/faker';
 import { generateEmptyAttendance } from './mock-data-generator';
+import { subDays, addDays, formatISO, startOfMonth, endOfMonth, parseISO, startOfDay, getTime, addSeconds, isSameDay, differenceInHours, differenceInMinutes } from 'date-fns';
 
 // Define a type for the enhanced employee object sent to the client
 interface EnhancedEmployee {
@@ -290,47 +291,36 @@ export async function registerRoutes(app: Express): Promise<Server> {
   
   // Attendance routes
   app.get("/api/attendance", async (req, res) => {
-    const { employeeId, startDate, endDate } = req.query;
+    const { startDate, endDate } = req.query;
     
-    console.log(`Attendance request params:`, {
-      employeeId,
-      startDate,
-      endDate,
-      query: req.query
-    });
-    
-    if (!employeeId || !startDate || !endDate) {
-      console.error(`Missing required parameters. Got: employeeId=${employeeId}, startDate=${startDate}, endDate=${endDate}`);
-      return res.status(400).json({ 
-        message: "Missing required parameters",
-        requiredParams: ['employeeId', 'startDate', 'endDate'],
-        providedParams: req.query
-      });
-    }
+    console.log("GET /api/attendance called with query params:", req.query);
     
     try {
-      console.log(`Fetching attendance for employee ${employeeId} from ${startDate} to ${endDate}`);
+      let attendance: Attendance[];
       
-      const parsedEmployeeId = Number(employeeId);
-      if (isNaN(parsedEmployeeId)) {
-        throw new Error(`Invalid employeeId: ${employeeId}`);
+      // If date range is provided, filter by date range
+      if (startDate && endDate) {
+        console.log(`Fetching all attendance from ${startDate} to ${endDate}`);
+        
+        // Validate dates
+        const parsedStartDate = parseISO(startDate as string);
+        const parsedEndDate = parseISO(endDate as string);
+        
+        if (isNaN(parsedStartDate.getTime()) || isNaN(parsedEndDate.getTime())) {
+          throw new Error(`Invalid date format: startDate=${startDate}, endDate=${endDate}`);
+        }
+        
+        attendance = await storage.getAllAttendanceByDateRange(parsedStartDate, parsedEndDate);
+      } else {
+        // Get all attendance records
+        console.log("Fetching all attendance records without date filtering");
+        attendance = await storage.getAllAttendance();
+        console.log(`Retrieved ${attendance.length} raw attendance records from storage`);
       }
-      
-      // Validate dates
-      const parsedStartDate = new Date(startDate as string);
-      const parsedEndDate = new Date(endDate as string);
-      if (isNaN(parsedStartDate.getTime()) || isNaN(parsedEndDate.getTime())) {
-        throw new Error(`Invalid date format: startDate=${startDate}, endDate=${endDate}`);
-      }
-      
-      const attendance = await storage.getAttendanceByEmployeeAndDateRange(
-        parsedEmployeeId,
-        parsedStartDate,
-        parsedEndDate
-      );
       
       // Enhance the records with additional info for the frontend
-      const enhancedRecords = await Promise.all(attendance.map(async record => {
+      console.log("Enhancing records with employee details...");
+      const enhancedRecords = await Promise.all(attendance.map(async (record: Attendance) => {
         const employee = await storage.getEmployeeWithDetails(record.employeeId);
         return {
           ...record,
@@ -339,13 +329,123 @@ export async function registerRoutes(app: Express): Promise<Server> {
         };
       }));
       
-      console.log(`Found ${enhancedRecords.length} attendance records`);
+      console.log(`Found and enhanced ${enhancedRecords.length} attendance records`);
+      
+      // If we still have no records, generate some mock data
+      if (enhancedRecords.length === 0) {
+        console.log("No attendance records found, creating mock data");
+        
+        // Get some employees to use for mock data
+        const employees = await storage.getAllActiveEmployees();
+        if (employees.length > 0) {
+          console.log(`Using ${employees.length} employees for mock data`);
+          
+          // Generate mock attendance for the last 7 days
+          const mockAttendance = [];
+          const today = new Date();
+          
+          for (let i = 0; i < 7; i++) {
+            const date = new Date(today);
+            date.setDate(date.getDate() - i);
+            
+            for (const employee of employees.slice(0, 5)) { // Use only first 5 employees
+              const employeeWithDetails = await storage.getEmployeeWithDetails(employee.id);
+              
+              // Create a mock attendance record
+              const clockInHour = 8 + Math.floor(Math.random() * 2); // 8-9 AM
+              const clockInMinute = Math.floor(Math.random() * 60);
+              
+              const clockIn = new Date(date);
+              clockIn.setHours(clockInHour, clockInMinute, 0, 0);
+              
+              const hoursWorked = 7 + Math.random() * 2; // 7-9 hours
+              
+              const clockOut = new Date(clockIn);
+              clockOut.setHours(clockOut.getHours() + Math.floor(hoursWorked));
+              clockOut.setMinutes(clockOut.getMinutes() + Math.floor((hoursWorked % 1) * 60));
+              
+              // Determine status based on clock-in time
+              let status = 'present';
+              if (clockInHour > 8 || (clockInHour === 8 && clockInMinute > 15)) {
+                status = 'late';
+              }
+              
+              mockAttendance.push({
+                id: 1000 + mockAttendance.length, // Use IDs starting from 1000
+                employeeId: employee.id,
+                employeeName: employeeWithDetails ? employeeWithDetails.user.name : 'Unknown Employee',
+                department: employeeWithDetails ? employeeWithDetails.department.name : 'Unknown Department',
+                date: formatISO(date),
+                clockInTime: formatISO(clockIn),
+                clockOutTime: formatISO(clockOut),
+                status,
+                hoursWorked: hoursWorked.toFixed(2)
+              });
+            }
+          }
+          
+          console.log(`Generated ${mockAttendance.length} mock attendance records`);
+          return res.status(200).json(mockAttendance);
+        }
+      }
+      
       return res.status(200).json(enhancedRecords);
     } catch (error) {
       console.error("Error fetching attendance:", error);
       return res.status(500).json({ 
         message: "Internal server error", 
         error: error instanceof Error ? error.message : "Unknown error" 
+      });
+    }
+  });
+  
+  app.get("/api/attendance/employee/:id", async (req, res) => {
+    const id = parseInt(req.params.id);
+    const { startDate, endDate } = req.query;
+    
+    if (isNaN(id)) {
+      return res.status(400).json({ message: "Invalid employee ID" });
+    }
+    
+    try {
+      let attendanceRecords;
+      
+      // If date range is provided, filter by date range
+      if (startDate && endDate) {
+        console.log(`Fetching attendance for employee ${id} from ${startDate} to ${endDate}`);
+        
+        // Validate dates
+        const parsedStartDate = parseISO(startDate as string);
+        const parsedEndDate = parseISO(endDate as string);
+        
+        if (isNaN(parsedStartDate.getTime()) || isNaN(parsedEndDate.getTime())) {
+          throw new Error(`Invalid date format: startDate=${startDate}, endDate=${endDate}`);
+        }
+        
+        attendanceRecords = await storage.getAttendanceByEmployeeAndDateRange(
+          id,
+          parsedStartDate,
+          parsedEndDate
+        );
+      } else {
+        // Get all attendance records for this employee
+        attendanceRecords = await storage.getAttendanceForEmployee(id);
+      }
+      
+      // Enhance the records with additional info for the frontend
+      const employee = await storage.getEmployeeWithDetails(id);
+      const enhancedRecords = attendanceRecords.map(record => ({
+        ...record,
+        employeeName: employee ? employee.user.name : 'Unknown Employee',
+        department: employee ? employee.department.name : 'Unknown Department'
+      }));
+      
+      return res.status(200).json(enhancedRecords);
+    } catch (error) {
+      console.error(`Error fetching attendance for employee ${id}:`, error);
+      return res.status(500).json({ 
+        message: "Failed to fetch attendance records", 
+        error: error instanceof Error ? error.message : "Unknown error"
       });
     }
   });
@@ -485,11 +585,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         companyId,
         timestamp,
         location: location || null,
-        exp: new Date(timestamp + expiresIn * 1000).toISOString()
+        exp: formatISO(addSeconds(new Date(timestamp), expiresIn))
       };
       
       // Calculate expiration time
-      const expiresAt = new Date(timestamp + expiresIn * 1000).toISOString();
+      const expiresAt = formatISO(addSeconds(new Date(timestamp), expiresIn));
       
       return res.status(200).json({
         data: qrData,
@@ -519,132 +619,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     
     res.setHeader('Content-Type', 'image/svg+xml');
     res.send(svgQrCode);
-  });
-  
-  app.get("/api/attendance/employee/:id", async (req, res) => {
-    const id = parseInt(req.params.id);
-    
-    if (isNaN(id)) {
-      return res.status(400).json({ message: "Invalid employee ID" });
-    }
-    
-    const attendanceRecords = await storage.getAttendanceForEmployee(id);
-    return res.status(200).json(attendanceRecords);
-  });
-  
-  // Clock In/Out endpoint with enhanced status detection
-  app.post("/api/attendance/clock", async (req, res) => {
-    try {
-      const { employeeId, action, timestamp, location } = req.body;
-      
-      if (!employeeId || !action) {
-        return res.status(400).json({ message: "Employee ID and action are required" });
-      }
-      
-      const employee = await storage.getEmployee(employeeId);
-      
-      if (!employee) {
-        return res.status(404).json({ message: "Employee not found" });
-      }
-      
-      const now = timestamp ? new Date(timestamp) : new Date();
-      const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-      
-      // Logging to help debug
-      console.log(`Processing ${action} for employee ${employeeId} at time ${now.toISOString()}`);
-      console.log(`Today's date: ${today.toISOString()}`);
-      
-      // Check for existing attendance record for today
-      const existingRecords = await storage.getAttendanceForEmployee(employeeId);
-      const todayRecord = existingRecords.find(record => {
-        if (!record.date) return false;
-        const recordDate = new Date(record.date);
-        return recordDate.getFullYear() === today.getFullYear() &&
-               recordDate.getMonth() === today.getMonth() &&
-               recordDate.getDate() === today.getDate();
-      });
-      
-      if (todayRecord) {
-        console.log(`Found existing record for today: ${JSON.stringify(todayRecord)}`);
-      } else {
-        console.log(`No existing record found for employee ${employeeId} today`);
-      }
-      
-      // Define standard work schedule (configurable in a real app)
-      const scheduledStartTimeMinutes = 9 * 60; // 9:00 AM in minutes since midnight
-      const lateWindowMinutes = 15; // 15 minute grace period
-      
-      // Calculate current time in minutes since midnight for comparison
-      const currentTimeMinutes = now.getHours() * 60 + now.getMinutes();
-      
-      let attendance;
-      
-      if (todayRecord) {
-        // Update existing record
-        if (action === 'clockIn' && !todayRecord.clockInTime) {
-          // Determine status based on clock-in time
-          const status = determineAttendanceStatus(now, scheduledStartTimeMinutes, lateWindowMinutes);
-          
-          attendance = await storage.updateAttendance(todayRecord.id, {
-            clockInTime: now,
-            status: status,
-            hoursWorked: "0", // Will be updated on clock-out
-            ...(location ? { geoLocation: JSON.stringify(location) } : {})
-          });
-          
-          console.log(`Updated record with clock-in: ${JSON.stringify(attendance)}`);
-        } else if (action === 'clockOut' && todayRecord.clockInTime && !todayRecord.clockOutTime) {
-          // Calculate hours worked for payroll calculations
-          const clockIn = new Date(todayRecord.clockInTime);
-          const hoursWorked = (now.getTime() - clockIn.getTime()) / (1000 * 60 * 60);
-          console.log(`Employee ${employeeId} worked ${hoursWorked.toFixed(2)} hours`);
-          
-          attendance = await storage.updateAttendance(todayRecord.id, {
-            clockOutTime: now,
-            hoursWorked: hoursWorked.toFixed(2),
-            ...(location ? { geoLocation: JSON.stringify(location) } : {})
-          });
-          
-          console.log(`Updated record with clock-out: ${JSON.stringify(attendance)}`);
-        } else {
-          return res.status(400).json({ 
-            message: action === 'clockIn' 
-              ? "Already clocked in for today" 
-              : "Cannot clock out without clocking in first"
-          });
-        }
-      } else if (action === 'clockIn') {
-        // Create new attendance record for clock in
-        const status = determineAttendanceStatus(now, scheduledStartTimeMinutes, lateWindowMinutes);
-        
-        // Ensure date and clockInTime are properly set
-        const newAttendance: InsertAttendance = {
-          employeeId,
-          date: today,
-          clockInTime: now,
-          clockOutTime: null,
-          status: status,
-          hoursWorked: "0", // Will be updated on clock-out
-          geoLocation: location ? JSON.stringify(location) : null,
-          approvedBy: null,
-          notes: `Self-logged via app: ${action}`
-        };
-        
-        console.log(`Creating new attendance record: ${JSON.stringify(newAttendance)}`);
-        attendance = await storage.createAttendance(newAttendance);
-        console.log(`Created new record: ${JSON.stringify(attendance)}`);
-      } else {
-        return res.status(400).json({ message: "Cannot clock out without clocking in first" });
-      }
-      
-      return res.status(200).json(attendance);
-    } catch (error) {
-      console.error("Error in clock in/out:", error);
-      return res.status(500).json({ 
-        message: "Failed to process attendance", 
-        error: error instanceof Error ? error.message : "Unknown error" 
-      });
-    }
   });
   
   app.post("/api/attendance", validateBody(insertAttendanceSchema), async (req, res) => {
@@ -700,7 +674,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/attendance/all-records", async (req, res) => {
     try {
       // Get all attendance records
-      const allRecords = Array.from(storage.getAllAttendance().values());
+      const allRecords = await storage.getAllAttendance();
       
       // Return all records
       return res.status(200).json(allRecords);
@@ -775,17 +749,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
       storage.clearTodayAttendanceCache?.();
       
       // Get today's date (reset to start of day)
-      const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      const today = startOfDay(now);
       
       // Check for existing attendance record for today
       const existingRecords = await storage.getAttendanceForEmployee(otpCode.employeeId);
       const todayRecord = existingRecords.find(record => {
         if (!record.date) return false;
         const recordDate = new Date(record.date);
-        return recordDate.getFullYear() === today.getFullYear() &&
-               recordDate.getMonth() === today.getMonth() &&
-               recordDate.getDate() === today.getDate();
+        return isSameDay(recordDate, today);
       });
+
+      console.log("todayRecord", todayRecord);
       
       // Define standard work schedule (configurable in a real app)
       const scheduledStartTimeMinutes = 9 * 60; // 9:00 AM in minutes since midnight
@@ -839,7 +813,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         
         // Calculate hours worked
         const clockIn = new Date(todayRecord.clockInTime);
-        const hoursWorked = (now.getTime() - clockIn.getTime()) / (1000 * 60 * 60);
+        const hoursWorked = differenceInHours(now, clockIn) + (differenceInMinutes(now, clockIn) % 60) / 60;
         
         attendance = await storage.updateAttendance(todayRecord.id, {
           clockOutTime: now,
@@ -886,12 +860,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       } else {
         // Return current month's payroll by default
         const now = new Date();
-        startDate = new Date(now.getFullYear(), now.getMonth(), 1);
-        endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+        startDate = startOfMonth(now);
+        endDate = endOfMonth(now);
       }
       
       // Create a cache key based on the query parameters
-      const cacheKey = `payroll:${startDate.toISOString()}:${endDate.toISOString()}`;
+      const cacheKey = `payroll:${formatISO(startDate)}:${formatISO(endDate)}`;
       
       // Simple in-memory cache
       const cache: Record<string, { data: any; timestamp: number }> = (global as any).payrollCache 
@@ -899,12 +873,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Check if we have a recent cached response (valid for 1 minute)
       const cachedResponse = cache[cacheKey];
-      if (cachedResponse && Date.now() - cachedResponse.timestamp < 60000) {
-        console.log(`Using cached payroll data for ${startDate.toISOString()} to ${endDate.toISOString()}`);
+      if (cachedResponse && getTime(new Date()) - cachedResponse.timestamp < 60000) {
+        console.log(`Using cached payroll data for ${formatISO(startDate)} to ${formatISO(endDate)}`);
         return res.status(200).json(cachedResponse.data);
       }
       
-      console.log(`Fetching payroll from ${startDate.toISOString()} to ${endDate.toISOString()}`);
+      console.log(`Fetching payroll from ${formatISO(startDate)} to ${formatISO(endDate)}`);
       
       const payrollRecords = await storage.getPayrollForPeriod(startDate, endDate);
       
@@ -933,7 +907,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Cache the result
       cache[cacheKey] = {
         data: transformedRecords,
-        timestamp: Date.now()
+        timestamp: getTime(new Date())
       };
       
       return res.status(200).json(transformedRecords);
@@ -989,7 +963,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       // Generate a unique reference number for this payroll run
-      const referenceNumber = `PR-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+      const referenceNumber = `PR-${getTime(new Date())}-${Math.floor(Math.random() * 1000)}`;
       
       // Process each employee's payroll and store in database
       const createdPayrolls = [];
@@ -1019,7 +993,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         ...payrollData,
         id: referenceNumber,
         status: "processed",
-        processedAt: new Date().toISOString(),
+        processedAt: formatISO(new Date()),
         payrolls: createdPayrolls
       });
     } catch (error) {
@@ -1095,7 +1069,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // 1. Validate attendance records exist for this employee
       const now = new Date();
-      const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+      const startOfCurrentMonth = startOfMonth(now);
       const attendanceRecords = await storage.getAttendanceForEmployee(employeeId);
       
       // Filter for this month's records
@@ -1103,7 +1077,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // Safely handle date - ensure it's not null
         if (record.date) {
           const recordDate = new Date(record.date);
-          return recordDate >= startOfMonth && recordDate <= now;
+          return recordDate >= startOfCurrentMonth && recordDate <= now;
         }
         return false;
       });
@@ -1242,7 +1216,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       amount: parsedAmount.toString(), // Convert to string for decimal type
       transactionType: 'employer_topup',
       description: 'Employer wallet top-up',
-      referenceId: `TOP-${Date.now()}`,
+      referenceId: `TOP-${getTime(new Date())}`,
       fundingSource,
       status: 'completed'
     });
@@ -1268,8 +1242,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     
     // Get attendance for current month
     const now = new Date();
-    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-    const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+    const startOfCurrentMonth = startOfMonth(now);
+    const endOfCurrentMonth = endOfMonth(now);
     
     // In a real app, these would be calculated from actual records
     // For now, we'll return mock statistics
@@ -1405,7 +1379,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Health check endpoint
   app.get("/api/health", (_req, res) => {
-    res.status(200).json({ status: "ok", timestamp: new Date().toISOString() });
+    res.status(200).json({ status: "ok", timestamp: formatISO(new Date()) });
   });
 
   // Payment details endpoint
@@ -1577,8 +1551,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           monthlyPayment,
           termMonths: loanType.termMonths,
           isActive: true,
-          startDate: new Date(Date.now() - (Math.random() * 10000000000)).toISOString(),
-          nextPaymentDate: new Date(Date.now() + (Math.random() * 2592000000)).toISOString() // Within next 30 days
+          startDate: formatISO(subDays(new Date(), Math.floor(Math.random() * 115))),
+          nextPaymentDate: formatISO(addDays(new Date(), Math.floor(Math.random() * 30)))
         });
       }
       

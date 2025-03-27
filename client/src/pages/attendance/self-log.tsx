@@ -94,66 +94,6 @@ export default function SelfLogPage() {
       </div>
       
       <div className="space-y-6">
-        {/* Status Cards */}
-        <div className="lg:col-span-3 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
-          <Card className="shadow-glass dark:shadow-glass-dark">
-            <CardContent className="pt-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-muted-foreground text-sm">Today's Check-ins</p>
-                  <p className="text-2xl font-bold">{stats.todayCount}</p>
-                </div>
-                <div className="h-10 w-10 bg-primary/10 rounded-full flex items-center justify-center">
-                  <Clock className="h-5 w-5 text-primary" />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-          
-          <Card className="shadow-glass dark:shadow-glass-dark">
-            <CardContent className="pt-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-muted-foreground text-sm">Average Clock-in</p>
-                  <p className="text-2xl font-bold">{stats.averageClockInTime}</p>
-                </div>
-                <div className="h-10 w-10 bg-orange-100 rounded-full flex items-center justify-center">
-                  <Calendar className="h-5 w-5 text-orange-500" />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-          
-          <Card className="shadow-glass dark:shadow-glass-dark">
-            <CardContent className="pt-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-muted-foreground text-sm">Total Employees</p>
-                  <p className="text-2xl font-bold">{stats.uniqueEmployees}</p>
-                </div>
-                <div className="h-10 w-10 bg-green-100 rounded-full flex items-center justify-center">
-                  <Users className="h-5 w-5 text-green-500" />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-          
-          <Card className="shadow-glass dark:shadow-glass-dark">
-            <CardContent className="pt-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-muted-foreground text-sm">Today's Absence</p>
-                  <p className="text-2xl font-bold">{stats.absenceCount}</p>
-                </div>
-                <div className="h-10 w-10 bg-red-100 rounded-full flex items-center justify-center">
-                  <svg className="h-5 w-5 text-red-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
         
         <div className="space-y-6">
           <Card className="shadow-glass dark:shadow-glass-dark">

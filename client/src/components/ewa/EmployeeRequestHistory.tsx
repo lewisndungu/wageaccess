@@ -9,21 +9,10 @@ import { DatePicker } from "@/components/ui/date-picker";
 import { formatKES } from "@/lib/tax-utils";
 import { ewaRequests } from "@/lib/mock-data";
 import { CalendarRange, Download, Filter } from "lucide-react";
+import { EwaRequest } from "@shared/schema";
 
 interface EWARequestHistoryProps {
-  employeeId: number;
-}
-
-interface EWARequest {
-  id: number;
-  requestDate: string;
-  amount: number;
-  processingFee: number;
-  reason: string;
-  status: 'pending' | 'approved' | 'rejected' | 'disbursed';
-  disbursementDate: string | null;
-  daysWorked?: number;
-  earnedWage?: number;
+  employeeId: string;
 }
 
 export function EmployeeRequestHistory({ employeeId }: EWARequestHistoryProps) {
@@ -41,7 +30,7 @@ export function EmployeeRequestHistory({ employeeId }: EWARequestHistoryProps) {
   };
   
   // Get EWA request history for the employee
-  const { data: requestHistory } = useQuery<EWARequest[]>({
+  const { data: requestHistory } = useQuery<EwaRequest[]>({
     queryKey: ['/api/ewa/requests/employee', employeeId],
     initialData: ewaRequests
       .filter((req) => req.employeeId === employeeId)
@@ -56,15 +45,16 @@ export function EmployeeRequestHistory({ employeeId }: EWARequestHistoryProps) {
           new Date(new Date(req.requestDate).getTime() + 1000 * 60 * 60 * 3).toISOString() : null,
         daysWorked: Math.floor(Math.random() * 10) + 10, // Random days between 10-20
         earnedWage: req.amount * 2, // Just for demo purposes
+        employeeId: req.employeeId,
       })),
   });
   
   // Filter the request history based on the date range
-  const filteredHistory = requestHistory.filter((req) => isWithinDateRange(req.requestDate));
+  const filteredHistory = requestHistory.filter((req) => isWithinDateRange(req.requestDate.toString()));
   
   // Calculate summary statistics
   const totalRequested = filteredHistory.reduce((sum, req) => sum + req.amount, 0);
-  const totalFees = filteredHistory.reduce((sum, req) => sum + req.processingFee, 0);
+  const totalFees = filteredHistory.reduce((sum, req) => sum + (req.processingFee || 0), 0);
   const totalAmount = totalRequested + totalFees;
   const approvedCount = filteredHistory.filter((req) => 
     req.status === 'approved' || req.status === 'disbursed'
@@ -81,7 +71,7 @@ export function EmployeeRequestHistory({ employeeId }: EWARequestHistoryProps) {
   };
   
   // Status badge color mapping
-  const getStatusColor = (status: EWARequest['status']) => {
+  const getStatusColor = (status: EwaRequest['status']) => {
     switch (status) {
       case 'pending':
         return 'bg-yellow-100 text-yellow-800 hover:bg-yellow-200';
@@ -97,11 +87,11 @@ export function EmployeeRequestHistory({ employeeId }: EWARequestHistoryProps) {
   };
   
   // Table columns definition
-  const columns: ColumnDef<EWARequest>[] = [
+  const columns: ColumnDef<EwaRequest>[] = [
     {
       accessorKey: "requestDate",
       header: "Request Date",
-      cell: ({ row }) => formatDate(row.original.requestDate),
+      cell: ({ row }) => formatDate(row.original.requestDate.toString()),
     },
     {
       accessorKey: "amount",
@@ -132,10 +122,10 @@ export function EmployeeRequestHistory({ employeeId }: EWARequestHistoryProps) {
       ),
     },
     {
-      accessorKey: "disbursementDate",
+      accessorKey: "disbursedAt",
       header: "Disbursed On",
       cell: ({ row }) => (
-        row.original.disbursementDate ? formatDate(row.original.disbursementDate) : '-'
+        row.original.disbursedAt ? formatDate(row.original.disbursedAt.toString()) : '-'
       ),
     },
   ];

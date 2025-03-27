@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { 
   Dialog, 
@@ -46,10 +45,32 @@ const HelpDialog: React.FC<HelpDialogProps> = ({ open, onOpenChange }) => {
   
   useEffect(() => {
     if (open) {
-      // Get personalized suggestions based on user history
-      const history = chatService.getHistory();
-      const actions = chatService.getSuggestedActions(history);
-      setSuggestedActions(actions);
+      try {
+        // Get personalized suggestions based on user history
+        const history = chatService.getHistory();
+        const actions = chatService.getSuggestedActions(history);
+        setSuggestedActions(actions);
+      } catch (error) {
+        console.error("Error getting suggested actions:", error);
+        // Set default actions if there's an error
+        setSuggestedActions([
+          {
+            id: 'upload-employees',
+            label: 'Upload Employee Data',
+            action: () => {}
+          },
+          {
+            id: 'calculate-payroll',
+            label: 'Calculate Payroll',
+            action: () => {}
+          },
+          {
+            id: 'view-employees',
+            label: 'View All Employees',
+            action: () => {}
+          }
+        ]);
+      }
     }
   }, [open]);
   

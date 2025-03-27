@@ -57,33 +57,17 @@ import {
   formatCurrency,
   formatDate,
 } from "@/lib/mock-data";
-
-interface PayrollRecord {
-  id: number;
-  employeeId: number;
-  employeeName: string;
-  department: string;
-  periodStart: string;
-  periodEnd: string;
-  hoursWorked: number;
-  hourlyRate: number;
-  grossPay: number;
-  ewaDeductions: number;
-  taxDeductions: number;
-  otherDeductions: number;
-  netPay: number;
-  status: string;
-}
+import { Payroll } from '../../../../shared/schema';
 
 interface PayrollDateRange {
-  startDate: string;
-  endDate: string;
+  startDate: Date;
+  endDate: Date;
 }
 
 export default function PayrollPage() {
   const navigate = useNavigate();
   const [payPeriod, setPayPeriod] = useState<"current" | "previous" | "custom">("current");
-  const [dateRange, setDateRange] = useState<PayrollDateRange>({ startDate: "", endDate: "" });
+  const [dateRange, setDateRange] = useState<PayrollDateRange>({ startDate: new Date(), endDate: new Date() });
   const [isProcessingDialogOpen, setIsProcessingDialogOpen] = useState(false);
   
   // For the date range picker
@@ -111,8 +95,8 @@ export default function PayrollPage() {
       });
       
       setDateRange({
-        startDate: startDate.toISOString().split("T")[0],
-        endDate: endDate.toISOString().split("T")[0]
+        startDate: startDate,
+        endDate: endDate
       });
     } else if (payPeriod === "previous") {
       // Previous month: 1st day of previous month to last day of previous month
@@ -126,30 +110,30 @@ export default function PayrollPage() {
       });
       
       setDateRange({
-        startDate: startDate.toISOString().split("T")[0],
-        endDate: endDate.toISOString().split("T")[0]
+        startDate: startDate,
+        endDate: endDate
       });
     } else if (payPeriod === "custom" && date.from && date.to) {
       // Custom range - use the date range picker values
       setDateRange({
-        startDate: date.from.toISOString().split("T")[0],
-        endDate: date.to.toISOString().split("T")[0]
+        startDate: date.from,
+        endDate: date.to
       });
     }
   }, [payPeriod, date]);
 
   // Fetch payroll data with date filtering
-  const { data: records, isLoading, refetch } = useQuery<PayrollRecord[]>({
-    queryKey: ["payroll", dateRange.startDate, dateRange.endDate],
+  const { data: records, isLoading, refetch } = useQuery<Payroll[]>({
+    queryKey: ["payroll", dateRange.startDate.toISOString(), dateRange.endDate.toISOString()],
     queryFn: async () => {
       if (!dateRange.startDate || !dateRange.endDate) {
         return payrollRecords; // Initial data or fallback
       }
       
       try {
-        console.log(`Fetching payroll for ${dateRange.startDate} to ${dateRange.endDate}`);
+        console.log(`Fetching payroll for ${dateRange.startDate.toISOString()} to ${dateRange.endDate.toISOString()}`);
         const response = await fetch(
-          `/api/payroll?startDate=${dateRange.startDate}&endDate=${dateRange.endDate}`
+          `/api/payroll?startDate=${dateRange.startDate.toISOString()}&endDate=${dateRange.endDate.toISOString()}`
         );
         if (!response.ok) {
           throw new Error("Failed to fetch payroll data");
@@ -181,7 +165,7 @@ export default function PayrollPage() {
     setPayPeriod(period);
   };
 
-  const columns: ColumnDef<PayrollRecord>[] = [
+  const columns: ColumnDef<Payroll>[] = [
     {
       accessorKey: "employeeName",
       header: "Employee",
@@ -190,15 +174,15 @@ export default function PayrollPage() {
         return (
           <div className="flex items-center">
             <Avatar className="h-8 w-8 mr-2">
-              <AvatarImage src="" alt={record.employeeName} />
+              <AvatarImage src={record.employee?.profileImage} alt={record.employee?.other_names} />
               <AvatarFallback>
                 <User className="h-4 w-4" />
               </AvatarFallback>
             </Avatar>
             <div>
-              <p className="font-medium text-sm">{record.employeeName}</p>
+              <p className="font-medium text-sm">{record.employee?.other_names} {record.employee?.surname}</p>
               <p className="text-xs text-muted-foreground">
-                {record.department}
+                {record.employee?.department?.name}
               </p>
             </div>
           </div>
@@ -208,7 +192,7 @@ export default function PayrollPage() {
     {
       accessorKey: "hourlyRate",
       header: "Rate",
-      cell: ({ row }) => formatCurrency(row.original.hourlyRate),
+      cell: ({ row }) => formatCurrency(row.original.employee?.hourlyRate),
     },
     {
       accessorKey: "hoursWorked",
@@ -284,11 +268,11 @@ export default function PayrollPage() {
     totalGrossPay: records.reduce((sum, record) => sum + record.grossPay, 0),
     totalNetPay: records.reduce((sum, record) => sum + record.netPay, 0),
     totalEwaDeductions: records.reduce(
-      (sum, record) => sum + record.ewaDeductions,
+      (sum, record) => sum + (record.ewaDeductions || 0),
       0
     ),
     totalTaxDeductions: records.reduce(
-      (sum, record) => sum + record.taxDeductions,
+      (sum, record) => sum + (record.taxDeductions || 0),
       0
     ),
   };

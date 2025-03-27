@@ -9,22 +9,11 @@ import { queryClient } from "@/lib/queryClient";
 import { toast } from "@/hooks/use-toast";
 import { CalendarDays, User } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-
-interface EWARequest {
-  id: number;
-  employeeId: number;
-  employeeName: string;
-  employeeImage?: string;
-  department: string;
-  requestDate: string;
-  amount: number;
-  status: "pending" | "approved" | "rejected" | "disbursed";
-  reason?: string;
-}
+import { EwaRequest } from '../../../../shared/schema';
 
 interface EWARequestCardProps {
-  request: EWARequest;
-  onStatusChange?: () => void;
+  request: EwaRequest;
+  onStatusChange?: (id: string, status: string) => void;
 }
 
 export function EWARequestCard({ request, onStatusChange }: EWARequestCardProps) {
@@ -81,7 +70,7 @@ export function EWARequestCard({ request, onStatusChange }: EWARequestCardProps)
         description: `EWA request for ${formatCurrency(request.amount)} has been approved.`,
       });
       
-      onStatusChange?.();
+      onStatusChange?.(request.id.toString(), 'approved');
     } catch (error) {
       toast({
         title: "Error",
@@ -121,7 +110,7 @@ export function EWARequestCard({ request, onStatusChange }: EWARequestCardProps)
         description: `EWA request for ${formatCurrency(request.amount)} has been rejected.`,
       });
       
-      onStatusChange?.();
+      onStatusChange?.(request.id.toString(), 'rejected');
     } catch (error) {
       toast({
         title: "Error",
@@ -150,7 +139,7 @@ export function EWARequestCard({ request, onStatusChange }: EWARequestCardProps)
         description: `EWA request for ${formatCurrency(request.amount)} has been disbursed.`,
       });
       
-      onStatusChange?.();
+      onStatusChange?.(request.id.toString(), 'disbursed');
     } catch (error) {
       toast({
         title: "Error",
@@ -172,7 +161,7 @@ export function EWARequestCard({ request, onStatusChange }: EWARequestCardProps)
               <div className="mt-1">{getStatusBadge(request.status)}</div>
             </div>
             <Avatar>
-              <AvatarImage src={request.employeeImage} alt={request.employeeName} />
+              <AvatarImage src={request.employee?.profileImage} alt={request.employee?.other_names} />
               <AvatarFallback>
                 <User className="h-4 w-4" />
               </AvatarFallback>
@@ -183,12 +172,12 @@ export function EWARequestCard({ request, onStatusChange }: EWARequestCardProps)
           <div className="space-y-3">
             <div className="flex items-center">
               <User className="h-4 w-4 mr-2 text-muted-foreground" />
-              <span className="text-sm">{request.employeeName}</span>
-              <span className="text-xs text-muted-foreground ml-2">({request.department})</span>
+              <span className="text-sm">{request.employee?.other_names} {request.employee?.surname}</span>
+              <span className="text-xs text-muted-foreground ml-2">({request.employee?.department?.name})</span>
             </div>
             <div className="flex items-center">
               <CalendarDays className="h-4 w-4 mr-2 text-muted-foreground" />
-              <span className="text-xs text-muted-foreground">{formatDate(request.requestDate)}</span>
+              <span className="text-xs text-muted-foreground">{formatDate(request.requestDate.toISOString())}</span>
             </div>
             {request.reason && (
               <div className="pt-2 text-sm border-t">
@@ -255,14 +244,14 @@ export function EWARequestCard({ request, onStatusChange }: EWARequestCardProps)
           <div className="py-4">
             <div className="flex items-center space-x-4">
               <Avatar>
-                <AvatarImage src={request.employeeImage} alt={request.employeeName} />
+                <AvatarImage src={request.employee?.profileImage} alt={request.employee?.other_names} />
                 <AvatarFallback>
                   <User className="h-4 w-4" />
                 </AvatarFallback>
               </Avatar>
               <div>
-                <p className="font-medium">{request.employeeName}</p>
-                <p className="text-sm text-muted-foreground">{request.department}</p>
+                <p className="font-medium">{request.employee?.other_names} {request.employee?.surname}</p>
+                <p className="text-sm text-muted-foreground">{request.employee?.department?.name}</p>
               </div>
             </div>
           </div>

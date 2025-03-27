@@ -20,40 +20,42 @@ import {
   generateEwaRequests,
   generateWallet,
   generateWalletTransactions,
-  generateOtpCodes
+  generateOtpCode
 } from "./mock-data-generator";
+
+import { faker } from '@faker-js/faker';
 
 // Storage interface
 export interface IStorage {
   // User operations
-  getUser(id: number): Promise<User | undefined>;
+  getUser(id: string): Promise<User | undefined>;
   getUserByUsername(username: string): Promise<User | undefined>;
   createUser(user: InsertUser): Promise<User>;
-  updateUser(id: number, user: Partial<User>): Promise<User | undefined>;
+  updateUser(id: string, user: Partial<User>): Promise<User | undefined>;
   
   // Department operations
-  getDepartment(id: number): Promise<Department | undefined>;
+  getDepartment(id: string): Promise<Department | undefined>;
   getAllDepartments(): Promise<Department[]>;
   createDepartment(department: InsertDepartment): Promise<Department>;
   
   // Employee operations
-  getEmployee(id: number): Promise<Employee | undefined>;
+  getEmployee(id: string): Promise<Employee | undefined>;
   getEmployeeByNumber(employeeNumber: string): Promise<Employee | undefined>;
-  getEmployeeWithDetails(id: number): Promise<EmployeeWithDetails | undefined>;
+  getEmployeeWithDetails(id: string): Promise<Employee | undefined>;
   getAllEmployees(): Promise<Employee[]>;
   getAllActiveEmployees(): Promise<Employee[]>;
   getAllInactiveEmployees(): Promise<Employee[]>;
   createEmployee(employee: InsertEmployee): Promise<Employee>;
-  updateEmployee(id: number, employee: Partial<Employee>): Promise<Employee | undefined>;
+  updateEmployee(id: string, employee: Partial<Employee>): Promise<Employee | undefined>;
   
   // Attendance operations
-  getAttendance(id: number): Promise<Attendance | undefined>;
-  getAttendanceForEmployee(employeeId: number): Promise<Attendance[]>;
+  getAttendance(id: string): Promise<Attendance | undefined>;
+  getAttendanceForEmployee(employeeId: string): Promise<Attendance[]>;
   getAttendanceForDate(date: Date): Promise<Attendance[]>;
   createAttendance(attendance: InsertAttendance): Promise<Attendance>;
-  updateAttendance(id: number, attendance: Partial<Attendance>): Promise<Attendance>;
+  updateAttendance(id: string, attendance: Partial<Attendance>): Promise<Attendance>;
   getAttendanceByEmployeeAndDateRange(
-    employeeId: number,
+    employeeId: string,
     startDate: Date,
     endDate: Date
   ): Promise<Attendance[]>;
@@ -64,59 +66,49 @@ export interface IStorage {
   ): Promise<Attendance[]>;
   
   // Payroll operations
-  getPayroll(id: number): Promise<Payroll | undefined>;
-  getPayrollForEmployee(employeeId: number): Promise<Payroll[]>;
+  getPayroll(id: string): Promise<Payroll | undefined>;
+  getPayrollForEmployee(employeeId: string): Promise<Payroll[]>;
   getPayrollForPeriod(startDate: Date, endDate: Date): Promise<Payroll[]>;
   createPayroll(payroll: InsertPayroll): Promise<Payroll>;
-  updatePayroll(id: number, payroll: Partial<Payroll>): Promise<Payroll | undefined>;
+  updatePayroll(id: string, payroll: Partial<Payroll>): Promise<Payroll | undefined>;
   
   // EWA operations
-  getEwaRequest(id: number): Promise<EwaRequest | undefined>;
-  getEwaRequestsForEmployee(employeeId: number): Promise<EwaRequest[]>;
+  getEwaRequest(id: string): Promise<EwaRequest | undefined>;
+  getEwaRequestsForEmployee(employeeId: string): Promise<EwaRequest[]>;
   getPendingEwaRequests(): Promise<EwaRequest[]>;
   getApprovedEwaRequests(): Promise<EwaRequest[]>;
   getDisbursedEwaRequests(): Promise<EwaRequest[]>;
   createEwaRequest(ewaRequest: InsertEwaRequest): Promise<EwaRequest>;
-  updateEwaRequest(id: number, ewaRequest: Partial<EwaRequest>): Promise<EwaRequest | undefined>;
+  updateEwaRequest(id: string, ewaRequest: Partial<EwaRequest>): Promise<EwaRequest | undefined>;
   
   // Wallet operations
   getWallet(): Promise<Wallet | undefined>;
   createWallet(wallet: InsertWallet): Promise<Wallet>;
-  updateWallet(id: number, wallet: Partial<Wallet>): Promise<Wallet | undefined>;
+  updateWallet(id: string, wallet: Partial<Wallet>): Promise<Wallet | undefined>;
   
   // Wallet transaction operations
-  getWalletTransaction(id: number): Promise<WalletTransaction | undefined>;
+  getWalletTransaction(id: string): Promise<WalletTransaction | undefined>;
   getWalletTransactions(): Promise<WalletTransaction[]>;
   createWalletTransaction(transaction: InsertWalletTransaction): Promise<WalletTransaction>;
   
   // OTP operations
   getOtpCode(code: string): Promise<OtpCode | undefined>;
   getOtpCodeByCode(code: string): Promise<OtpCode | undefined>;
-  getOtpCodesForEmployee(employeeId: number): Promise<OtpCode[]>;
+  getOtpCodesForEmployee(employeeId: string): Promise<OtpCode[]>;
   createOtpCode(otpCode: InsertOtpCode): Promise<OtpCode>;
-  updateOtpCode(id: number, otpCode: Partial<OtpCode>): Promise<OtpCode | undefined>;
+  updateOtpCode(id: string, otpCode: Partial<OtpCode>): Promise<OtpCode | undefined>;
 }
 
 export class MemStorage implements IStorage {
-  private users: Map<number, User>;
-  private departments: Map<number, Department>;
-  private employees: Map<number, Employee>;
-  private attendance: Map<number, Attendance>;
-  private payroll: Map<number, Payroll>;
-  private ewaRequests: Map<number, EwaRequest>;
-  private wallets: Map<number, Wallet>;
-  private walletTransactions: Map<number, WalletTransaction>;
-  private otpCodes: Map<number, OtpCode>;
-  
-  private currentUserId: number;
-  private currentDepartmentId: number;
-  private currentEmployeeId: number;
-  private currentAttendanceId: number;
-  private currentPayrollId: number;
-  private currentEwaRequestId: number;
-  private currentWalletId: number;
-  private currentWalletTransactionId: number;
-  private currentOtpCodeId: number;
+  private users: Map<string, User>;
+  private departments: Map<string, Department>;
+  private employees: Map<string, Employee>;
+  private attendance: Map<string, Attendance>;
+  private payroll: Map<string, Payroll>;
+  private ewaRequests: Map<string, EwaRequest>;
+  private wallets: Map<string, Wallet>;
+  private walletTransactions: Map<string, WalletTransaction>;
+  private otpCodes: Map<string, OtpCode>;
   
   // Cache for today's attendance
   private todayAttendanceCache: {
@@ -134,16 +126,6 @@ export class MemStorage implements IStorage {
     this.wallets = new Map();
     this.walletTransactions = new Map();
     this.otpCodes = new Map();
-    
-    this.currentUserId = 1;
-    this.currentDepartmentId = 1;
-    this.currentEmployeeId = 1;
-    this.currentAttendanceId = 1;
-    this.currentPayrollId = 1;
-    this.currentEwaRequestId = 1;
-    this.currentWalletId = 1;
-    this.currentWalletTransactionId = 1;
-    this.currentOtpCodeId = 1;
     
     // Initialize with generated data
     this.initializeData();
@@ -200,15 +182,15 @@ export class MemStorage implements IStorage {
       await this.createWalletTransaction(transaction);
     }
     
-    // Generate OTP codes
-    const otpCodes = generateOtpCodes(allEmployees);
-    for (const code of otpCodes) {
-      await this.createOtpCode(code);
+    // Generate OTP codes for each employee
+    for (const employee of allEmployees) {
+      const otpCode = generateOtpCode(employee.id);
+      await this.createOtpCode(otpCode);
     }
   }
 
   // User operations
-  async getUser(id: number): Promise<User | undefined> {
+  async getUser(id: string): Promise<User | undefined> {
     return this.users.get(id);
   }
 
@@ -219,30 +201,36 @@ export class MemStorage implements IStorage {
   }
 
   async createUser(insertUser: InsertUser): Promise<User> {
-    const id = this.currentUserId++;
+    const id = faker.string.numeric(8).toString();
+    // Create with all required fields explicitly set
     const user: User = {
-      ...insertUser,
       id,
-      createdAt: new Date(),
-      role: insertUser.role || "employee",
-      profileImage: insertUser.profileImage || null,
-      departmentId: insertUser.departmentId || null
+      username: insertUser.username || '',
+      password: insertUser.password || '',
+      role: insertUser.role || 'employee',
+      profileImage: insertUser.profileImage,
+      departmentId: insertUser.departmentId,
+      created_at: insertUser.created_at || new Date(),
+      modified_at: insertUser.modified_at || new Date()
     };
     this.users.set(id, user);
     return user;
   }
   
-  async updateUser(id: number, userData: Partial<User>): Promise<User | undefined> {
+  async updateUser(id: string, userData: Partial<User>): Promise<User | undefined> {
     const user = await this.getUser(id);
     if (!user) return undefined;
     
-    const updatedUser = { ...user, ...userData };
+    const updatedUser = {
+      ...user,
+      ...userData
+    };
     this.users.set(id, updatedUser);
     return updatedUser;
   }
 
   // Department operations
-  async getDepartment(id: number): Promise<Department | undefined> {
+  async getDepartment(id: string): Promise<Department | undefined> {
     return this.departments.get(id);
   }
   
@@ -251,19 +239,52 @@ export class MemStorage implements IStorage {
   }
   
   async createDepartment(departmentData: InsertDepartment): Promise<Department> {
-    const id = this.currentDepartmentId++;
+    const id = faker.string.numeric(8).toString();
     const department: Department = {
       id,
-      name: departmentData.name,
-      description: departmentData.description ?? null
+      name: departmentData.name || '',
+      description: departmentData.description
     };
     this.departments.set(id, department);
     return department;
   }
 
   // Employee operations
-  async getEmployee(id: number): Promise<Employee | undefined> {
-    return this.employees.get(id);
+  async getEmployee(id: string): Promise<Employee | undefined> {
+    console.log(`Storage.getEmployee called with ID: ${id}`);
+    
+    if (!id) {
+      console.log(`Invalid employee ID (empty or undefined)`);
+      return undefined;
+    }
+    
+    // Try direct lookup first with exact ID
+    const employee = this.employees.get(id);
+    
+    if (employee) {
+      console.log(`Found employee via direct map lookup for ID: ${id}`);
+      return employee;
+    }
+    
+    // If direct lookup fails, enumerate through all employees and do a more flexible comparison
+    console.log(`Direct map lookup failed for ID: ${id}, trying flexible comparison`);
+    
+    // Use Array.from to convert the Map entries to an array we can iterate over
+    const employeeEntries = Array.from(this.employees.entries());
+    
+    for (const [key, emp] of employeeEntries) {
+      if (
+        String(key).trim() === id || 
+        String(emp.id).trim() === id ||
+        String(emp.employeeNumber).trim() === id
+      ) {
+        console.log(`Found employee via flexible comparison for ID: ${id}, matched employee with ID: ${emp.id}`);
+        return emp;
+      }
+    }
+    
+    console.log(`No employee found for ID: ${id} after flexible comparison`);
+    return undefined;
   }
   
   async getEmployeeByNumber(employeeNumber: string): Promise<Employee | undefined> {
@@ -272,20 +293,25 @@ export class MemStorage implements IStorage {
     );
   }
   
-  async getEmployeeWithDetails(id: number): Promise<EmployeeWithDetails | undefined> {
+  async getEmployeeWithDetails(id: string): Promise<Employee | undefined> {
+    console.log(`Getting employee with details for ID: ${id}`);
     const employee = await this.getEmployee(id);
-    if (!employee) return undefined;
     
-    const user = await this.getUser(employee.userId);
-    const department = await this.getDepartment(employee.departmentId);
+    if (!employee) {
+      console.log(`No employee found with ID: ${id}`);
+      return undefined;
+    }
     
-    if (!user || !department) return undefined;
-    
-    return {
+    const result: Employee = {
       ...employee,
-      user,
-      department
+      department: {
+        id: employee.departmentId || '',
+        name: employee.role || ''
+      }
     };
+    
+    console.log(`Successfully retrieved employee details for ID: ${id}`);
+    return result;
   }
   
   async getAllEmployees(): Promise<Employee[]> {
@@ -305,30 +331,65 @@ export class MemStorage implements IStorage {
   }
   
   async createEmployee(employeeData: InsertEmployee): Promise<Employee> {
-    const id = this.currentEmployeeId++;
+    const id = employeeData.id || faker.string.uuid();
     const employee: Employee = {
       id,
-      employeeNumber: employeeData.employeeNumber,
-      userId: employeeData.userId,
-      departmentId: employeeData.departmentId,
-      position: employeeData.position,
-      status: employeeData.status ?? "active",
-      hourlyRate: employeeData.hourlyRate,
+      username: (employeeData.username as string) || '',
+      password: (employeeData.password as string) || '',
+      role: (employeeData.role as string) || 'employee',
+      employeeNumber: (employeeData.employeeNumber as string) || '',
+      userId: (employeeData.userId as string) || '', 
+      departmentId: (employeeData.departmentId as string) || '',
+      surname: (employeeData.surname as string) || '',
+      other_names: (employeeData.other_names as string) || '',
+      id_no: (employeeData.id_no as string) || '',
+      tax_pin: employeeData.tax_pin,
+      sex: (employeeData.sex as string) || '',
+      position: (employeeData.position as string) || '',
+      status: (employeeData.status as string) || 'active',
+      is_on_probation: employeeData.is_on_probation || false,
+      gross_income: Number(employeeData.gross_income || 0),
+      net_income: Number(employeeData.net_income || 0),
+      total_deductions: Number(employeeData.total_deductions || 0),
+      loan_deductions: Number(employeeData.loan_deductions || 0),
+      employer_advances: Number(employeeData.employer_advances || 0),
+      total_loan_deductions: Number(employeeData.total_loan_deductions || 0),
+      statutory_deductions: employeeData.statutory_deductions || {},
+      max_salary_advance_limit: Number(employeeData.max_salary_advance_limit || 0),
+      available_salary_advance_limit: Number(employeeData.available_salary_advance_limit || 0),
+      last_withdrawal_time: employeeData.last_withdrawal_time,
+      contact: employeeData.contact || { email: '', phoneNumber: '' },
+      address: employeeData.address,
+      bank_info: employeeData.bank_info || {},
+      id_confirmed: employeeData.id_confirmed || false,
+      mobile_confirmed: employeeData.mobile_confirmed || false,
+      tax_pin_verified: employeeData.tax_pin_verified || false,
+      country: (employeeData.country as string) || 'KE',
+      documents: employeeData.documents || {},
+      crb_reports: employeeData.crb_reports || {},
+      avatar_url: employeeData.avatar_url,
+      hourlyRate: Number(employeeData.hourlyRate || 60),
+      phoneNumber: employeeData.phoneNumber,
       startDate: employeeData.startDate,
-      active: employeeData.active ?? null,
-      phoneNumber: employeeData.phoneNumber ?? null,
-      emergencyContact: employeeData.emergencyContact ?? null,
-      address: employeeData.address ?? null
+      emergencyContact: employeeData.emergencyContact || {},
+      active: employeeData.active ?? true,
+      created_at: employeeData.created_at || new Date(),
+      modified_at: employeeData.modified_at || new Date(),
+      profileImage: employeeData.profileImage
     };
     this.employees.set(id, employee);
     return employee;
   }
   
-  async updateEmployee(id: number, employeeData: Partial<Employee>): Promise<Employee | undefined> {
+  async updateEmployee(id: string, employeeData: Partial<Employee>): Promise<Employee | undefined> {
     const employee = await this.getEmployee(id);
     if (!employee) return undefined;
     
-    const updatedEmployee = { ...employee, ...employeeData };
+    const updatedEmployee = {
+      ...employee,
+      ...employeeData,
+      modified_at: new Date()
+    };
     this.employees.set(id, updatedEmployee);
     return updatedEmployee;
   }
@@ -339,70 +400,39 @@ export class MemStorage implements IStorage {
   }
 
   // Attendance operations
-  async getAttendance(id: number): Promise<Attendance | undefined> {
+  async getAttendance(id: string): Promise<Attendance | undefined> {
     return this.attendance.get(id);
   }
   
-  async getAttendanceForEmployee(employeeId: number): Promise<Attendance[]> {
+  async getAttendanceForEmployee(employeeId: string): Promise<Attendance[]> {
     return Array.from(this.attendance.values()).filter(
       (attendance) => attendance.employeeId === employeeId
     );
   }
   
   async getAttendanceForDate(date: Date): Promise<Attendance[]> {
-    const normalizedDate = new Date(
-      date.getFullYear(),
-      date.getMonth(),
-      date.getDate()
-    );
-    const today = new Date(
-      new Date().getFullYear(),
-      new Date().getMonth(),
-      new Date().getDate()
-    );
-
-    // If requesting today's attendance and we have cached data, return it
-    if (normalizedDate.getTime() === today.getTime() && this.todayAttendanceCache) {
-      return this.todayAttendanceCache.records;
-    }
-
-    // Get base records
-    const records = Array.from(this.attendance.values()).filter(
+    const dateString = date.toISOString().split('T')[0];
+    return Array.from(this.attendance.values()).filter(
       (attendance) => {
         if (!attendance.date) return false;
-        const attendanceDate = attendance.date;
-        return (
-          attendanceDate.getFullYear() === date.getFullYear() &&
-          attendanceDate.getMonth() === date.getMonth() &&
-          attendanceDate.getDate() === date.getDate()
-        );
+        return attendance.date.toString().split('T')[0] === dateString;
       }
     );
-
-    // If it's today, cache the results
-    if (normalizedDate.getTime() === today.getTime()) {
-      this.todayAttendanceCache = {
-        date: normalizedDate,
-        records
-      };
-    }
-
-    return records;
   }
   
   async createAttendance(attendanceData: InsertAttendance): Promise<Attendance> {
-    const id = this.currentAttendanceId++;
+    const id = faker.string.numeric(8).toString();
     const attendance: Attendance = {
       id,
-      employeeId: attendanceData.employeeId,
-      status: attendanceData.status,
-      date: attendanceData.date ?? null,
-      clockInTime: attendanceData.clockInTime ?? null,
-      clockOutTime: attendanceData.clockOutTime ?? null,
-      hoursWorked: attendanceData.hoursWorked ?? null,
-      geoLocation: attendanceData.geoLocation ?? null,
-      approvedBy: attendanceData.approvedBy ?? null,
-      notes: attendanceData.notes ?? null
+      status: attendanceData.status || '',
+      employeeId: attendanceData.employeeId || '',
+      date: attendanceData.date,
+      clockInTime: attendanceData.clockInTime,
+      clockOutTime: attendanceData.clockOutTime,
+      hoursWorked: attendanceData.hoursWorked,
+      geoLocation: attendanceData.geoLocation || {},
+      approvedBy: attendanceData.approvedBy,
+      notes: attendanceData.notes
     };
     this.attendance.set(id, attendance);
     
@@ -412,13 +442,17 @@ export class MemStorage implements IStorage {
     return attendance;
   }
   
-  async updateAttendance(id: number, updateData: Partial<Attendance>): Promise<Attendance> {
+  async updateAttendance(id: string, updateData: Partial<Attendance>): Promise<Attendance> {
     const attendance = this.attendance.get(id);
     if (!attendance) {
       throw new Error(`Attendance record with ID ${id} not found`);
     }
     
-    const updatedAttendance = { ...attendance, ...updateData };
+    const updatedAttendance = {
+      ...attendance,
+      ...updateData,
+      modified_at: new Date().toISOString()
+    };
     this.attendance.set(id, updatedAttendance);
     
     // Clear cache after updating attendance
@@ -428,23 +462,25 @@ export class MemStorage implements IStorage {
   }
 
   async getAttendanceByEmployeeAndDateRange(
-    employeeId: number,
+    employeeId: string,
     startDate: Date,
     endDate: Date
   ): Promise<Attendance[]> {
-    // Get all attendance records for the employee
-    const allRecords = await this.getAttendanceForEmployee(employeeId);
-    
-    // Filter by date range
-    return allRecords.filter(record => {
-      const recordDate = record.date ? new Date(record.date) : null;
-      if (!recordDate) return false;
-      
-      return recordDate >= startDate && recordDate <= endDate;
+    const startDateString = startDate.toISOString().split('T')[0];
+    const endDateString = endDate.toISOString().split('T')[0];
+
+    return Array.from(this.attendance.values()).filter((attendance) => {
+      if (!attendance.date) return false;
+      const attendanceDate = attendance.date.toString().split('T')[0];
+      return (
+        attendance.employeeId === employeeId &&
+        attendanceDate >= startDateString &&
+        attendanceDate <= endDateString
+      );
     });
   }
 
-  async deleteAttendance(id: number): Promise<boolean> {
+  async deleteAttendance(id: string): Promise<boolean> {
     if (!this.attendance.has(id)) {
       return false;
     }
@@ -459,7 +495,6 @@ export class MemStorage implements IStorage {
 
   // Get all attendance records
   getAllAttendance(): Promise<Attendance[]> {
-    console.log('getAllAttendance called, returning:', this.attendance.size, 'records');
     return Promise.resolve(Array.from(this.attendance.values()));
   }
 
@@ -467,82 +502,84 @@ export class MemStorage implements IStorage {
     startDate: Date,
     endDate: Date
   ): Promise<Attendance[]> {
-    console.log(`getAllAttendanceByDateRange called with dates: ${startDate} to ${endDate}`);
-    const attendance = Array.from(this.attendance.values());
-    const filtered = attendance.filter(record => {
-      if (!record.date) return false;
-      const recordDate = new Date(record.date);
-      return recordDate >= startDate && recordDate <= endDate;
+    const startDateString = startDate.toISOString().split('T')[0];
+    const endDateString = endDate.toISOString().split('T')[0];
+
+    return Array.from(this.attendance.values()).filter((attendance) => {
+      if (!attendance.date) return false;
+      const attendanceDate = attendance.date.toString().split('T')[0];
+      return (
+        attendanceDate >= startDateString &&
+        attendanceDate <= endDateString
+      );
     });
-    console.log(`Filtered down to ${filtered.length} records`);
-    return filtered;
   }
 
   // Payroll operations
-  async getPayroll(id: number): Promise<Payroll | undefined> {
+  async getPayroll(id: string): Promise<Payroll | undefined> {
     return this.payroll.get(id);
   }
   
-  async getPayrollForEmployee(employeeId: number): Promise<Payroll[]> {
+  async getPayrollForEmployee(employeeId: string): Promise<Payroll[]> {
     return Array.from(this.payroll.values()).filter(
       (payroll) => payroll.employeeId === employeeId
     );
   }
   
   async getPayrollForPeriod(startDate: Date, endDate: Date): Promise<Payroll[]> {
-    return Array.from(this.payroll.values()).filter(
-      (payroll) => {
-        const periodStart = new Date(payroll.periodStart);
-        const periodEnd = new Date(payroll.periodEnd);
-        // Check if the payroll period overlaps with the requested period
-        return (
-          // Either the payroll period starts within our requested range
-          (periodStart >= startDate && periodStart <= endDate) ||
-          // Or the payroll period ends within our requested range
-          (periodEnd >= startDate && periodEnd <= endDate) ||
-          // Or the payroll period completely encompasses our requested range
-          (periodStart <= startDate && periodEnd >= endDate)
-        );
-      }
-    );
+    const startDateString = startDate.toISOString().split('T')[0];
+    const endDateString = endDate.toISOString().split('T')[0];
+
+    return Array.from(this.payroll.values()).filter((payroll) => {
+      const periodStart = payroll.periodStart.toString().split('T')[0];
+      const periodEnd = payroll.periodEnd.toString().split('T')[0];
+      return (
+        periodStart >= startDateString &&
+        periodEnd <= endDateString
+      );
+    });
   }
   
   async createPayroll(payrollData: InsertPayroll): Promise<Payroll> {
-    const id = this.currentPayrollId++;
+    const id = faker.string.numeric(8).toString();
     const payroll: Payroll = {
       id,
-      employeeId: payrollData.employeeId,
-      status: payrollData.status,
-      periodStart: payrollData.periodStart,
-      periodEnd: payrollData.periodEnd,
-      hoursWorked: payrollData.hoursWorked,
-      grossPay: payrollData.grossPay,
-      netPay: payrollData.netPay,
-      ewaDeductions: payrollData.ewaDeductions ?? null,
-      taxDeductions: payrollData.taxDeductions ?? null,
-      otherDeductions: payrollData.otherDeductions ?? null,
-      processedAt: null,
-      processedBy: null
+      status: payrollData.status || '',
+      employeeId: payrollData.employeeId || '',
+      hoursWorked: Number(payrollData.hoursWorked || 0),
+      periodStart: payrollData.periodStart || new Date(),
+      periodEnd: payrollData.periodEnd || new Date(),
+      grossPay: Number(payrollData.grossPay || 0),
+      ewaDeductions: payrollData.ewaDeductions,
+      taxDeductions: payrollData.taxDeductions,
+      otherDeductions: payrollData.otherDeductions,
+      netPay: Number(payrollData.netPay || 0),
+      processedAt: new Date(),
+      processedBy: payrollData.processedBy || ''
     };
     this.payroll.set(id, payroll);
     return payroll;
   }
   
-  async updatePayroll(id: number, payrollData: Partial<Payroll>): Promise<Payroll | undefined> {
+  async updatePayroll(id: string, payrollData: Partial<Payroll>): Promise<Payroll | undefined> {
     const payroll = await this.getPayroll(id);
     if (!payroll) return undefined;
     
-    const updatedPayroll = { ...payroll, ...payrollData };
+    const updatedPayroll = {
+      ...payroll,
+      ...payrollData,
+      modified_at: new Date()
+    };
     this.payroll.set(id, updatedPayroll);
     return updatedPayroll;
   }
 
   // EWA operations
-  async getEwaRequest(id: number): Promise<EwaRequest | undefined> {
+  async getEwaRequest(id: string): Promise<EwaRequest | undefined> {
     return this.ewaRequests.get(id);
   }
   
-  async getEwaRequestsForEmployee(employeeId: number): Promise<EwaRequest[]> {
+  async getEwaRequestsForEmployee(employeeId: string): Promise<EwaRequest[]> {
     return Array.from(this.ewaRequests.values()).filter(
       (ewaRequest) => ewaRequest.employeeId === employeeId
     );
@@ -567,67 +604,70 @@ export class MemStorage implements IStorage {
   }
   
   async createEwaRequest(ewaRequestData: InsertEwaRequest): Promise<EwaRequest> {
-    const id = this.currentEwaRequestId++;
-    const ewaRequest: EwaRequest = { 
-      id, 
-      employeeId: ewaRequestData.employeeId,
-      amount: ewaRequestData.amount,
-      status: ewaRequestData.status ?? "pending",
+    const id = faker.string.numeric(8).toString();
+    const ewaRequest: EwaRequest = {
+      id,
+      status: ewaRequestData.status || '',
+      employeeId: ewaRequestData.employeeId || '',
+      approvedBy: ewaRequestData.approvedBy,
       requestDate: new Date(),
-      approvedAt: null,
-      disbursedAt: null,
-      approvedBy: ewaRequestData.approvedBy ?? null,
-      processingFee: ewaRequestData.processingFee ?? null,
-      reason: ewaRequestData.reason ?? null,
-      rejectionReason: ewaRequestData.rejectionReason ?? null
+      amount: Number(ewaRequestData.amount || 0),
+      processingFee: ewaRequestData.processingFee,
+      approvedAt: new Date(),
+      disbursedAt: new Date(),
+      reason: ewaRequestData.reason,
+      rejectionReason: ewaRequestData.rejectionReason
     };
     this.ewaRequests.set(id, ewaRequest);
     return ewaRequest;
   }
   
-  async updateEwaRequest(id: number, ewaRequestData: Partial<EwaRequest>): Promise<EwaRequest | undefined> {
+  async updateEwaRequest(id: string, ewaRequestData: Partial<EwaRequest>): Promise<EwaRequest | undefined> {
     const ewaRequest = await this.getEwaRequest(id);
     if (!ewaRequest) return undefined;
     
-    const updatedEwaRequest = { ...ewaRequest, ...ewaRequestData };
+    const updatedEwaRequest = {
+      ...ewaRequest,
+      ...ewaRequestData,
+      modified_at: new Date()
+    };
     this.ewaRequests.set(id, updatedEwaRequest);
     return updatedEwaRequest;
   }
 
   // Wallet operations
   async getWallet(): Promise<Wallet | undefined> {
-    // Return the first wallet (we only have one for the company)
-    return this.wallets.get(1);
+    return Array.from(this.wallets.values())[0];
   }
   
   async createWallet(walletData: InsertWallet): Promise<Wallet> {
-    const id = this.currentWalletId++;
+    const id = faker.string.numeric(8).toString();
     const wallet: Wallet = {
       id,
-      employerBalance: walletData.employerBalance ?? "0",
-      jahaziiBalance: walletData.jahaziiBalance ?? "0",
-      perEmployeeCap: walletData.perEmployeeCap ?? "3000",
+      employerBalance: Number(walletData.employerBalance || 0),
+      jahaziiBalance: Number(walletData.jahaziiBalance || 0),
+      perEmployeeCap: Number(walletData.perEmployeeCap || 0),
       updatedAt: new Date()
     };
     this.wallets.set(id, wallet);
     return wallet;
   }
   
-  async updateWallet(id: number, walletData: Partial<Wallet>): Promise<Wallet | undefined> {
+  async updateWallet(id: string, walletData: Partial<Wallet>): Promise<Wallet | undefined> {
     const wallet = await this.getWallet();
     if (!wallet) return undefined;
     
-    const updatedWallet = { 
-      ...wallet, 
+    const updatedWallet = {
+      ...wallet,
       ...walletData,
-      updatedAt: new Date()
+      modified_at: new Date()
     };
     this.wallets.set(id, updatedWallet);
     return updatedWallet;
   }
 
   // Wallet transaction operations
-  async getWalletTransaction(id: number): Promise<WalletTransaction | undefined> {
+  async getWalletTransaction(id: string): Promise<WalletTransaction | undefined> {
     return this.walletTransactions.get(id);
   }
   
@@ -636,17 +676,17 @@ export class MemStorage implements IStorage {
   }
   
   async createWalletTransaction(transactionData: InsertWalletTransaction): Promise<WalletTransaction> {
-    const id = this.currentWalletTransactionId++;
-    const transaction: WalletTransaction = { 
+    const id = faker.string.numeric(8).toString();
+    const transaction: WalletTransaction = {
       id,
-      walletId: transactionData.walletId,
-      amount: transactionData.amount,
-      transactionType: transactionData.transactionType,
-      fundingSource: transactionData.fundingSource,
-      status: transactionData.status ?? "completed",
-      description: transactionData.description ?? null,
+      status: transactionData.status || '',
+      description: transactionData.description || '',
+      amount: Number(transactionData.amount || 0),
+      walletId: transactionData.walletId || '',
+      transactionType: transactionData.transactionType || '',
       transactionDate: new Date(),
-      referenceId: transactionData.referenceId ?? null
+      referenceId: transactionData.referenceId || '',
+      fundingSource: transactionData.fundingSource || ''
     };
     this.walletTransactions.set(id, transaction);
     return transaction;
@@ -661,35 +701,41 @@ export class MemStorage implements IStorage {
   
   // Add a method to get OTP code by code string (alias for getOtpCode for clarity)
   async getOtpCodeByCode(code: string): Promise<OtpCode | undefined> {
-    return this.getOtpCode(code);
+    return Array.from(this.otpCodes.values()).find(
+      (otpCode) => otpCode.code === code
+    );
   }
   
-  async getOtpCodesForEmployee(employeeId: number): Promise<OtpCode[]> {
+  async getOtpCodesForEmployee(employeeId: string): Promise<OtpCode[]> {
     return Array.from(this.otpCodes.values()).filter(
       (otpCode) => otpCode.employeeId === employeeId
     );
   }
   
   async createOtpCode(otpCodeData: InsertOtpCode): Promise<OtpCode> {
-    const id = this.currentOtpCodeId++;
-    const otpCode: OtpCode = { 
+    const id = faker.string.numeric(8).toString();
+    const otpCode: OtpCode = {
       id,
-      employeeId: otpCodeData.employeeId,
-      code: otpCodeData.code,
-      expiresAt: otpCodeData.expiresAt,
+      employeeId: otpCodeData.employeeId || '',
+      code: otpCodeData.code || '',
+      expiresAt: otpCodeData.expiresAt || new Date(),
+      used: otpCodeData.used || false,
       createdAt: new Date(),
-      used: otpCodeData.used ?? false
     };
     this.otpCodes.set(id, otpCode);
     return otpCode;
   }
   
-  async updateOtpCode(id: number, otpCodeData: Partial<OtpCode>): Promise<OtpCode | undefined> {
+  async updateOtpCode(id: string, otpCodeData: Partial<OtpCode>): Promise<OtpCode | undefined> {
     // First find the OTP code by ID
     const existingOtpCode = Array.from(this.otpCodes.values()).find(otp => otp.id === id);
     if (!existingOtpCode) return undefined;
     
-    const updatedOtpCode = { ...existingOtpCode, ...otpCodeData };
+    const updatedOtpCode = {
+      ...existingOtpCode,
+      ...otpCodeData,
+      modified_at: new Date().toISOString()
+    };
     this.otpCodes.set(id, updatedOtpCode);
     return updatedOtpCode;
   }
@@ -701,7 +747,7 @@ export class MemStorage implements IStorage {
     
     try {
       // Find and remove today's attendance records from in-memory storage
-      const todayRecordIds: number[] = [];
+      const todayRecordIds: string[] = [];
       
       // Identify records from today
       this.attendance.forEach((record, id) => {
@@ -729,11 +775,202 @@ export class MemStorage implements IStorage {
       throw error;
     }
   }
+
+  async findEmployees(options: { query: string }): Promise<any[]> {
+    const { query } = options;
+    const lowerQuery = query.toLowerCase();
+    
+    // Search in the memory storage employees
+    const allEmployees = await this.getAllEmployees();
+    const results = [];
+    
+    for (const emp of allEmployees) {
+      // Get user data to get name
+      const user = await this.getUser(emp.userId.toString());
+      if (!user) continue;
+      
+      // Get department
+      const department = await this.getDepartment(emp.departmentId.toString());
+      
+      const name = user.username;
+      const position = emp.position;
+      const departmentName = department?.name || 'Unknown';
+      
+      // Process address and emergency contact fields
+      let addressObj: Record<string, any> = {};
+      let emergencyContactObj: Record<string, any> = {};
+      
+      // Parse the address field if it's a JSON string
+      if (typeof emp.address === 'string' && 
+          (emp.address.startsWith('{') || emp.address.startsWith('['))) {
+        try {
+          addressObj = JSON.parse(emp.address);
+        } catch (e) {
+          console.error(`Failed to parse address for employee ${emp.id}: ${e}`);
+        }
+      } else if (emp.address && typeof emp.address === 'object') {
+        addressObj = emp.address as Record<string, any>;
+      }
+      
+      // Parse the emergencyContact field if it's a JSON string
+      if (typeof emp.emergencyContact === 'string' && 
+          (emp.emergencyContact.startsWith('{') || emp.emergencyContact.startsWith('['))) {
+        try {
+          emergencyContactObj = JSON.parse(emp.emergencyContact);
+        } catch (e) {
+          console.error(`Failed to parse emergencyContact for employee ${emp.id}: ${e}`);
+        }
+      } else if (emp.emergencyContact && typeof emp.emergencyContact === 'object') {
+        emergencyContactObj = emp.emergencyContact as Record<string, any>;
+      }
+      
+      // Extract additional details from address object if available
+      const idNumber = addressObj.idNumber || '';
+      const kraPin = addressObj.kraPin || '';
+      const nssfNo = addressObj.nssfNo || '';
+      const nhifNo = addressObj.nhifNo || '';
+      
+      // Check if the query matches any employee field
+      if (
+        name.toLowerCase().includes(lowerQuery) ||
+        position.toLowerCase().includes(lowerQuery) ||
+        emp.employeeNumber.includes(query) ||
+        departmentName.toLowerCase().includes(lowerQuery) ||
+        (idNumber && idNumber.toString().includes(query)) ||
+        (kraPin && kraPin.toString().toLowerCase().includes(lowerQuery)) ||
+        (nssfNo && nssfNo.toString().includes(query)) ||
+        (nhifNo && nhifNo.toString().includes(query))
+      ) {
+        // Format employee with needed data
+        results.push({
+          id: emp.id.toString(),
+          name,
+          position,
+          department: departmentName,
+          employeeNumber: emp.employeeNumber,
+          salary: emp.hourlyRate,
+          email: user.username + '@company.com',
+          hireDate: emp.startDate,
+          idNumber,
+          kraPin,
+          nssfNo,
+          nhifNo,
+          status: emp.status,
+          phoneNumber: emp.phoneNumber,
+          address: addressObj,
+          emergencyContact: emergencyContactObj,
+          profileImage: user.profileImage || faker.image.avatar()
+        });
+      }
+    }
+    
+    return results;
+  }
+
+  async addEmployees(employees: Employee[]): Promise<number> {
+    let addedCount = 0;
+    console.log(`addEmployees: Processing ${employees.length} employees for import`);
+    
+    for (const emp of employees) {
+      try {
+        const newEmployee = await this.createEmployee(emp);
+        const fullName = `${emp.other_names} ${emp.surname}`.trim();
+        console.log(`addEmployees: Created new employee ${fullName}, employee number: ${newEmployee.employeeNumber}, employee ID: ${newEmployee.id}, active: ${newEmployee.active}`);
+        addedCount++;
+      } catch (error) {
+        console.error('Error adding employee:', error);
+      }
+    }
+    
+    console.log(`addEmployees: Completed adding ${addedCount} new employees`);
+    return addedCount;
+  }
+
+  async getEmployees(employeeIds: string[]): Promise<any[]> {
+    const result = [];
+    
+    for (const id of employeeIds) {
+      try {
+        const employee = await this.getEmployee(id);
+        if (!employee) continue;
+        
+        // Get user data - convert numeric ID to string
+        const user = await this.getUser(employee.userId.toString());
+        if (!user) continue;
+        
+        // Get department - convert numeric ID to string
+        const department = await this.getDepartment(employee.departmentId.toString());
+        
+        result.push({
+          id: employee.id,
+          name: user.username,
+          position: employee.position,
+          department: department?.name || 'Unknown',
+          salary: employee.hourlyRate,
+          email: user.username + '@company.com',
+          hireDate: employee.startDate
+        });
+      } catch (error) {
+        console.error('Error getting employee:', error);
+      }
+    }
+    
+    return result;
+  }
 }
 
 export const storage = new MemStorage();
 
-// Chat storage schema
+// Helper function to generate IDs
+export function generateId(): string {
+  return Date.now().toString() + Math.random().toString(36).substring(2, 9);
+}
+
+export class MemCollection<T extends Record<string, any>> {
+  private data: T[] = [];
+  private collectionName: string;
+  
+  constructor(name: string) {
+    this.collectionName = name;
+  }
+  
+  async find(query: Partial<T> = {}): Promise<T[]> {
+    return this.data.filter(item => {
+      for (const [key, value] of Object.entries(query)) {
+        if (item[key] !== value) return false;
+      }
+      return true;
+    });
+  }
+  
+  async findOne(query: Partial<T>): Promise<T | null> {
+    const results = await this.find(query);
+    return results.length > 0 ? results[0] : null;
+  }
+  
+  async insertOne(document: T): Promise<void> {
+    this.data.push(document);
+  }
+  
+  async updateOne(query: Partial<T>, update: T): Promise<void> {
+    const item = await this.findOne(query);
+    if (item) {
+      const index = this.data.indexOf(item);
+      this.data[index] = update;
+    }
+  }
+  
+  async deleteOne(query: Partial<T>): Promise<boolean> {
+    const item = await this.findOne(query);
+    if (item) {
+      const index = this.data.indexOf(item);
+      this.data.splice(index, 1);
+      return true;
+    }
+    return false;
+  }
+}
+
 interface ChatMessage {
   id: string;
   userId: string;
@@ -816,4 +1053,240 @@ export async function saveSearch(userId: string, search: string): Promise<void> 
   const updatedSearches = [search, ...history.searches].slice(0, 10); // Keep last 10 searches
   
   await saveUserChatHistory(userId, { searches: updatedSearches });
+}
+
+// Employee search and management functions for chat service
+export async function findEmployees(options: { query: string }): Promise<any[]> {
+  const { query } = options;
+  const lowerQuery = query.toLowerCase();
+  
+  // Search in the memory storage employees
+  const allEmployees = await storage.getAllEmployees();
+  const results = [];
+  
+  for (const emp of allEmployees) {
+    // Get user data to get name
+    const user = await storage.getUser(emp.userId.toString());
+    if (!user) continue;
+    
+    // Get department
+    const department = await storage.getDepartment(emp.departmentId.toString());
+    
+    const name = user.username;
+    const position = emp.position;
+    const departmentName = department?.name || 'Unknown';
+    
+    // Process address and emergency contact fields
+    let addressObj: Record<string, any> = {};
+    let emergencyContactObj: Record<string, any> = {};
+    
+    // Parse the address field if it's a JSON string
+    if (typeof emp.address === 'string' && 
+        (emp.address.startsWith('{') || emp.address.startsWith('['))) {
+      try {
+        addressObj = JSON.parse(emp.address);
+      } catch (e) {
+        console.error(`Failed to parse address for employee ${emp.id}: ${e}`);
+      }
+    } else if (emp.address && typeof emp.address === 'object') {
+      addressObj = emp.address as Record<string, any>;
+    }
+    
+    // Parse the emergencyContact field if it's a JSON string
+    if (typeof emp.emergencyContact === 'string' && 
+        (emp.emergencyContact.startsWith('{') || emp.emergencyContact.startsWith('['))) {
+      try {
+        emergencyContactObj = JSON.parse(emp.emergencyContact);
+      } catch (e) {
+        console.error(`Failed to parse emergencyContact for employee ${emp.id}: ${e}`);
+      }
+    } else if (emp.emergencyContact && typeof emp.emergencyContact === 'object') {
+      emergencyContactObj = emp.emergencyContact as Record<string, any>;
+    }
+    
+    // Extract additional details from address object if available
+    const idNumber = addressObj.idNumber || '';
+    const kraPin = addressObj.kraPin || '';
+    const nssfNo = addressObj.nssfNo || '';
+    const nhifNo = addressObj.nhifNo || '';
+    
+    // Check if the query matches any employee field
+    if (
+      name.toLowerCase().includes(lowerQuery) ||
+      position.toLowerCase().includes(lowerQuery) ||
+      emp.employeeNumber.includes(query) ||
+      departmentName.toLowerCase().includes(lowerQuery) ||
+      (idNumber && idNumber.toString().includes(query)) ||
+      (kraPin && kraPin.toString().toLowerCase().includes(lowerQuery)) ||
+      (nssfNo && nssfNo.toString().includes(query)) ||
+      (nhifNo && nhifNo.toString().includes(query))
+    ) {
+      // Format employee with needed data
+      results.push({
+        id: emp.id.toString(),
+        name,
+        position,
+        department: departmentName,
+        employeeNumber: emp.employeeNumber,
+        salary: emp.hourlyRate,
+        email: user.username + '@company.com',
+        hireDate: emp.startDate,
+        idNumber,
+        kraPin,
+        nssfNo,
+        nhifNo,
+        status: emp.status,
+        phoneNumber: emp.phoneNumber,
+        address: addressObj,
+        emergencyContact: emergencyContactObj,
+        profileImage: user.profileImage || faker.image.avatar()
+      });
+    }
+  }
+  
+  return results;
+}
+
+export async function addEmployees(employees: any[]): Promise<number> {
+  let addedCount = 0;
+  console.log(`addEmployees: Processing ${employees.length} employees for import`);
+  
+  for (const emp of employees) {
+    try {
+      // Extract employee identification fields
+      const empNo = emp['Emp No'] || emp['employeeNumber'] || '';
+      const idNumber = emp['ID Number'] || emp['id_no'] || '';
+      
+      // Look for existing employee
+      let existingEmp = null;
+      if (empNo) {
+        existingEmp = await storage.getEmployeeByNumber(empNo);
+      }
+      
+      // Get name from MongoDB structure or legacy fields
+      const firstName = emp['First Name'] || emp['other_names'] || '';
+      const lastName = emp['Last Name'] || emp['surname'] || '';
+      const fullName = `${firstName} ${lastName}`.trim();
+      
+      if (!existingEmp) {
+        // Create user first
+        const username = fullName.toLowerCase().replace(/\s+/g, '.').replace(/[^a-z0-9.]/g, '');
+        const email = emp['email'] || `${username}@company.com`;
+        
+        const user = await storage.createUser({
+          username,
+          password: 'default-password',
+          role: emp['role'] || 'employee',
+          departmentId: emp['departmentId']?.toString(),
+          created_at: new Date(),
+          modified_at: new Date()
+        });
+        
+        // Extract fields using MongoDB structure with fallbacks to legacy fields
+        const position = emp['position'] || emp['Position'] || 'Employee';
+        const grossPay = emp['gross_income'] || emp['Gross Pay'] || 0;
+        const status = emp['status'] || 'active';
+        
+        // Handle statutory deductions
+        const statutoryDeductions = emp['statutory_deductions'] || {
+          nhif: emp['nhif'] || 0,
+          nssf: emp['nssf'] || emp['nssf_no'] || 0,
+          paye: emp['paye'] || 0,
+          levies: emp['levy'] || 0
+        };
+        
+        // Handle contact details
+        const mobile = emp['contact']?.['mobile'] || emp['phoneNumber'] || null;
+        const city = emp['contact']?.['city'] || null;
+        
+        // Generate a new UUID on the server
+        const employeeId = faker.string.uuid();
+        console.log(`Generated new employee ID: ${employeeId}`);
+        
+        // Create MongoDB-compatible employee record
+        const newEmployee = await storage.createEmployee({
+          id: employeeId,
+          employeeNumber: empNo || `EMP${Date.now().toString().substring(7)}`,
+          userId: user.id,
+          departmentId: emp['departmentId'] || '1',
+          surname: lastName,
+          other_names: firstName,
+          id_no: idNumber,
+          tax_pin: emp['tax_pin'] || emp['KRA Pin'] || '',
+          sex: emp['sex'] || 'unknown',
+          position: position,
+          gross_income: grossPay.toString(),
+          net_income: (emp['net_income'] || 0).toString(),
+          total_deductions: (emp['total_deductions'] || 0).toString(),
+          loan_deductions: (emp['loan_deductions'] || 0).toString(),
+          employer_advances: (emp['employer_advances'] || 0).toString(),
+          total_loan_deductions: (emp['total_loan_deductions'] || 0).toString(),
+          statutory_deductions: statutoryDeductions,
+          max_salary_advance_limit: (emp['max_salary_advance_limit'] || 0).toString(),
+          available_salary_advance_limit: (emp['available_salary_advance_limit'] || 0).toString(),
+          last_withdrawal_time: emp['last_withdrawal_time'] || null,
+          contact: mobile,
+          address: city,
+          country: emp['country'] || 'KE',
+            emergencyContact: "",
+          status: status,
+          is_on_probation: emp['is_on_probation'] || false,
+          role: emp['role'] || 'employee',
+          avatar_url: emp['avatar_url'] || '',
+          hourlyRate: 60,
+          phoneNumber: mobile,
+          startDate: new Date(),
+          active: true,
+          created_at: new Date(),
+          modified_at: new Date(),
+          bank_info: emp['bank_info'] || null,
+          documents: emp['documents'] || [],
+          crb_reports: emp['crb_reports'] || [],
+        });
+        
+        console.log(`addEmployees: Created new employee ${fullName}, employee number: ${newEmployee.employeeNumber}, employee ID: ${newEmployee.id}, active: ${newEmployee.active}`);
+        addedCount++;
+      } else {
+        // Update existing employee if needed
+        console.log(`Employee ${fullName} already exists, skipping import. Active status: ${existingEmp.active}`);
+      }
+    } catch (error) {
+      console.error('Error adding employee:', error);
+    }
+  }
+  
+  console.log(`addEmployees: Completed adding ${addedCount} new employees`);
+  return addedCount;
+}
+
+export async function getEmployees(employeeIds: string[]): Promise<any[]> {
+  const result = [];
+  
+  for (const id of employeeIds) {
+    try {
+      const employee = await storage.getEmployee(id);
+      if (!employee) continue;
+      
+      // Get user data - convert numeric ID to string
+      const user = await storage.getUser(employee.userId.toString());
+      if (!user) continue;
+      
+      // Get department - convert numeric ID to string
+      const department = await storage.getDepartment(employee.departmentId.toString());
+      
+      result.push({
+        id: employee.id,
+        name: user.username,
+        position: employee.position,
+        department: department?.name || 'Unknown',
+        salary: employee.hourlyRate,
+        email: user.username + '@company.com',
+        hireDate: employee.startDate
+      });
+    } catch (error) {
+      console.error('Error getting employee:', error);
+    }
+  }
+  
+  return result;
 }

@@ -10,24 +10,10 @@ import { useQuery } from "@tanstack/react-query";
 import { formatKES } from "@/lib/tax-utils";
 import { Wallet, ArrowUpRight, ArrowDownRight, Clock, DollarSign, AlertCircle, History, CreditCard, Users } from "lucide-react";
 import { walletData } from "@/lib/mock-data";
-
-interface WalletTransaction {
-  id: number;
-  date: string;
-  amount: number;
-  type: string;
-  description: string;
-  status: string;
-}
-
-interface WalletData {
-  balance: number;
-  pendingBalance: number;
-  transactions: WalletTransaction[];
-}
+import { Wallet as SharedWallet, WalletTransaction as SharedWalletTransaction } from '../../../../shared/schema';
 
 interface EWAWalletProps {
-  employeeId?: number;
+  employeeId?: string;
   isEmployer?: boolean;
 }
 
@@ -38,13 +24,13 @@ export function EWAWallet({ employeeId, isEmployer = false }: EWAWalletProps) {
   const [receiverName, setReceiverName] = useState('');
   
   // Fetch wallet data
-  const { data, isLoading, refetch } = useQuery<WalletData>({
+  const { data, isLoading, refetch } = useQuery<SharedWallet>({
     queryKey: ['/api/wallet', employeeId],
-    initialData: walletData as WalletData,
+    initialData: walletData
   });
   
   // Create a typed reference to wallet data
-  const wallet = data as WalletData;
+  const wallet = data;
   
   // Handle transfer
   const handleTransfer = async () => {
@@ -59,7 +45,7 @@ export function EWAWallet({ employeeId, isEmployer = false }: EWAWalletProps) {
       return;
     }
     
-    if (amount > wallet.balance) {
+    if (amount > wallet.totalBalance) {
       toast({
         title: "Insufficient Balance",
         description: "You don't have enough funds to complete this transfer",
@@ -164,10 +150,10 @@ export function EWAWallet({ employeeId, isEmployer = false }: EWAWalletProps) {
             <CardContent className="p-6">
               <div className="flex flex-col space-y-4">
                 <p className="text-primary-foreground/70 text-sm">Available Balance</p>
-                <p className="text-3xl font-bold">{formatKES(wallet.balance)}</p>
-                {wallet.pendingBalance > 0 && (
+                <p className="text-3xl font-bold">{formatKES(wallet.totalBalance)}</p>
+                {wallet.pendingAmount > 0 && (
                   <p className="text-xs text-primary-foreground/70">
-                    + {formatKES(wallet.pendingBalance)} pending
+                    + {formatKES(wallet.pendingAmount)} pending
                   </p>
                 )}
               </div>
@@ -199,13 +185,11 @@ export function EWAWallet({ employeeId, isEmployer = false }: EWAWalletProps) {
                 <div className="flex flex-col space-y-2">
                   <p className="text-sm text-muted-foreground">Quick Actions</p>
                   <div className="grid grid-cols-2 gap-2">
-                    <Button variant="outline" size="sm" className="h-12 flex flex-col items-center justify-center text-xs">
-                      <DollarSign className="h-4 w-4 mb-1" />
-                      Add Funds
+                    <Button variant="outline" className="w-full" onClick={() => setTransferAmount(wallet.totalBalance.toString())}>
+                      Max
                     </Button>
-                    <Button variant="outline" size="sm" className="h-12 flex flex-col items-center justify-center text-xs">
-                      <History className="h-4 w-4 mb-1" />
-                      History
+                    <Button variant="outline" className="w-full" onClick={() => setTransferAmount((wallet.totalBalance / 2).toString())}>
+                      Half
                     </Button>
                   </div>
                 </div>
@@ -315,7 +299,7 @@ export function EWAWallet({ employeeId, isEmployer = false }: EWAWalletProps) {
                   isProcessing || 
                   !transferAmount || 
                   parseFloat(transferAmount) <= 0 || 
-                  parseFloat(transferAmount) > wallet.balance ||
+                  parseFloat(transferAmount) > wallet.totalBalance ||
                   !accountNumber ||
                   !receiverName
                 }

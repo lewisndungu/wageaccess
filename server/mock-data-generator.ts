@@ -13,7 +13,7 @@ import type {
 } from "@shared/schema";
 
 // Constants
-const HOURLY_RATE = "500.00"; // Base hourly rate in KES (as string for consistency)
+const HOURLY_RATE = 500; // Base hourly rate in KES
 const WORK_HOURS_PER_DAY = 8;
 const WORK_START_HOUR = 8;
 const WORK_END_HOUR = 17;
@@ -49,61 +49,71 @@ function generateKenyanPhoneNumber(): string {
 // Consistent employee data - updated with more Kenyan names
 const EMPLOYEE_DATA = [
   {
-    name: "James Mwangi",
+    firstName: "James",
+    lastName: "Mwangi",
     avatar: "https://ui-avatars.com/api/?name=James+Mwangi&background=random",
     department: "IT",
     position: "Software Engineer"
   },
   {
-    name: "Lucy Njeri",
+    firstName: "Lucy",
+    lastName: "Njeri",
     avatar: "https://ui-avatars.com/api/?name=Lucy+Njeri&background=random",
     department: "Marketing",
     position: "Marketing Manager"
   },
   {
-    name: "David Ochieng",
+    firstName: "David",
+    lastName: "Ochieng",
     avatar: "https://ui-avatars.com/api/?name=David+Ochieng&background=random",
     department: "Finance",
     position: "Financial Analyst"
   },
   {
-    name: "Sarah Kimani",
+    firstName: "Sarah",
+    lastName: "Kimani",
     avatar: "https://ui-avatars.com/api/?name=Sarah+Kimani&background=random",
     department: "HR",
     position: "HR Manager"
   },
   {
-    name: "Peter Ndegwa",
+    firstName: "Peter",
+    lastName: "Ndegwa",
     avatar: "https://ui-avatars.com/api/?name=Peter+Ndegwa&background=random",
     department: "Operations",
     position: "Operations Manager"
   },
   {
-    name: "Mary Wangari",
+    firstName: "Mary",
+    lastName: "Wangari",
     avatar: "https://ui-avatars.com/api/?name=Mary+Wangari&background=random",
     department: "IT",
     position: "UI/UX Designer"
   },
   {
-    name: "John Kamau",
+    firstName: "John",
+    lastName: "Kamau",
     avatar: "https://ui-avatars.com/api/?name=John+Kamau&background=random",
     department: "Marketing",
     position: "Social Media Specialist"
   },
   {
-    name: "Grace Atieno",
+    firstName: "Grace",
+    lastName: "Atieno",
     avatar: "https://ui-avatars.com/api/?name=Grace+Atieno&background=random",
     department: "Finance",
     position: "Accountant"
   },
   {
-    name: "Samuel Kipchoge",
+    firstName: "Samuel",
+    lastName: "Kipchoge",
     avatar: "https://ui-avatars.com/api/?name=Samuel+Kipchoge&background=random",
     department: "HR",
     position: "Recruitment Specialist"
   },
   {
-    name: "Esther Wambui",
+    firstName: "Esther",
+    lastName: "Wambui",
     avatar: "https://ui-avatars.com/api/?name=Esther+Wambui&background=random",
     department: "Operations",
     position: "Logistics Coordinator"
@@ -120,17 +130,12 @@ const KENYAN_NAMES = [
 const RELATIONSHIPS = ["Spouse", "Parent", "Sibling", "Uncle", "Aunt", "Cousin", "Friend"];
 
 // Helper function to generate a Kenyan address
-function generateKenyanAddress() {
-  return {
-    street: KENYAN_STREETS[Math.floor(Math.random() * KENYAN_STREETS.length)],
-    city: KENYAN_CITIES[Math.floor(Math.random() * KENYAN_CITIES.length)],
-    postalCode: KENYAN_POSTAL_CODES[Math.floor(Math.random() * KENYAN_POSTAL_CODES.length)],
-    country: 'Kenya'
-  };
+function generateKenyanAddress(): string {
+  return `${KENYAN_STREETS[Math.floor(Math.random() * KENYAN_STREETS.length)]}, ${KENYAN_CITIES[Math.floor(Math.random() * KENYAN_CITIES.length)]}, ${KENYAN_POSTAL_CODES[Math.floor(Math.random() * KENYAN_POSTAL_CODES.length)]}, Kenya`;
 }
 
 // Helper function to generate a Kenyan emergency contact
-function generateKenyanEmergencyContact() {
+function generateKenyanEmergencyContact(): any {
   const firstName = KENYAN_NAMES[Math.floor(Math.random() * KENYAN_NAMES.length)];
   const lastName = KENYAN_NAMES[Math.floor(Math.random() * KENYAN_NAMES.length)];
   return {
@@ -151,14 +156,14 @@ function generateWorkingHours(date: Date): { clockIn: Date; clockOut: Date } {
   return { clockIn, clockOut };
 }
 
-function calculateHoursWorked(clockIn: Date | null, clockOut: Date | null): string {
-  if (!clockIn || !clockOut) return "0.00";
+function calculateHoursWorked(clockIn: Date | null, clockOut: Date | null): number {
+  if (!clockIn || !clockOut) return 0;
   const diffInHours = (clockOut.getTime() - clockIn.getTime()) / (1000 * 60 * 60);
-  return diffInHours.toFixed(2);
+  return parseFloat(diffInHours.toFixed(2));
 }
 
 function calculateGrossPay(hoursWorked: string): string {
-  return (parseFloat(hoursWorked) * parseFloat(HOURLY_RATE)).toFixed(2);
+  return (parseFloat(hoursWorked) * parseFloat(HOURLY_RATE.toString())).toFixed(2);
 }
 
 function generateAttendanceStatus(clockIn: Date | null): 'present' | 'late' | 'absent' | 'leave' {
@@ -175,6 +180,7 @@ function generateAttendanceStatus(clockIn: Date | null): 'present' | 'late' | 'a
 // Data generators
 export function generateDepartments(): InsertDepartment[] {
   return ["IT", "Marketing", "Finance", "HR", "Operations"].map(name => ({
+    id: faker.string.uuid(),
     name,
     description: `${name} Department`
   }));
@@ -185,15 +191,20 @@ export function generateUsers(departments: Department[]): InsertUser[] {
   
   // Generate one supervisor per department
   departments.forEach((dept, index) => {
+    if (index >= EMPLOYEE_DATA.length) return;
+    
     const employeeData = EMPLOYEE_DATA[index];
+    const username = `${employeeData.firstName.toLowerCase()}.${employeeData.lastName.toLowerCase()}`;
+    
     users.push({
-      username: employeeData.name.toLowerCase().replace(/\s+/g, '.'),
+      id: faker.string.uuid(),
+      username,
       password: "password123", // In a real app, this would be hashed
-      name: employeeData.name,
-      email: `${employeeData.name.toLowerCase().replace(/\s+/g, '.')}@company.com`,
       role: "supervisor",
+      profileImage: employeeData.avatar,
       departmentId: dept.id,
-      profileImage: employeeData.avatar
+      created_at: new Date(),
+      modified_at: new Date()
     });
   });
   
@@ -201,70 +212,99 @@ export function generateUsers(departments: Department[]): InsertUser[] {
 }
 
 export function generateEmployees(users: User[], departments: Department[]): InsertEmployee[] {
-  return users.map((user, index) => {
-    const employeeData = EMPLOYEE_DATA[index % EMPLOYEE_DATA.length];
-    return {
-      employeeNumber: `EMP${(index + 1).toString().padStart(4, '0')}`,
+  const employees: InsertEmployee[] = [];
+  
+  // Create one employee per user
+  users.forEach((user, index) => {
+    if (index >= EMPLOYEE_DATA.length) return;
+    
+    const employeeData = EMPLOYEE_DATA[index];
+    const department = departments.find(d => d.id === user.departmentId) || departments[0];
+    
+    employees.push({
+      id: faker.string.uuid(),
+      employeeNumber: `EMP-${faker.string.numeric(5)}`,
       userId: user.id,
-      departmentId: user.departmentId!,
+      departmentId: department.id,
+      surname: employeeData.lastName,
+      other_names: employeeData.firstName,
+      id_no: faker.string.numeric(8),
+      tax_pin: faker.string.alphanumeric(9),
+      sex: faker.helpers.arrayElement(['M', 'F']),
       position: employeeData.position,
       status: "active",
+      is_on_probation: faker.datatype.boolean(0.3),
+      role: "employee",
+      gross_income: HOURLY_RATE * WORK_HOURS_PER_DAY * 22, // 22 working days per month
+      net_income: HOURLY_RATE * WORK_HOURS_PER_DAY * 22 * 0.8, // 80% after taxes
+      total_deductions: HOURLY_RATE * WORK_HOURS_PER_DAY * 22 * 0.2, // 20% deductions
+      loan_deductions: faker.number.int({ min: 0, max: 5000 }),
+      employer_advances: faker.number.int({ min: 0, max: 5000 }),
+      total_loan_deductions: faker.number.int({ min: 0, max: 5000 }),
+      statutory_deductions: {
+        nhif: faker.number.int({ min: 500, max: 1000 }),
+        nssf: faker.number.int({ min: 200, max: 500 }),
+        paye: faker.number.int({ min: 1000, max: 3000 }),
+        levies: faker.number.int({ min: 100, max: 300 })
+      },
+      max_salary_advance_limit: HOURLY_RATE * WORK_HOURS_PER_DAY * 22 * 0.5, // 50% of gross salary
+      available_salary_advance_limit: HOURLY_RATE * WORK_HOURS_PER_DAY * 22 * 0.3, // 30% of gross salary
+      contact: {
+        email: `${employeeData.firstName.toLowerCase()}.${employeeData.lastName.toLowerCase()}@company.com`,
+        phoneNumber: generateKenyanPhoneNumber()
+      },
+      address: generateKenyanAddress(),
+      bank_info: {
+        acc_no: faker.string.numeric(10),
+        bank_name: faker.helpers.arrayElement(['KCB', 'Equity', 'Standard Chartered', 'Coop Bank', 'Absa'])
+      },
+      id_confirmed: true,
+      mobile_confirmed: true,
+      tax_pin_verified: true,
+      country: "KE",
+      documents: [],
+      crb_reports: [],
+      avatar_url: employeeData.avatar,
       hourlyRate: HOURLY_RATE,
-      startDate: subDays(new Date(), faker.number.int({ min: 30, max: 365 })),
-      active: true,
       phoneNumber: generateKenyanPhoneNumber(),
-      emergencyContact: JSON.stringify(generateKenyanEmergencyContact()),
-      address: JSON.stringify(generateKenyanAddress())
-    };
+      startDate: subDays(new Date(), faker.number.int({ min: 30, max: 365 })),
+      emergencyContact: generateKenyanEmergencyContact(),
+      active: true,
+      created_at: new Date(),
+      modified_at: new Date()
+    });
   });
+  
+  return employees;
 }
 
-export function generateAttendance(employees: Employee[], days: number = 30): InsertAttendance[] {
+export function generateAttendance(employees: Employee[], days: number): InsertAttendance[] {
   const attendance: InsertAttendance[] = [];
   const today = new Date();
   
-  for (let i = 0; i < days; i++) {
-    const date = subDays(today, i);
-    
-    // Skip weekends
+  for (let day = days - 1; day >= 0; day--) {
+    const date = subDays(today, day);
     if (isWeekend(date)) continue;
     
     for (const employee of employees) {
-      if (!employee.active) continue;
-      
-      // Randomly mark some employees as absent
-      if (faker.number.float() < 0.1) { // 10% chance of absence
-        attendance.push({
-          employeeId: employee.id,
-          date: startOfDay(date),
-          clockInTime: null,
-          clockOutTime: null,
-          status: 'absent',
-          hoursWorked: "0.00",
-          geoLocation: null,
-          approvedBy: null,
-          notes: 'Marked as absent'
-        });
-        continue;
-      }
-      
       const { clockIn, clockOut } = generateWorkingHours(date);
       const hoursWorked = calculateHoursWorked(clockIn, clockOut);
       const status = generateAttendanceStatus(clockIn);
       
       attendance.push({
+        id: faker.string.uuid(),
         employeeId: employee.id,
-        date: startOfDay(date),
+        status,
+        date: date,
         clockInTime: clockIn,
         clockOutTime: clockOut,
-        status,
-        hoursWorked,
+        hoursWorked: hoursWorked,
         geoLocation: {
-          lat: faker.location.latitude(),
-          lng: faker.location.longitude()
+          latitude: faker.location.latitude(),
+          longitude: faker.location.longitude()
         },
-        approvedBy: null,
-        notes: status === 'late' ? 'Arrived late to work' : null
+        approvedBy: faker.string.uuid(),
+        notes: faker.helpers.maybe(() => faker.lorem.sentence(), { probability: 0.3 })
       });
     }
   }
@@ -276,194 +316,141 @@ export function generatePayroll(employees: Employee[], attendance: Attendance[])
   const payroll: InsertPayroll[] = [];
   const today = new Date();
   
-  // Generate payrolls for the last 3 months
-  for (let monthOffset = 0; monthOffset < 3; monthOffset++) {
-    const periodStart = new Date(today.getFullYear(), today.getMonth() - monthOffset, 1);
-    const periodEnd = new Date(today.getFullYear(), today.getMonth() - monthOffset + 1, 0);
+  for (const employee of employees) {
+    const employeeAttendance = attendance.filter(a => a.employeeId === employee.id);
+    const totalHoursWorked = employeeAttendance.reduce((total, record) => 
+      total + (record.hoursWorked || 0), 0);
+    const grossPay = totalHoursWorked * (employee.hourlyRate || HOURLY_RATE);
+    const taxDeductions = grossPay * 0.15; // Assuming 15% tax deduction
+    const netPay = grossPay - taxDeductions;
     
-    // Group attendance by employee for this period
-    const employeeAttendance = new Map<number, Attendance[]>();
-    for (const record of attendance) {
-      if (!record.date) continue;
-      const recordDate = new Date(record.date);
-      if (recordDate >= periodStart && recordDate <= periodEnd) {
-        if (!employeeAttendance.has(record.employeeId)) {
-          employeeAttendance.set(record.employeeId, []);
-        }
-        employeeAttendance.get(record.employeeId)?.push(record);
-      }
-    }
-    
-    // Generate payroll for each employee
-    for (const employee of employees) {
-      if (!employee.active) continue;
-      
-      const employeeRecords = employeeAttendance.get(employee.id) || [];
-      const totalHours = employeeRecords.reduce((sum, record) => {
-        return sum + parseFloat(record.hoursWorked || "0");
-      }, 0);
-      
-      const grossPay = calculateGrossPay(totalHours.toString());
-      
-      // Calculate deductions
-      const ewaDeductions = employeeRecords.reduce((sum, record) => {
-        const hoursWorked = parseFloat(record.hoursWorked || "0");
-        const dailyEarnings = hoursWorked * parseFloat(employee.hourlyRate);
-        return sum + (dailyEarnings * EWA_PERCENTAGE_LIMIT);
-      }, 0);
-      
-      const taxDeductions = parseFloat(grossPay) * 0.3; // 30% tax
-      const netPay = (parseFloat(grossPay) - ewaDeductions - taxDeductions).toFixed(2);
-      
-      // For past months, mark as processed
-      const isProcessed = monthOffset > 0;
-      
-      payroll.push({
-        employeeId: employee.id,
-        status: isProcessed ? "processed" : "draft",
-        periodStart,
-        periodEnd,
-        hoursWorked: totalHours.toFixed(2),
-        grossPay,
-        netPay,
-        ewaDeductions: ewaDeductions.toFixed(2),
-        taxDeductions: taxDeductions.toFixed(2),
-        otherDeductions: "0.00",
-        processedBy: isProcessed ? 1 : null // Default admin user ID for processed payrolls
-      });
-    }
+    payroll.push({
+      id: faker.string.uuid(),
+      employeeId: employee.id,
+      status: "pending",
+      periodStart: subDays(today, 30),
+      periodEnd: today,
+      hoursWorked: totalHoursWorked,
+      grossPay: grossPay,
+      netPay: netPay,
+      ewaDeductions: 0,
+      taxDeductions: taxDeductions,
+      otherDeductions: 0,
+      processedBy: faker.string.uuid(),
+      processedAt: new Date()
+    });
   }
   
   return payroll;
 }
 
 export function generateEwaRequests(employees: Employee[], payroll: Payroll[]): InsertEwaRequest[] {
-  const requests: InsertEwaRequest[] = [];
+  const ewaRequests: InsertEwaRequest[] = [];
   
   for (const employee of employees) {
-    if (!employee.active) continue;
-    
     const employeePayroll = payroll.find(p => p.employeeId === employee.id);
     if (!employeePayroll) continue;
     
-    // Generate 1-3 requests per employee
-    const requestCount = faker.number.int({ min: 1, max: 3 });
+    const maxEwaAmount = employeePayroll.netPay * EWA_PERCENTAGE_LIMIT;
+    const requestAmount = faker.number.float({ min: 1000, max: maxEwaAmount });
+    const status = faker.helpers.arrayElement(['pending', 'approved', 'disbursed']);
     
-    for (let i = 0; i < requestCount; i++) {
-      const availableBalance = parseFloat(employeePayroll.grossPay) * EWA_PERCENTAGE_LIMIT;
-      const amount = faker.number.float({ min: 1000, max: availableBalance }).toFixed(2);
-      
-      requests.push({
-        employeeId: employee.id,
-        amount,
-        status: "pending",
-        processingFee: (parseFloat(amount) * 0.01).toFixed(2), // 1% processing fee
-        approvedBy: null,
-        reason: faker.helpers.arrayElement([
-          "Emergency medical expenses",
-          "School fees payment",
-          "Rent payment",
-          "Family emergency"
-        ]),
-        rejectionReason: null
-      });
+    // Create basic request properties
+    const request: InsertEwaRequest = {
+      id: faker.string.uuid(),
+      employeeId: employee.id,
+      requestDate: new Date(),
+      amount: requestAmount,
+      status: status,
+      processingFee: requestAmount * 0.01, // 1% processing fee
+      reason: faker.helpers.arrayElement([
+        'Emergency medical expenses',
+        'School fees payment',
+        'Rent payment',
+        'Family emergency',
+        'Utility bills'
+      ])
+    };
+    
+    // Add approval info if approved or disbursed
+    if (status === 'approved' || status === 'disbursed') {
+      request.approvedBy = faker.string.uuid();
+      request.approvedAt = new Date(new Date().getTime() - 24 * 60 * 60 * 1000); // Yesterday
     }
+    
+    // Add disbursed info if disbursed
+    if (status === 'disbursed') {
+      request.disbursedAt = new Date();
+    }
+    
+    ewaRequests.push(request);
   }
   
-  return requests;
+  return ewaRequests;
 }
 
 export function generateWallet(): InsertWallet {
   return {
-    employerBalance: "250000.00",
-    jahaziiBalance: "100000.00",
-    perEmployeeCap: "3000.00"
+    id: faker.string.uuid(),
+    employerBalance: 1000000,
+    jahaziiBalance: 500000,
+    perEmployeeCap: 50000,
+    updatedAt: new Date()
   };
 }
 
 export function generateWalletTransactions(wallet: Wallet): InsertWalletTransaction[] {
-  const transactions: InsertWalletTransaction[] = [
-    {
-      walletId: wallet.id,
-      amount: "250000.00",
-      transactionType: "employer_topup",
-      description: "Initial employer fund deposit",
-      referenceId: `INI-EMP-${Date.now()}`,
-      fundingSource: "employer",
-      status: "completed"
-    },
-    {
-      walletId: wallet.id,
-      amount: "100000.00",
-      transactionType: "jahazii_topup",
-      description: "Initial Jahazii fund deposit",
-      referenceId: `INI-JAH-${Date.now()}`,
-      fundingSource: "jahazii",
-      status: "completed"
-    }
-  ];
+  const transactions: InsertWalletTransaction[] = [];
   
-  // Generate additional transactions
-  const transactionCount = faker.number.int({ min: 5, max: 10 });
-  
-  for (let i = 0; i < transactionCount; i++) {
-    const amount = faker.number.int({ min: 5000, max: 50000 }).toFixed(2);
-    const type = faker.helpers.arrayElement(['employer_topup', 'jahazii_topup', 'ewa_disbursement']);
-    const source = type === 'ewa_disbursement' ? 'employer' : type.split('_')[0] as 'employer' | 'jahazii';
+  for (let i = 0; i < 10; i++) {
+    const amount = faker.number.float({ min: 1000, max: 100000 });
+    const transactionType = faker.helpers.arrayElement(['deposit', 'withdrawal', 'transfer']);
     
     transactions.push({
+      id: faker.string.uuid(),
       walletId: wallet.id,
       amount,
-      transactionType: type,
-      description: faker.lorem.sentence(),
-      referenceId: `TXN-${Date.now()}-${i}`,
-      fundingSource: source,
-      status: "completed"
+      transactionType,
+      fundingSource: faker.helpers.arrayElement(['bank', 'mpesa', 'card']),
+      status: 'completed',
+      description: `${transactionType} via ${faker.helpers.arrayElement(['bank', 'mpesa', 'card'])}`,
+      referenceId: faker.string.uuid(),
+      transactionDate: new Date()
     });
   }
   
   return transactions;
 }
 
-export function generateOtpCodes(employees: Employee[]): InsertOtpCode[] {
-  const otpCodes: InsertOtpCode[] = [];
-  
-  for (const employee of employees) {
-    if (!employee.active) continue;
-    
-    // Generate 1-3 OTP codes per employee
-    const codeCount = faker.number.int({ min: 1, max: 3 });
-    
-    for (let i = 0; i < codeCount; i++) {
-      otpCodes.push({
-        employeeId: employee.id,
-        code: faker.string.numeric(6),
-        expiresAt: addMinutes(new Date(), 5),
-        used: false
-      });
-    }
-  }
-  
-  return otpCodes;
+export function generateOtpCode(employeeId: string): InsertOtpCode {
+  return {
+    id: faker.string.uuid(),
+    employeeId,
+    code: faker.number.int({ min: 100000, max: 999999 }).toString(),
+    expiresAt: new Date(Date.now() + 15 * 60 * 1000),
+    createdAt: new Date(),
+    used: false
+  };
 }
 
 // Additional export for resetting attendance state
 export function generateEmptyAttendance(employees: Employee[]): InsertAttendance[] {
   const attendanceRecords: InsertAttendance[] = [];
-  const today = new Date();
+  const today = startOfDay(new Date());
   
   // Create attendance records for today with no clock in/out
   employees.forEach(employee => {
     if (employee.active) {
       attendanceRecords.push({
+        id: faker.string.uuid(),
         employeeId: employee.id,
-        date: startOfDay(today),
-        clockInTime: null,
-        clockOutTime: null,
+        date: today,
+        clockInTime: undefined,
+        clockOutTime: undefined,
         status: 'absent',
-        hoursWorked: "0.00",
+        hoursWorked: 0,
         geoLocation: null,
-        approvedBy: null,
+        approvedBy: undefined,
         notes: "Auto-generated reset record"
       });
     }

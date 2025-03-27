@@ -3,7 +3,7 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Employee } from '@/lib/store';
+import { Employee } from '@shared/schema';
 import { formatKESCurrency, formatKEDate } from '@/lib/format-utils';
 import { User, Phone, Mail, Calendar, Briefcase, Building, DollarSign } from 'lucide-react';
 
@@ -21,7 +21,7 @@ const EmployeeCard: React.FC<EmployeeCardProps> = ({ employee }) => {
               <User className="h-5 w-5 text-primary" />
             </div>
             <div>
-              <h3 className="font-semibold text-base">{employee.name}</h3>
+              <h3 className="font-semibold text-base">{`${employee.other_names} ${employee.surname}`}</h3>
               <p className="text-sm text-muted-foreground">{employee.position}</p>
             </div>
           </div>
@@ -34,30 +34,30 @@ const EmployeeCard: React.FC<EmployeeCardProps> = ({ employee }) => {
             
             <div className="flex items-center gap-2">
               <Building className="h-4 w-4 text-muted-foreground" />
-              <span>{employee.department}</span>
+              <span>{employee.department?.name}</span>
             </div>
             
             <div className="flex items-center gap-2">
               <DollarSign className="h-4 w-4 text-muted-foreground" />
-              <span>{formatKESCurrency(employee.salary)}</span>
+              <span>{formatKESCurrency(employee.gross_income)}</span>
             </div>
             
             <div className="flex items-center gap-2">
               <Calendar className="h-4 w-4 text-muted-foreground" />
-              <span>Hired: {formatKEDate(employee.hireDate)}</span>
+              <span>Hired: {formatKEDate(employee.created_at)}</span>
             </div>
             
-            {employee.email && (
+            {employee.contact.email && (
               <div className="flex items-center gap-2">
                 <Mail className="h-4 w-4 text-muted-foreground" />
-                <span>{employee.email}</span>
+                <span>{employee.contact.email}</span>
               </div>
             )}
             
-            {employee.phone && (
+            {employee.contact.phoneNumber && (
               <div className="flex items-center gap-2">
                 <Phone className="h-4 w-4 text-muted-foreground" />
-                <span>{employee.phone}</span>
+                <span>{employee.contact.phoneNumber}</span>
               </div>
             )}
           </div>

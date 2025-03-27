@@ -1,174 +1,153 @@
-import { pgTable, text, serial, integer, boolean, timestamp, decimal, json } from "drizzle-orm/pg-core";
-import { createInsertSchema } from "drizzle-zod";
-import { z } from "zod";
-
-// User model
-export const users = pgTable("users", {
-  id: serial("id").primaryKey(),
-  username: text("username").notNull().unique(),
-  password: text("password").notNull(),
-  email: text("email").notNull(),
-  name: text("name").notNull(),
-  role: text("role").notNull().default("employee"), // employee, supervisor, hr, admin
-  profileImage: text("profile_image"),
-  departmentId: integer("department_id"),
-  createdAt: timestamp("created_at").defaultNow(),
-});
+export interface User {
+  id: string;
+  username: string;
+  password: string;
+  role: string;
+  profileImage?: string;
+  departmentId?: string;
+  created_at: Date;
+  modified_at: Date;
+}
 
 // Department model
-export const departments = pgTable("departments", {
-  id: serial("id").primaryKey(),
-  name: text("name").notNull().unique(),
-  description: text("description"),
-});
+export interface Department {
+  id: string;
+  name: string;
+  description?: string;
+}
 
 // Employee model
-export const employees = pgTable("employees", {
-  id: serial("id").primaryKey(),
-  employeeNumber: text("employee_number").notNull().unique(),
-  userId: integer("user_id").notNull(),
-  departmentId: integer("department_id").notNull(),
-  position: text("position").notNull(),
-  status: text("status").notNull().default("active"), // active, inactive
-  hourlyRate: decimal("hourly_rate", { precision: 10, scale: 2 }).notNull(),
-  phoneNumber: text("phone_number"),
-  startDate: timestamp("start_date").notNull(),
-  emergencyContact: text("emergency_contact"),
-  address: text("address"),
-  active: boolean("active").default(true),
-});
+export interface Employee extends User {
+  id: string;
+  employeeNumber: string;
+  userId: string;
+  departmentId: string;
+  surname: string;
+  other_names: string;
+  id_no: string;
+  tax_pin?: string;
+  sex: string;
+  position: string;
+  status: string;
+  is_on_probation: boolean;
+  role: string;
+  gross_income: number;
+  net_income: number;
+  total_deductions: number;
+  loan_deductions: number;
+  employer_advances: number;
+  total_loan_deductions: number;
+  statutory_deductions: any;
+  max_salary_advance_limit: number;
+  available_salary_advance_limit: number;
+  last_withdrawal_time?: Date;
+  contact: {
+    email: string;
+    phoneNumber: string;
+  };
+  address?: string;
+  bank_info: any;
+  id_confirmed: boolean;
+  mobile_confirmed: boolean;
+  tax_pin_verified: boolean;
+  country: string;
+  documents: any;
+  crb_reports: any;
+  avatar_url?: string;
+  created_at: Date;
+  modified_at: Date;
+  hourlyRate?: number;
+  phoneNumber?: string;
+  startDate?: Date;
+  emergencyContact: any;
+  active: boolean;
+  department?: Department;
+}
 
 // Attendance record model
-export const attendance = pgTable("attendance", {
-  id: serial("id").primaryKey(),
-  employeeId: integer("employee_id").notNull(),
-  clockInTime: timestamp("clock_in_time"),
-  clockOutTime: timestamp("clock_out_time"),
-  date: timestamp("date").defaultNow(),
-  status: text("status").notNull(), // present, absent, late, leave
-  hoursWorked: decimal("hours_worked", { precision: 10, scale: 2 }).default("0"),
-  geoLocation: json("geo_location"),
-  approvedBy: integer("approved_by"),
-  notes: text("notes"),
-});
+export interface Attendance {
+  id: string;
+  employeeId: string;
+  clockInTime?: Date;
+  clockOutTime?: Date;
+  date?: Date;
+  status: string;
+  hoursWorked?: number;
+  geoLocation: any;
+  approvedBy?: string;
+  notes?: string;
+  employee?: Employee;
+}
 
 // Payroll model
-export const payroll = pgTable("payroll", {
-  id: serial("id").primaryKey(),
-  employeeId: integer("employee_id").notNull(),
-  periodStart: timestamp("period_start").notNull(),
-  periodEnd: timestamp("period_end").notNull(),
-  hoursWorked: decimal("hours_worked", { precision: 10, scale: 2 }).notNull(),
-  grossPay: decimal("gross_pay", { precision: 10, scale: 2 }).notNull(),
-  ewaDeductions: decimal("ewa_deductions", { precision: 10, scale: 2 }).default("0"),
-  taxDeductions: decimal("tax_deductions", { precision: 10, scale: 2 }).default("0"),
-  otherDeductions: decimal("other_deductions", { precision: 10, scale: 2 }).default("0"),
-  netPay: decimal("net_pay", { precision: 10, scale: 2 }).notNull(),
-  status: text("status").notNull(), // draft, processed, paid
-  processedAt: timestamp("processed_at"),
-  processedBy: integer("processed_by"),
-});
+export interface Payroll {
+  id: string;
+  employeeId: string;
+  periodStart: Date;
+  periodEnd: Date;
+  hoursWorked: number;
+  grossPay: number;
+  ewaDeductions?: number;
+  taxDeductions?: number;
+  otherDeductions?: number;
+  netPay: number;
+  status: string;
+  processedAt?: Date;
+  processedBy?: string;
+  employee?: Employee;
+}
 
 // EWA (Earned Wage Access) model
-export const ewaRequests = pgTable("ewa_requests", {
-  id: serial("id").primaryKey(),
-  employeeId: integer("employee_id").notNull(),
-  requestDate: timestamp("request_date").defaultNow(),
-  amount: decimal("amount", { precision: 10, scale: 2 }).notNull(),
-  status: text("status").notNull().default("pending"), // pending, approved, rejected, disbursed
-  processingFee: decimal("processing_fee", { precision: 10, scale: 2 }).default("0"),
-  approvedBy: integer("approved_by"),
-  approvedAt: timestamp("approved_at"),
-  disbursedAt: timestamp("disbursed_at"),
-  reason: text("reason"),
-  rejectionReason: text("rejection_reason"),
-});
+export interface EwaRequest {
+  id: string;
+  employeeId: string;
+  requestDate: Date;
+  amount: number;
+  status: string;
+  processingFee?: number;
+  approvedBy?: string;
+  approvedAt?: Date;
+  disbursedAt?: Date;
+  reason?: string;
+  rejectionReason?: string;
+  employee?: Employee;
+}
 
 // Company wallet model
-export const wallet = pgTable("wallet", {
-  id: serial("id").primaryKey(),
-  employerBalance: decimal("employer_balance", { precision: 10, scale: 2 }).notNull().default("0"),
-  jahaziiBalance: decimal("jahazii_balance", { precision: 10, scale: 2 }).notNull().default("0"),
-  perEmployeeCap: decimal("per_employee_cap", { precision: 10, scale: 2 }).notNull().default("3000"),
-  updatedAt: timestamp("updated_at").defaultNow(),
-});
+export interface Wallet {
+  id: string;
+  employerBalance: number;
+  jahaziiBalance: number;
+  perEmployeeCap: number;
+  updatedAt: Date;
+}
 
 // Wallet transaction model
-export const walletTransactions = pgTable("wallet_transactions", {
-  id: serial("id").primaryKey(),
-  walletId: integer("wallet_id").notNull(),
-  amount: decimal("amount", { precision: 10, scale: 2 }).notNull(),
-  transactionType: text("transaction_type").notNull(), // employer_topup, jahazii_topup, employer_disbursement, jahazii_disbursement
-  description: text("description"),
-  transactionDate: timestamp("transaction_date").defaultNow(),
-  referenceId: text("reference_id"),
-  fundingSource: text("funding_source").notNull(), // employer, jahazii
-  status: text("status").notNull().default("completed"), // pending, completed, failed
-});
+export interface WalletTransaction {
+  id: string;
+  walletId: string;
+  amount: number;
+  transactionType: string;
+  description?: string;
+  transactionDate: Date;
+  referenceId: string;
+  fundingSource: string;
+  status: string;
+}
 
 // OTP codes for self-log
-export const otpCodes = pgTable("otp_codes", {
-  id: serial("id").primaryKey(),
-  employeeId: integer("employee_id").notNull(),
-  code: text("code").notNull(),
-  expiresAt: timestamp("expires_at").notNull(),
-  createdAt: timestamp("created_at").defaultNow(),
-  used: boolean("used").default(false),
-});
-
-// Create insert schemas
-export const insertUserSchema = createInsertSchema(users).omit({ id: true, createdAt: true });
-export const insertDepartmentSchema = createInsertSchema(departments).omit({ id: true });
-export const insertEmployeeSchema = createInsertSchema(employees).omit({ id: true });
-export const insertAttendanceSchema = createInsertSchema(attendance).omit({ id: true });
-export const insertPayrollSchema = createInsertSchema(payroll).omit({ id: true, processedAt: true });
-export const insertEwaRequestSchema = createInsertSchema(ewaRequests).omit({ 
-  id: true, 
-  requestDate: true, 
-  approvedAt: true, 
-  disbursedAt: true 
-});
-export const insertWalletSchema = createInsertSchema(wallet).omit({ id: true, updatedAt: true });
-export const insertWalletTransactionSchema = createInsertSchema(walletTransactions).omit({ 
-  id: true, 
-  transactionDate: true 
-});
-export const insertOtpCodeSchema = createInsertSchema(otpCodes).omit({ 
-  id: true, 
-  createdAt: true 
-});
-
-// Export types
-export type User = typeof users.$inferSelect;
-export type InsertUser = z.infer<typeof insertUserSchema>;
-
-export type Department = typeof departments.$inferSelect;
-export type InsertDepartment = z.infer<typeof insertDepartmentSchema>;
-
-export type Employee = typeof employees.$inferSelect;
-export type InsertEmployee = z.infer<typeof insertEmployeeSchema>;
-
-export type Attendance = typeof attendance.$inferSelect;
-export type InsertAttendance = z.infer<typeof insertAttendanceSchema>;
-
-export type Payroll = typeof payroll.$inferSelect;
-export type InsertPayroll = z.infer<typeof insertPayrollSchema>;
-
-export type EwaRequest = typeof ewaRequests.$inferSelect;
-export type InsertEwaRequest = z.infer<typeof insertEwaRequestSchema>;
-
-export type Wallet = typeof wallet.$inferSelect;
-export type InsertWallet = z.infer<typeof insertWalletSchema>;
-
-export type WalletTransaction = typeof walletTransactions.$inferSelect;
-export type InsertWalletTransaction = z.infer<typeof insertWalletTransactionSchema>;
-
-export type OtpCode = typeof otpCodes.$inferSelect;
-export type InsertOtpCode = z.infer<typeof insertOtpCodeSchema>;
+export interface OtpCode {
+  id: string;
+  employeeId: string;
+  code: string;
+  expiresAt: Date;
+  createdAt: Date;
+  used: boolean;
+}
 
 // User with extra info for frontend
 export type UserWithRole = User & {
-  role: 'employee' | 'supervisor' | 'hr' | 'admin';
+  role: "employee" | "supervisor" | "hr" | "admin";
 };
 
 // Employee with department and user info
@@ -176,3 +155,22 @@ export type EmployeeWithDetails = Employee & {
   user: User;
   department: Department;
 };
+
+// Export types
+export type InsertUser = Partial<User>;
+
+export type InsertDepartment = Partial<Department>;
+
+export type InsertEmployee = Partial<Employee>;
+
+export type InsertAttendance = Partial<Attendance>;
+
+export type InsertPayroll = Partial<Payroll>;
+
+export type InsertEwaRequest = Partial<EwaRequest>;
+
+export type InsertWallet = Partial<Wallet>;
+
+export type InsertWalletTransaction = Partial<WalletTransaction>;
+
+export type InsertOtpCode = Partial<OtpCode>;

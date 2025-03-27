@@ -1,156 +1,73 @@
+import { faker } from '@faker-js/faker';
+import { 
+  Payroll, 
+  EwaRequest, 
+  Wallet, 
+  WalletTransaction,
+  Department,
+  UserWithRole, 
+  User
+} from '@shared/schema';
+
 // This file contains mock data for the application
 // In a real application, this would be fetched from the API
 
 // Dashboard Statistics
 export const dashboardStats = {
   employeeCount: {
-    total: 248,
-    active: 220,
-    inactive: 28,
-    change: "+3.2%"
+    total: faker.number.int({ min: 200, max: 300 }),
+    active: faker.number.int({ min: 180, max: 250 }),
+    inactive: faker.number.int({ min: 20, max: 50 }),
+    change: `+${faker.number.float({ min: 2, max: 5, fractionDigits: 1 })}%`
   },
   attendance: {
-    rate: "93.5%",
-    change: "+1.5%"
+    rate: `${faker.number.float({ min: 90, max: 95, fractionDigits: 1 })}%`,
+    change: `+${faker.number.float({ min: 1, max: 3, fractionDigits: 1 })}%`
   },
   payroll: {
-    expected: "KES 4.2M",
-    change: "+2.8%"
+    expected: `KES ${faker.number.int({ min: 4000000, max: 5000000 })}`,
+    change: `+${faker.number.float({ min: 2, max: 4, fractionDigits: 1 })}%`
   },
   ewa: {
-    total: "KES 890K",
-    pending: 38,
-    change: "+12.3%"
+    total: `KES ${faker.number.int({ min: 800000, max: 1000000 })}`,
+    pending: faker.number.int({ min: 30, max: 50 }),
+    change: `+${faker.number.float({ min: 10, max: 15, fractionDigits: 1 })}%`
   }
 };
 
 // Activities
-export const recentActivities = [
-  {
-    id: 1,
-    type: "employee",
-    title: "New Employee Added",
-    description: "John Kamau (ID: EMP-1928) has been added to the IT Department",
-    time: "10 min ago",
-    icon: "user-add-line"
-  },
-  {
-    id: 2,
-    type: "ewa",
-    title: "New EWA Request",
-    description: "Mary Wambui (Sales) requested KES 15,000 early wage access",
-    time: "30 min ago",
-    icon: "bank-card-line"
-  },
-  {
-    id: 3,
-    type: "attendance",
-    title: "Attendance Anomaly",
-    description: "5 employees in Marketing department haven't clocked in today",
-    time: "1 hour ago",
-    icon: "time-line"
-  },
-  {
-    id: 4,
-    type: "payroll",
-    title: "Payroll Processed",
-    description: "Payroll for IT Department (24 employees) has been processed",
-    time: "2 hours ago",
-    icon: "money-dollar-box-line"
-  },
-  {
-    id: 5,
-    type: "self-log",
-    title: "Self-Log QR Generated",
-    description: "Tom Mugo (Supervisor) generated QR code for warehouse team",
-    time: "3 hours ago",
-    icon: "login-box-line"
-  }
-];
+export const recentActivities = Array.from({ length: 5 }).map(() => ({
+  id: faker.string.uuid(),
+  type: faker.helpers.arrayElement(["employee", "ewa", "attendance", "payroll", "self-log"]),
+  title: faker.lorem.sentence(),
+  description: faker.lorem.sentence(),
+  time: faker.date.recent().toLocaleTimeString(),
+  icon: faker.helpers.arrayElement([
+    "user-add-line",
+    "bank-card-line",
+    "time-line",
+    "money-dollar-box-line",
+    "login-box-line",
+  ]),
+}));
 
 // Employees
-export const employees = [
-  {
-    id: 1,
-    employeeNumber: "EMP-1023",
-    name: "James Mwangi",
-    email: "james.m@company.com",
-    department: "IT Department",
-    position: "Senior Developer",
-    contact: "+254 723 456789",
-    status: "present",
-    profileImage: "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?ixlib=rb-1.2.1&auto=format&fit=facearea&facepad=2&w=256&h=256&q=80",
-    active: true,
-    hourlyRate: 1200,
-    startDate: "2021-03-15",
-    address: "123 Nairobi St, Nairobi",
-    emergencyContact: "+254 712 345678"
-  },
-  {
-    id: 2,
-    employeeNumber: "EMP-1024",
-    name: "Lucy Njeri",
-    email: "lucy.n@company.com",
-    department: "Marketing",
-    position: "Social Media Specialist",
-    contact: "+254 798 123456",
-    status: "late",
-    profileImage: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?ixlib=rb-1.2.1&auto=format&fit=facearea&facepad=2&w=256&h=256&q=80",
-    active: true,
-    hourlyRate: 900,
-    startDate: "2022-01-10",
-    address: "456 Mombasa Rd, Nairobi",
-    emergencyContact: "+254 722 987654"
-  },
-  {
-    id: 3,
-    employeeNumber: "EMP-1025",
-    name: "David Ochieng",
-    email: "david.o@company.com",
-    department: "Finance",
-    position: "Accountant",
-    contact: "+254 711 987654",
-    status: "present",
-    profileImage: "https://images.unsplash.com/photo-1519085360753-af0119f7cbe7?ixlib=rb-1.2.1&auto=format&fit=facearea&facepad=2&w=256&h=256&q=80",
-    active: true,
-    hourlyRate: 1100,
-    startDate: "2020-11-05",
-    address: "789 Eldoret Way, Eldoret",
-    emergencyContact: "+254 733 456789"
-  },
-  {
-    id: 4,
-    employeeNumber: "EMP-1026",
-    name: "Sarah Kimani",
-    email: "sarah.k@company.com",
-    department: "HR",
-    position: "HR Assistant",
-    contact: "+254 733 456123",
-    status: "absent",
-    profileImage: "https://images.unsplash.com/photo-1517841905240-472988babdf9?ixlib=rb-1.2.1&auto=format&fit=facearea&facepad=2&w=256&h=256&q=80",
-    active: true,
-    hourlyRate: 950,
-    startDate: "2021-08-20",
-    address: "321 Kisumu St, Kisumu",
-    emergencyContact: "+254 724 123456"
-  },
-  {
-    id: 5,
-    employeeNumber: "EMP-1027",
-    name: "Peter Ndegwa",
-    email: "peter.n@company.com",
-    department: "Operations",
-    position: "Logistics Manager",
-    contact: "+254 721 789456",
-    status: "present",
-    profileImage: "https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?ixlib=rb-1.2.1&auto=format&fit=facearea&facepad=2&w=256&h=256&q=80",
-    active: true,
-    hourlyRate: 1300,
-    startDate: "2019-05-12",
-    address: "654 Nakuru Ave, Nakuru",
-    emergencyContact: "+254 735 789123"
-  }
-];
+export const employees = Array.from({ length: 5 }).map(() => ({
+  id: faker.string.uuid(),
+  employeeNumber: `EMP-${faker.string.numeric(4)}`,
+  name: faker.person.fullName(),
+  email: faker.internet.email(),
+  department: faker.commerce.department(),
+  position: faker.person.jobTitle(),
+  contact: faker.phone.number(),
+  status: faker.helpers.arrayElement(["present", "late", "absent"]),
+  profileImage: faker.image.avatar(),
+  active: faker.datatype.boolean(),
+  hourlyRate: faker.number.int({ min: 800, max: 1500 }),
+  startDate: faker.date.past().toISOString().split('T')[0],
+  address: faker.location.streetAddress(),
+  emergencyContact: faker.phone.number(),
+}));
 
 // Helper functions
 function generateRandomTime(baseHour: number, variance: number = 30): string {
@@ -179,14 +96,6 @@ function calculateHoursWorked(clockIn: string | null, clockOut: string | null): 
 // Generate dynamic attendance records for the last 7 days
 export const attendanceRecords = (() => {
   const records: any[] = [];
-  const employees = [
-    { id: 1, name: "James Mwangi", department: "IT Department" },
-    { id: 2, name: "Lucy Njeri", department: "Marketing" },
-    { id: 3, name: "David Ochieng", department: "Finance" },
-    { id: 4, name: "Sarah Kimani", department: "HR" },
-    { id: 5, name: "Peter Ndegwa", department: "Operations" }
-  ];
-  
   const today = new Date();
   
   for (let i = 0; i < 7; i++) {
@@ -196,7 +105,7 @@ export const attendanceRecords = (() => {
     // Skip weekends
     if (date.getDay() === 0 || date.getDay() === 6) continue;
     
-    employees.forEach((emp, index) => {
+    employees.forEach((emp) => {
       // 10% chance of being absent
       const isAbsent = Math.random() < 0.1;
       
@@ -206,7 +115,7 @@ export const attendanceRecords = (() => {
       const hoursWorked = calculateHoursWorked(clockInTime, clockOutTime);
       
       records.push({
-        id: records.length + 1,
+        id: faker.string.uuid(),
         employeeId: emp.id,
         employeeName: emp.name,
         department: emp.department,
@@ -223,223 +132,87 @@ export const attendanceRecords = (() => {
 })();
 
 // Payroll records
-export const payrollRecords = [
-  {
-    id: 1,
-    employeeId: 1,
-    employeeName: "James Mwangi",
-    department: "IT Department",
-    periodStart: "2023-07-01",
-    periodEnd: "2023-07-31",
-    hoursWorked: 184,
-    hourlyRate: 1200,
-    grossPay: 220800,
-    ewaDeductions: 15000,
-    taxDeductions: 22080,
-    otherDeductions: 5000,
-    netPay: 178720,
-    status: "processed"
-  },
-  {
-    id: 2,
-    employeeId: 2,
-    employeeName: "Lucy Njeri",
-    department: "Marketing",
-    periodStart: "2023-07-01",
-    periodEnd: "2023-07-31",
-    hoursWorked: 176,
-    hourlyRate: 900,
-    grossPay: 158400,
-    ewaDeductions: 10000,
-    taxDeductions: 15840,
-    otherDeductions: 3500,
-    netPay: 129060,
-    status: "processed"
-  },
-  {
-    id: 3,
-    employeeId: 3,
-    employeeName: "David Ochieng",
-    department: "Finance",
-    periodStart: "2023-07-01",
-    periodEnd: "2023-07-31",
-    hoursWorked: 180,
-    hourlyRate: 1100,
-    grossPay: 198000,
-    ewaDeductions: 20000,
-    taxDeductions: 19800,
-    otherDeductions: 4500,
-    netPay: 153700,
-    status: "processed"
-  },
-  {
-    id: 4,
-    employeeId: 4,
-    employeeName: "Sarah Kimani",
-    department: "HR",
-    periodStart: "2023-07-01",
-    periodEnd: "2023-07-31",
-    hoursWorked: 168,
-    hourlyRate: 950,
-    grossPay: 159600,
-    ewaDeductions: 0,
-    taxDeductions: 15960,
-    otherDeductions: 3800,
-    netPay: 139840,
-    status: "draft"
-  },
-  {
-    id: 5,
-    employeeId: 5,
-    employeeName: "Peter Ndegwa",
-    department: "Operations",
-    periodStart: "2023-07-01",
-    periodEnd: "2023-07-31",
-    hoursWorked: 190,
-    hourlyRate: 1300,
-    grossPay: 247000,
-    ewaDeductions: 25000,
-    taxDeductions: 24700,
-    otherDeductions: 6000,
-    netPay: 191300,
-    status: "processed"
-  }
-];
+export const payrollRecords: Payroll[] = Array.from({ length: 5 }).map(() => ({
+  id: faker.string.uuid(),
+  employeeId: faker.string.uuid(),
+  periodStart: faker.date.past(),
+  periodEnd: faker.date.recent(),
+  hoursWorked: faker.number.int({ min: 160, max: 200 }),
+  hourlyRate: faker.number.int({ min: 800, max: 1500 }),
+  grossPay: faker.number.int({ min: 150000, max: 250000 }),
+  ewaDeductions: faker.number.int({ min: 0, max: 20000 }),
+  taxDeductions: faker.number.int({ min: 10000, max: 30000 }),
+  otherDeductions: faker.number.int({ min: 0, max: 5000 }),
+  netPay: faker.number.int({ min: 120000, max: 220000 }),
+  status: faker.helpers.arrayElement(["processed", "draft", "paid"]),
+}));
 
 // EWA Requests
-export const ewaRequests = [
-  {
-    id: 1,
-    employeeId: 2,
-    employeeName: "Lucy Njeri",
-    employeeImage: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?ixlib=rb-1.2.1&auto=format&fit=facearea&facepad=2&w=256&h=256&q=80",
-    department: "Marketing",
-    requestDate: "2023-07-10T09:30:00",
-    amount: 10000,
-    status: "approved",
-    reason: "Medical emergency",
-    processingFee: 200
-  },
-  {
-    id: 2,
-    employeeId: 3,
-    employeeName: "David Ochieng",
-    employeeImage: "https://images.unsplash.com/photo-1519085360753-af0119f7cbe7?ixlib=rb-1.2.1&auto=format&fit=facearea&facepad=2&w=256&h=256&q=80",
-    department: "Finance",
-    requestDate: "2023-07-11T14:15:00",
-    amount: 20000,
-    status: "pending",
-    reason: "Rent payment",
-    processingFee: 400
-  },
-  {
-    id: 3,
-    employeeId: 5,
-    employeeName: "Peter Ndegwa",
-    employeeImage: "https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?ixlib=rb-1.2.1&auto=format&fit=facearea&facepad=2&w=256&h=256&q=80",
-    department: "Operations",
-    requestDate: "2023-07-09T11:05:00",
-    amount: 25000,
-    status: "disbursed",
-    reason: "School fees",
-    processingFee: 500
-  },
-  {
-    id: 4,
-    employeeId: 1,
-    employeeName: "James Mwangi",
-    employeeImage: "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?ixlib=rb-1.2.1&auto=format&fit=facearea&facepad=2&w=256&h=256&q=80",
-    department: "IT Department",
-    requestDate: "2023-07-12T10:20:00",
-    amount: 15000,
-    status: "pending",
-    reason: "Car repair",
-    processingFee: 300
-  }
-];
+export const ewaRequests: Omit<EwaRequest, 'employee'>[] = Array.from({ length: 4 }).map(() => ({
+  id: faker.string.uuid(),
+  employeeId: faker.string.uuid(),
+  requestDate: faker.date.recent(),
+  amount: faker.number.int({ min: 5000, max: 25000 }),
+  status: faker.helpers.arrayElement(["approved", "pending", "disbursed"]),
+  reason: faker.lorem.sentence(),
+  processingFee: faker.number.int({ min: 100, max: 500 }),
+}));
 
 // Wallet data
-export const walletData = {
-  employerBalance: 250000,
-  jahaziiBalance: 100000,
-  perEmployeeCap: 3000,
-  totalBalance: 350000,
-  activeEmployees: 45,
-  pendingRequests: 4,
-  pendingAmount: 25000,
-  employerFundsUtilization: 68, // percentage
-  transactions: [
-    {
-      id: 1,
-      date: "2023-07-01T09:15:00",
-      amount: 100000,
-      type: "employer_topup",
-      fundingSource: "employer",
-      description: "Monthly employer wallet top-up",
-      status: "completed"
-    },
-    {
-      id: 2,
-      date: "2023-07-05T14:30:00",
-      amount: 2500,
-      type: "employer_disbursement",
-      fundingSource: "employer",
-      description: "EWA disbursement - Peter Ndegwa (Employer funds)",
-      status: "completed"
-    },
-    {
-      id: 3,
-      date: "2023-07-08T11:45:00",
-      amount: 50000,
-      type: "jahazii_topup",
-      fundingSource: "jahazii",
-      description: "Jahazii advance funding allocation",
-      status: "completed"
-    },
-    {
-      id: 4,
-      date: "2023-07-10T16:20:00",
-      amount: 5000,
-      type: "jahazii_disbursement",
-      fundingSource: "jahazii",
-      description: "EWA disbursement - Lucy Njeri (Jahazii funds)",
-      status: "completed"
-    },
-    {
-      id: 5,
-      date: "2023-07-15T13:45:00",
-      amount: 2800,
-      type: "employer_disbursement",
-      fundingSource: "employer",
-      description: "EWA disbursement - James Mwangi (Employer funds)",
-      status: "pending"
-    }
-  ]
+export const walletData: Wallet & { 
+  totalBalance: number;
+  activeEmployees: number;
+  pendingRequests: number;
+  pendingAmount: number;
+  employerFundsUtilization: number;
+  transactions: WalletTransaction[] 
+} = {
+  id: faker.string.uuid(),
+  employerBalance: faker.number.int({ min: 200000, max: 300000 }),
+  jahaziiBalance: faker.number.int({ min: 80000, max: 120000 }),
+  perEmployeeCap: faker.number.int({ min: 2000, max: 4000 }),
+  updatedAt: new Date(),
+  // Additional frontend-specific fields
+  totalBalance: faker.number.int({ min: 280000, max: 420000 }),
+  activeEmployees: faker.number.int({ min: 40, max: 50 }),
+  pendingRequests: faker.number.int({ min: 2, max: 6 }),
+  pendingAmount: faker.number.int({ min: 10000, max: 30000 }),
+  employerFundsUtilization: faker.number.int({ min: 60, max: 80 }),
+  transactions: Array.from({ length: 5 }).map(() => ({
+    id: faker.string.uuid(),
+    walletId: faker.string.uuid(),
+    amount: faker.number.int({ min: 1000, max: 100000 }),
+    transactionType: faker.helpers.arrayElement([
+      "employer_topup",
+      "employer_disbursement",
+      "jahazii_topup",
+      "jahazii_disbursement",
+    ]),
+    fundingSource: faker.helpers.arrayElement(["employer", "jahazii"]),
+    description: faker.lorem.sentence(),
+    status: faker.helpers.arrayElement(["completed", "pending"]),
+    transactionDate: faker.date.recent(),
+    referenceId: faker.string.uuid(),
+  })),
 };
 
 // Departments
-export const departments = [
-  { id: 1, name: "IT Department", description: "Information Technology Department" },
-  { id: 2, name: "HR", description: "Human Resources Department" },
-  { id: 3, name: "Finance", description: "Finance and Accounting Department" },
-  { id: 4, name: "Marketing", description: "Marketing and Sales Department" },
-  { id: 5, name: "Operations", description: "Operations Department" }
-];
+export const departments: Department[] = Array.from({ length: 5 }).map(() => ({
+  id: faker.string.uuid(),
+  name: faker.commerce.department(),
+  description: faker.lorem.sentence(),
+}));
 
 // User profile
-export const userProfile = {
-  id: 1,
-  username: "hrmanager",
-  name: "Sophia Wanjiku",
-  email: "sophia.w@jahazii.io",
-  role: "hr",
-  profileImage: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?ixlib=rb-1.2.1&auto=format&fit=facearea&facepad=2&w=256&h=256&q=80",
-  departmentId: 2,
-  position: "HR Manager",
-  contact: "+254 712 345678",
-  joinDate: "2020-05-15",
-  emergencyContact: "+254 723 456789",
-  address: "123 Nairobi Way, Nairobi"
+export const userProfile: User = {
+  id: faker.string.uuid(),
+  username: faker.internet.userName(),
+  password: faker.internet.password(),
+  role: faker.helpers.arrayElement(["hr", "admin", "employee", "supervisor"]),
+  profileImage: faker.image.avatar(),
+  departmentId: faker.string.uuid(),  
+  created_at: faker.date.recent(),
+  modified_at: faker.date.recent(),
 };
 
 // Format functions

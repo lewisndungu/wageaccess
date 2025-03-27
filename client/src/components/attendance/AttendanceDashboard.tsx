@@ -63,11 +63,14 @@ import {
   Users
 } from "lucide-react";
 import { DatePicker } from "@/components/ui/date-picker";
+import { Attendance, Employee } from '../../../../shared/schema';
 
 // Helper functions for date/time formatting
-const formatDate = (dateString: string | undefined): string => {
+const formatDate = (dateString: string | Date | undefined): string => {
   if (!dateString) return '-';
-  const date = new Date(dateString);
+  const date = typeof dateString === 'string' ? new Date(dateString) : dateString;
+  if (isNaN(date.getTime())) return '-'; // Invalid date
+  
   return date.toLocaleDateString('en-US', {
     year: 'numeric',
     month: 'short',
@@ -75,9 +78,11 @@ const formatDate = (dateString: string | undefined): string => {
   });
 };
 
-const formatTime = (dateString: string | undefined): string => {
+const formatTime = (dateString: string | Date | undefined): string => {
   if (!dateString) return '-';
-  const date = new Date(dateString);
+  const date = typeof dateString === 'string' ? new Date(dateString) : dateString;
+  if (isNaN(date.getTime())) return '-'; // Invalid date
+  
   return date.toLocaleTimeString('en-US', {
     hour: '2-digit',
     minute: '2-digit'
@@ -87,27 +92,10 @@ const formatTime = (dateString: string | undefined): string => {
 // Constants
 const WORK_START_HOUR = 8; // Work day starts at 8 AM
 
-// Define the interface for attendance records
-interface AttendanceRecord {
-  id: number;
-  employeeId: number;
-  employeeName: string;
-  department: string;
-  date: string;
-  clockInTime: string | null;
-  clockOutTime: string | null;
-  status: string;
-  hoursWorked: string;
-}
-
 // Define the interface for department attendance data
 interface DepartmentAttendance {
-  name: string;
-  present: number;
-  absent: number;
-  late: number;
-  total: number;
-  percentage: number;
+  department: string;
+  records: Attendance[];
 }
 
 // Define the interface for time distribution data
@@ -134,41 +122,59 @@ interface LatenessStats {
 }
 
 interface AttendanceDashboardProps {
-  records: AttendanceRecord[];
-  employees: {
-    id: number;
-    name: string;
-    department: string;
-    position: string;
-    profileImage?: string;
-  }[];
+  records: Attendance[];
+  isLoading?: boolean;
 }
 
-export function AttendanceDashboard({ records, employees }: AttendanceDashboardProps) {
+export function AttendanceDashboard({ records, isLoading = false }: AttendanceDashboardProps) {
   // State for date range and view type
-  const [startDate, setStartDate] = useState<Date | undefined>(new Date());
-  const [endDate, setEndDate] = useState<Date | undefined>(new Date());
+  const [startDate, setStartDate] = useState<Date | undefined>(() => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    return today;
+  });
+  
+  const [endDate, setEndDate] = useState<Date | undefined>(() => {
+    const today = new Date();
+    today.setHours(23, 59, 59, 999);
+    return today;
+  });
+  
   const [viewType, setViewType] = useState("daily");
   const [selectedDepartment, setSelectedDepartment] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState("");
   
-  // Use the provided records directly instead of making a separate query
   // Filter the records based on date range
   const filteredRecords = records.filter(record => {
-    const recordDate = new Date(record.date);
+    // Check for both clockInTime and date fields
+    const clockInDate = record.clockInTime ? new Date(record.clockInTime) : null;
+    const recordDate = record.date ? new Date(record.date) : null;
+    
+    // Use the clockInTime if available, otherwise use the date field
+    const dateToCheck = clockInDate || recordDate;
+    
+    // Skip records without a valid date
+    if (!dateToCheck) return false;
+    
+    // For startDate and endDate, create new date objects to avoid mutation
+    const startOfDay = startDate ? new Date(startDate) : null;
+    if (startOfDay) startOfDay.setHours(0, 0, 0, 0);
+    
+    const endOfDay = endDate ? new Date(endDate) : null;
+    if (endOfDay) endOfDay.setHours(23, 59, 59, 999);
     
     // Apply date range filter
-    if (startDate && endDate) {
-      return recordDate >= startDate && recordDate <= endDate;
-    } else if (startDate) {
-      return recordDate >= startDate;
+    if (startOfDay && endOfDay) {
+      return dateToCheck >= startOfDay && dateToCheck <= endOfDay;
+    } else if (startOfDay) {
+      return dateToCheck >= startOfDay;
     }
     
     return true;
   }).filter(record => {
     // Apply department filter
     if (selectedDepartment && selectedDepartment !== 'all') {
-      return record.department === selectedDepartment;
+      return record.employee?.department?.name === selectedDepartment;
     }
     return true;
   }).filter(record => {
@@ -176,25 +182,12 @@ export function AttendanceDashboard({ records, employees }: AttendanceDashboardP
     if (searchQuery) {
       const query = searchQuery.toLowerCase();
       return (
-        record.employeeName.toLowerCase().includes(query) ||
-        record.department.toLowerCase().includes(query) ||
-        record.status.toLowerCase().includes(query)
+        record.employee?.other_names?.toLowerCase().includes(query) ||
+        record.employee?.surname?.toLowerCase().includes(query) ||
+        record.status?.toLowerCase().includes(query)
       );
     }
     return true;
-  });
-
-  // Query to fetch employee list  
-  const { data: employeeList, isLoading: isLoadingEmployees } = useQuery({
-    queryKey: ['/api/employees/active'],
-    queryFn: async () => {
-      const response = await fetch('/api/employees/active');
-      if (!response.ok) throw new Error('Failed to fetch employees');
-      return response.json();
-    },
-    refetchInterval: 30000, // Refetch every 30 seconds
-    staleTime: 15000, // Data stays fresh for 15 seconds
-    placeholderData: employees // Use props data as placeholder
   });
 
   // Query to fetch recent attendance events
@@ -228,23 +221,37 @@ export function AttendanceDashboard({ records, employees }: AttendanceDashboardP
     }
   });
 
+  // Query to fetch attendance statistics
+  const { data: attendanceStats } = useQuery({
+    queryKey: ['/api/attendance/stats'],
+    queryFn: async () => {
+      const response = await fetch('/api/attendance/stats');
+      if (!response.ok) throw new Error('Failed to fetch attendance statistics');
+      return response.json();
+    },
+    refetchInterval: 60000, // Refetch every minute
+    staleTime: 30000, // Data stays fresh for 30 seconds
+    initialData: {
+      totalClockIns: 0,
+      totalClockOuts: 0,
+      averageClockInTime: "--:--",
+      uniqueEmployees: 0,
+      todayCount: 0,
+      absenceCount: 0
+    }
+  });
+
+  console.log({attendanceStats, dashboardStats});
+
   // Use the filtered records as display records
   const displayRecords = filteredRecords || [];
   
-  // Fallback to the passed employees prop if query hasn't loaded yet
-  const employeesData = employeeList && employeeList.length > 0 ? employeeList : (employees || []);
-
-  // Map employee data to a format that works with the component
-  const mappedEmployees = employeesData.map((emp: any) => {
-    // Handle different employee data structures
-    return {
-      id: emp.id,
-      name: emp.user?.name || emp.name || 'Unknown',
-      department: typeof emp.department === 'object' ? emp.department.name : (emp.department || 'Unknown'),
-      position: emp.position || 'Unknown',
-      profileImage: emp.user?.profileImage || emp.profileImage || null
-    };
-  });
+  // Extract unique departments from the records for the department filter
+  const departments = Array.from(new Set(
+    records
+      .filter(record => record.employee?.department?.name)
+      .map(record => record.employee?.department?.name)
+  )).filter(Boolean) as string[];
 
   // Function to calculate rate change (needs to be defined before metrics)
   function calculateRateChange(currentRate: number, previousRate: number): number {
@@ -254,28 +261,54 @@ export function AttendanceDashboard({ records, employees }: AttendanceDashboardP
   // Calculate lateness statistics
   const latenessStats = calculateLatenessStats(displayRecords);
   
-  // Calculate attendance percentage
-  const attendancePercentage = calculateAttendanceRate(displayRecords);
+  // Calculate attendance percentage based on API data or local data if needed
+  const attendanceRate = dashboardStats.attendance.rate 
+    ? parseInt(dashboardStats.attendance.rate.replace('%', ''))
+    : calculateAttendanceRate(displayRecords);
+
   const previousRate = calculatePreviousAttendanceRate();
   
-  // Calculate metrics based on the records
+  // Extract rate change value from API or calculate it
+  const rateChangeValue = dashboardStats.attendance.change
+    ? parseFloat(dashboardStats.attendance.change.replace('%', ''))
+    : calculateRateChange(attendanceRate, previousRate);
+  
+  // Calculate metrics based on the records and API data
   const metrics = {
+    // Use employee count from dashboard stats API
     totalEmployees: dashboardStats.employeeCount.active,
+    
+    // Use filtered records for present/late/absent counts (more accurate for current view)
     present: displayRecords.filter(r => r.status === 'present').length,
     late: displayRecords.filter(r => r.status === 'late').length,
     absent: displayRecords.filter(r => r.status === 'absent').length,
-    avgCheckIn: calculateAverageCheckInTime(displayRecords),
-    attendanceRate: parseInt(dashboardStats.attendance.rate),
-    previousRate: calculatePreviousAttendanceRate(),
-    rateChange: parseFloat(dashboardStats.attendance.change),
+    
+    // Use the API's average clock-in time if available
+    averageClockInTime: attendanceStats.averageClockInTime,
+    
+    // Use attendance rate from API or calculate if not available
+    attendanceRate: attendanceRate,
+    previousRate: previousRate,
+    rateChange: rateChangeValue,
+    
+    // Keep using locally calculated lateness stats for specific view
     avgLateness: latenessStats.avgLateness,
     maxLateness: latenessStats.maxLateness,
     latenessRate: latenessStats.latenessRate,
-    totalHours: displayRecords.reduce((acc, record) => acc + parseFloat(record.hoursWorked || "0"), 0).toFixed(2)
+    
+    // Sum hours from filtered records
+    totalHours: displayRecords.reduce((acc, record) => acc + (record.hoursWorked || 0), 0).toFixed(2),
+    
+    // Add additional metrics from attendance stats API
+    totalClockIns: attendanceStats.totalClockIns,
+    totalClockOuts: attendanceStats.totalClockOuts,
+    uniqueEmployees: attendanceStats.uniqueEmployees,
+    todayCount: attendanceStats.todayCount,
+    absenceCount: attendanceStats.absenceCount
   };
 
   // Generate department attendance data
-  const departmentData = generateDepartmentData(displayRecords, employeesData);
+  const departmentData = generateDepartmentData(displayRecords);
   
   // Generate time distribution data
   const timeDistributionData = generateTimeDistributionData(displayRecords);
@@ -284,25 +317,25 @@ export function AttendanceDashboard({ records, employees }: AttendanceDashboardP
   const trendData = generateTrendData(7); // Last 7 days
 
   // Define columns for the attendance table
-  const columns: ColumnDef<AttendanceRecord>[] = [
+  const columns: ColumnDef<Attendance>[] = [
     {
       accessorKey: "employeeName",
       header: "Employee",
       cell: ({ row }) => {
         const record = row.original;
-        const employee = mappedEmployees.find((e: { id: number; }) => e.id === record.employeeId);
+        const employee = record.employee;
           
         return (
           <div className="flex items-center">
             <Avatar className="h-8 w-8 mr-2">
-              <AvatarImage src={employee?.profileImage} alt={record.employeeName} />
+              <AvatarImage src={employee?.avatar_url} alt={`${employee?.other_names} ${employee?.surname}`} />
               <AvatarFallback>
                 <User className="h-4 w-4" />
               </AvatarFallback>
             </Avatar>
             <div>
-              <p className="font-medium text-sm">{record.employeeName}</p>
-              <p className="text-xs text-muted-foreground">{record.department}</p>
+              <p className="font-medium text-sm">{employee?.other_names} {employee?.surname}</p>
+              <p className="text-xs text-muted-foreground">{employee?.department?.name}</p>
             </div>
           </div>
         );
@@ -316,12 +349,12 @@ export function AttendanceDashboard({ records, employees }: AttendanceDashboardP
     {
       accessorKey: "clockInTime",
       header: "Clock In",
-      cell: ({ row }) => formatTime(row.original.clockInTime || ""),
+      cell: ({ row }) => formatTime(row.original.clockInTime),
     },
     {
       accessorKey: "clockOutTime",
       header: "Clock Out",
-      cell: ({ row }) => formatTime(row.original.clockOutTime || ""),
+      cell: ({ row }) => formatTime(row.original.clockOutTime),
     },
     {
       accessorKey: "status",
@@ -332,7 +365,7 @@ export function AttendanceDashboard({ records, employees }: AttendanceDashboardP
       accessorKey: "hoursWorked",
       header: "Hours",
       cell: ({ row }) => {
-        const hours = parseFloat(row.original.hoursWorked || "0");
+        const hours = row.original.hoursWorked || 0;
         return hours.toFixed(2);
       },
     },
@@ -355,12 +388,12 @@ export function AttendanceDashboard({ records, employees }: AttendanceDashboardP
   }
 
   // Function to calculate average check-in time
-  function calculateAverageCheckInTime(records: AttendanceRecord[]): string {
+  function calculateAverageCheckInTime(records: Attendance[]): string {
     const validRecords = records.filter(r => r.clockInTime !== null);
     if (validRecords.length === 0) return "N/A";
 
     const totalMinutes = validRecords.reduce((acc, record) => {
-      const date = new Date(record.clockInTime as string);
+      const date = new Date(record.clockInTime || "");
       return acc + (date.getHours() * 60 + date.getMinutes());
     }, 0);
 
@@ -372,7 +405,7 @@ export function AttendanceDashboard({ records, employees }: AttendanceDashboardP
   }
 
   // Function to calculate attendance rate with more detailed breakdown
-  function calculateAttendanceRate(records: AttendanceRecord[]): number {
+  function calculateAttendanceRate(records: Attendance[]): number {
     if (records.length === 0) return 0;
     
     const presentCount = records.filter(r => r.status === 'present').length;
@@ -392,55 +425,30 @@ export function AttendanceDashboard({ records, employees }: AttendanceDashboardP
   }
 
   // Function to generate department data
-  function generateDepartmentData(records: AttendanceRecord[], employees: any[]): DepartmentAttendance[] {
+  function generateDepartmentData(records: Attendance[]): DepartmentAttendance[] {
     const departments: { [key: string]: DepartmentAttendance } = {};
     
-    if (!employees || employees.length === 0) {
-      return [];
-    }
-    
-    // Group employees by department first
-    employees.forEach(emp => {
-      let departmentName = typeof emp.department === 'object' ? emp.department.name : emp.department;
-      if (!departmentName) return; // Skip employees without department
-      
-      if (!departments[departmentName]) {
-        departments[departmentName] = {
-          name: departmentName,
-          present: 0,
-          absent: 0,
-          late: 0,
-          total: 0,
-          percentage: 0
-        };
-      }
-      departments[departmentName].total++;
-    });
-    
-    // Count attendance status by department
+    // Group attendance records by department
     records.forEach(record => {
-      if (record.department && departments[record.department]) {
-        if (record.status === 'present') {
-          departments[record.department].present++;
-        } else if (record.status === 'late') {
-          departments[record.department].late++;
-        } else if (record.status === 'absent') {
-          departments[record.department].absent++;
+      if (record.employee?.department?.name) {
+        const departmentName = record.employee.department.name;
+        
+        if (!departments[departmentName]) {
+          departments[departmentName] = {
+            department: departmentName,
+            records: []
+          };
         }
+        
+        departments[departmentName].records.push(record);
       }
-    });
-    
-    // Calculate percentages
-    Object.keys(departments).forEach(dept => {
-      const { present, late, total } = departments[dept];
-      departments[dept].percentage = total > 0 ? Math.round(((present + late) / total) * 100) : 0;
     });
     
     return Object.values(departments);
   }
 
   // Function to generate time distribution data
-  function generateTimeDistributionData(records: AttendanceRecord[]): TimeDistribution[] {
+  function generateTimeDistributionData(records: Attendance[]): TimeDistribution[] {
     const hourCounts: { [key: string]: number } = {};
     
     // Initialize hours from 6 AM to 6 PM
@@ -501,7 +509,7 @@ export function AttendanceDashboard({ records, employees }: AttendanceDashboardP
   };
 
   // Function to calculate lateness statistics
-  function calculateLatenessStats(records: AttendanceRecord[]): LatenessStats {
+  function calculateLatenessStats(records: Attendance[]): LatenessStats {
     const lateRecords = records.filter(r => r.status === 'late' && r.clockInTime);
     
     if (lateRecords.length === 0) {
@@ -514,7 +522,7 @@ export function AttendanceDashboard({ records, employees }: AttendanceDashboardP
 
     const expectedStartTime = WORK_START_HOUR * 60; // Convert to minutes
     const latenessDurations = lateRecords.map(record => {
-      const clockIn = new Date(record.clockInTime as string);
+      const clockIn = new Date(record.clockInTime || "");
       const clockInMinutes = clockIn.getHours() * 60 + clockIn.getMinutes();
       return clockInMinutes - expectedStartTime;
     });
@@ -528,6 +536,35 @@ export function AttendanceDashboard({ records, employees }: AttendanceDashboardP
       maxLateness: `${maxLateness} min`,
       latenessRate
     };
+  }
+
+  // If loading, show loading skeleton
+  if (isLoading) {
+    return (
+      <div className="space-y-6">
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+          {Array(5).fill(0).map((_, i) => (
+            <Card key={i} className="shadow-glass dark:shadow-glass-dark">
+              <CardContent className="p-6">
+                <div className="h-20 animate-pulse bg-gray-200 dark:bg-gray-700 rounded-md"></div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+        
+        <Card className="shadow-glass dark:shadow-glass-dark">
+          <CardHeader>
+            <div className="h-8 w-1/3 animate-pulse bg-gray-200 dark:bg-gray-700 rounded-md"></div>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-6">
+              <div className="h-10 animate-pulse bg-gray-200 dark:bg-gray-700 rounded-md"></div>
+              <div className="h-40 animate-pulse bg-gray-200 dark:bg-gray-700 rounded-md"></div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
   }
 
   // Render the dashboard
@@ -570,7 +607,7 @@ export function AttendanceDashboard({ records, employees }: AttendanceDashboardP
             <div className="flex justify-between">
               <div>
                 <p className="text-muted-foreground text-sm">Avg. Check-in Time</p>
-                <h3 className="text-2xl font-bold">{metrics.avgCheckIn}</h3>
+                <h3 className="text-2xl font-bold">{metrics.averageClockInTime}</h3>
                 <div className="flex items-center text-xs text-muted-foreground">
                   <Timer className="h-3 w-3 mr-1" />
                   <span>target: 08:30</span>
@@ -588,7 +625,8 @@ export function AttendanceDashboard({ records, employees }: AttendanceDashboardP
             <div className="flex justify-between">
               <div>
                 <p className="text-muted-foreground text-sm">Lateness Stats</p>
-                <h3 className="text-2xl font-bold">{metrics.avgLateness}</h3>
+                <h3 className="text-2xl font-bold">{metrics.averageClockInTime}</h3>
+
                 <div className="flex items-center text-xs text-muted-foreground">
                   <Timer className="h-3 w-3 mr-1" />
                   <span>max: {metrics.maxLateness}</span>
@@ -628,6 +666,7 @@ export function AttendanceDashboard({ records, employees }: AttendanceDashboardP
           </CardContent>
         </Card>
       </div>
+
 
       {/* Main Dashboard Content */}
       <Card className="shadow-glass dark:shadow-glass-dark">
@@ -673,9 +712,9 @@ export function AttendanceDashboard({ records, employees }: AttendanceDashboardP
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="all">All Departments</SelectItem>
-                      {departmentData.map((dept) => (
-                        <SelectItem key={dept.name} value={dept.name}>
-                          {dept.name}
+                      {departments.map((dept) => (
+                        <SelectItem key={dept} value={dept}>
+                          {dept}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -694,7 +733,15 @@ export function AttendanceDashboard({ records, employees }: AttendanceDashboardP
               </div>
               
               {/* Data Table */}
-              <DataTable columns={columns} data={displayRecords} />
+              {displayRecords.length > 0 ? (
+                <DataTable columns={columns} data={displayRecords} />
+              ) : (
+                <div className="text-center p-8 border border-dashed rounded-md">
+                  <Calendar className="h-10 w-10 mx-auto mb-2 text-muted-foreground/50" />
+                  <h3 className="text-lg font-medium mb-2">No attendance records found</h3>
+                  <p className="text-muted-foreground">Try adjusting your filters or date range.</p>
+                </div>
+              )}
               
               {/* Charts Section */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
@@ -732,13 +779,13 @@ export function AttendanceDashboard({ records, employees }: AttendanceDashboardP
                           }}
                         >
                           <CartesianGrid strokeDasharray="3 3" />
-                          <ChartXAxis dataKey="name" />
+                          <ChartXAxis dataKey="department" />
                           <ChartYAxis />
                           <ChartTooltip />
                           <ChartLegend />
-                          <ChartBar dataKey="present" fill="#10B981" name="Present" />
-                          <ChartBar dataKey="late" fill="#F59E0B" name="Late" />
-                          <ChartBar dataKey="absent" fill="#EF4444" name="Absent" />
+                          <ChartBar dataKey="records.filter(r => r.status === 'present').length" fill="#10B981" name="Present" />
+                          <ChartBar dataKey="records.filter(r => r.status === 'late').length" fill="#F59E0B" name="Late" />
+                          <ChartBar dataKey="records.filter(r => r.status === 'absent').length" fill="#EF4444" name="Absent" />
                         </BarChart>
                       </Chart>
                     </div>

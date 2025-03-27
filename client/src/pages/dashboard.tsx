@@ -49,15 +49,36 @@ export default function Dashboard() {
     payroll: { expected: "KES 0", change: "+0%" },
     ewa: { total: "0", pending: 0, change: "+0%" }
   }} = useQuery<DashboardStats>({
-    queryKey: ['/api/statistics/dashboard']
+    queryKey: ['/api/statistics/dashboard'],
+    queryFn: async () => {
+      const response = await fetch('/api/statistics/dashboard');
+      if (!response.ok) {
+        throw new Error('Failed to fetch dashboard statistics');
+      }
+      return response.json();
+    }
   });
   
   const { data: employeeData = [] } = useQuery<BasicEmployee[]>({
-    queryKey: ['/api/employees/active']
+    queryKey: ['/api/employees/active'],
+    queryFn: async () => {
+      const response = await fetch('/api/employees/active');
+      if (!response.ok) {
+        throw new Error('Failed to fetch employees');
+      }
+      return response.json();
+    }
   });
   
   const { data: activities = [] } = useQuery<Activity[]>({
-    queryKey: ['/api/activities']
+    queryKey: ['/api/activities'],
+    queryFn: async () => {
+      const response = await fetch('/api/activities');
+      if (!response.ok) {
+        throw new Error('Failed to fetch activities');
+      }
+      return response.json();
+    }
   });
   
   const { defaultActions } = useQuickActions();

@@ -8,7 +8,10 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Card } from "@/components/ui/card";
-import type { BasicEmployee } from "@/types/employee";
+import { cn } from "@/lib/utils";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { MoreHorizontal } from "lucide-react";
+import { Employee } from "@shared/schema";
 
 // Utility function to safely parse JSON strings
 const parseJsonField = (jsonString: string | null | undefined) => {
@@ -22,166 +25,126 @@ const parseJsonField = (jsonString: string | null | undefined) => {
   }
 };
 
-// Format phone number to display
-const formatPhoneNumber = (phoneNumber: string | null | undefined) => {
-  if (!phoneNumber) return "N/A";
-  
-  // Return the formatted phone number
-  return phoneNumber;
-};
+type BasicEmployee = Pick<
+  Employee,
+  | "id"
+  | "employeeNumber"
+  | "other_names"
+  | "surname"
+  | "department"
+  | "position"
+  | "status"
+  | "contact"
+>;
 
 interface EmployeeTableProps {
-  data: BasicEmployee[];
+  data?: Employee[];
   isLoading?: boolean;
 }
 
-export function EmployeeTable({ data, isLoading }: EmployeeTableProps) {
+export function EmployeeTable({ data = [], isLoading }: EmployeeTableProps) {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState("active");
   
-  const handleViewProfile = (employee: BasicEmployee) => {
+  const handleViewProfile = (employee: Employee) => {
     navigate(`/employees/${employee.id}`);
   };
-  
-  const columns: ColumnDef<BasicEmployee>[] = [
-    {
-      accessorKey: "name",
-      header: "Employee",
-      cell: ({ row }) => {
-        const employee = row.original;
-        return (
-          <div className="flex items-center">
-            <Avatar className="h-9 w-9 mr-3">
-              <AvatarImage src={employee.profileImage} alt={employee.name} />
-              <AvatarFallback>
-                <User className="h-4 w-4" />
-              </AvatarFallback>
-            </Avatar>
-            <div>
-              <p className="text-sm font-medium">{employee.name}</p>
-              <p className="text-xs text-muted-foreground">{employee.email}</p>
-            </div>
-          </div>
-        );
-      },
-    },
+
+  const columns = [
     {
       accessorKey: "employeeNumber",
-      header: "ID",
+      header: "Employee ID",
+    },
+    {
+      accessorKey: "other_names",
+      header: "Name",
+      cell: ({ row }: { row: any }) => {
+        const employee = row.original as Employee;
+        return `${employee.other_names} ${employee.surname}`;
+      },
     },
     {
       accessorKey: "department",
       header: "Department",
+      cell: ({ row }: { row: any }) => {
+        const employee = row.original as Employee;
+        return employee.department?.name || "N/A";
+      },
     },
     {
       accessorKey: "position",
       header: "Position",
     },
     {
-      accessorKey: "contact",
+        accessorKey: "contact.phoneNumber",
       header: "Contact",
-      cell: ({ row }) => {
-        const employee = row.original;
-        const phoneNumber = employee.phoneNumber || "N/A";
-        
-        return (
-          <div className="flex items-center">
-            <Phone className="h-3 w-3 mr-1 text-muted-foreground" />
-            <span className="text-sm">{formatPhoneNumber(phoneNumber)}</span>
-          </div>
-        );
-      }
-    },
-    {
-      accessorKey: "status",
-      header: "Status",
-      cell: ({ row }) => {
-        const status = row.original.status;
-        if (status === "active") {
-          return <Badge className="bg-[#10B981]/20 text-[#10B981] hover:bg-[#10B981]/20">Active</Badge>;
-        } else {
-          return <Badge className="bg-[#EF4444]/20 text-[#EF4444] hover:bg-[#EF4444]/20">Inactive</Badge>;
-        }
+      cell: ({ row }: { row: any }) => {
+        const employee = row.original as Employee;
+        return employee.contact?.phoneNumber || "N/A";
       },
     },
     {
       id: "actions",
-      header: () => <div className="text-right">Actions</div>,
-      cell: ({ row }) => {
+      cell: ({ row }: { row: any }) => {
+        const employee = row.original as Employee;
         return (
-          <div className="text-right">
-            <Button 
-              variant="ghost" 
-              size="icon"
-              onClick={(e) => {
-                e.stopPropagation();
-                handleViewProfile(row.original);
-              }}
-              className="text-primary hover:text-primary/80"
-            >
-              <i className="ri-eye-line"></i>
-            </Button>
-            <Button 
-              variant="ghost" 
-              size="icon"
-              className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300"
-            >
-              <i className="ri-edit-line"></i>
-            </Button>
-            <Button 
-              variant="ghost" 
-              size="icon"
-              className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300"
-            >
-              <i className="ri-more-2-fill"></i>
-            </Button>
-          </div>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" className="h-8 w-8 p-0">
+                <span className="sr-only">Open menu</span>
+                <MoreHorizontal className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={() => handleViewProfile(employee)}>
+                View Profile
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => navigate(`/employees/${employee.id}/edit`)}>
+                Edit Details
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         );
       },
     },
   ];
-
-  // Filter data based on active tab
-  const filteredData = activeTab === "active" 
-    ? data.filter(employee => employee.status === "active")
-    : data.filter(employee => employee.status === "inactive");
-
-  // Get counts for the tabs
-  const activeCount = data.filter(employee => employee.status === "active").length;
-  const inactiveCount = data.filter(employee => employee.status === "inactive").length;
-
+  
+  const filteredData = data.filter(employee => {
+    if (activeTab === "active") {
+      return employee.status === "active";
+    }
+    return employee.status === "inactive";
+  });
+  
+  const activeCount = data.filter(emp => emp.status === "active").length;
+  const inactiveCount = data.filter(emp => emp.status === "inactive").length;
+  
+  if (isLoading) {
+    return <div>Loading...</div>;
+  }
+  
   return (
-    <Card className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-800 overflow-hidden">
-      <Tabs defaultValue="active" onValueChange={setActiveTab}>
-        <div className="border-b border-gray-200 dark:border-gray-700 px-4">
-          <TabsList className="bg-transparent border-b-0">
-            <TabsTrigger 
-              value="active"
-              className="data-[state=active]:border-b-2 data-[state=active]:border-primary data-[state=active]:text-primary rounded-none border-b-2 border-transparent px-4 py-2"
-            >
-              Active ({activeCount})
-            </TabsTrigger>
-            <TabsTrigger 
-              value="inactive"
-              className="data-[state=active]:border-b-2 data-[state=active]:border-primary data-[state=active]:text-primary rounded-none border-b-2 border-transparent px-4 py-2"
-            >
-              Inactive ({inactiveCount})
-            </TabsTrigger>
-          </TabsList>
-        </div>
-        <TabsContent value="active" className="p-4">
+    <Card>
+      <Tabs value={activeTab} onValueChange={setActiveTab}>
+        <TabsList className="grid w-full grid-cols-2 mb-4">
+          <TabsTrigger value="active">Active ({activeCount})</TabsTrigger>
+          <TabsTrigger value="inactive">Inactive ({inactiveCount})</TabsTrigger>
+        </TabsList>
+        
+        <TabsContent value="active">
           <DataTable 
             columns={columns} 
             data={filteredData} 
-            searchColumn="name"
+            searchColumn="other_names"
             onRowClick={handleViewProfile}
           />
         </TabsContent>
-        <TabsContent value="inactive" className="p-4">
+        
+        <TabsContent value="inactive">
           <DataTable 
             columns={columns} 
             data={filteredData} 
-            searchColumn="name"
+            searchColumn="other_names"
             onRowClick={handleViewProfile}
           />
         </TabsContent>

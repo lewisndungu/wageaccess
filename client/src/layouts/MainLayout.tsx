@@ -11,8 +11,10 @@ import {
   SearchIcon, MenuIcon, BellIcon, User, LayoutDashboard, 
   Users, Clock, DollarSign, CreditCard, LogIn, UserCog, 
   HelpCircle, BadgeDollarSign, ArrowRight,
-  MessageCircle
+  MessageCircle,
+  Upload
 } from "lucide-react";
+import JahaziiIcon from "@/assets/JahaziiIcon.svg";
 
 // Error boundary component
 export class AppErrorBoundary extends React.Component<{ children: ReactNode, fallback?: ReactNode }> {
@@ -100,10 +102,10 @@ export default function MainLayout({ children }: MainLayoutProps) {
           dark:border-gray-800 shadow-glass dark:shadow-glass-dark lg:animate-fade-in`}
       >
         {/* Logo section */}
-        <div className="h-16 flex items-center justify-center border-b border-gray-200 dark:border-gray-800">
+        <div className="h-16 flex items-center justify-start pl-4 border-b border-gray-200 dark:border-gray-800">
           <div className="flex items-center space-x-2">
-            <div className="bg-primary rounded-md h-8 w-8 flex items-center justify-center text-white">
-              <BadgeDollarSign className="h-5 w-5" />
+            <div className="h-8 w-8 flex items-center justify-center text-white">
+              <img src={JahaziiIcon} alt="Jahazii" className="h-8 w-8" />
             </div>
             <span className="text-xl font-semibold text-primary">Jahazii</span>
           </div>
@@ -116,7 +118,7 @@ export default function MainLayout({ children }: MainLayoutProps) {
               <Avatar>
                 <AvatarImage 
                   src={user?.profileImage || "https://ui-avatars.com/api/?name=User"} 
-                  alt={user?.name || "User"} 
+                  alt={user?.username || "User"} 
                 />
                 <AvatarFallback>
                   <User className="h-4 w-4" />
@@ -125,7 +127,7 @@ export default function MainLayout({ children }: MainLayoutProps) {
               <span className="absolute bottom-0 right-0 h-3 w-3 rounded-full bg-green-500 border-2 border-white dark:border-gray-900"></span>
             </div>
             <div className="ml-3">
-              <p className="text-sm font-medium">{user?.name || "User"}</p>
+              <p className="text-sm font-medium">{user?.username || "User"}</p>
               <p className="text-xs text-gray-500 dark:text-gray-400">{user?.role === 'hr' ? 'HR Manager' : user?.role || 'User'}</p>
             </div>
           </div>
@@ -140,6 +142,14 @@ export default function MainLayout({ children }: MainLayoutProps) {
                 icon={<LayoutDashboard size={18} />} 
                 label="Dashboard" 
                 active={location.pathname === '/' || location.pathname === '/dashboard'} 
+              />
+            </li>
+            <li>
+              <SidebarLink 
+                to="/chat" 
+                icon={<Upload size={18} />} 
+                label="Upload" 
+                active={location.pathname === '/chat'} 
               />
             </li>
             <li>
@@ -180,14 +190,6 @@ export default function MainLayout({ children }: MainLayoutProps) {
                 icon={<LogIn size={18} />} 
                 label="Self-Log" 
                 active={location.pathname === '/attendance/self-log'} 
-              />
-            </li>
-            <li>
-              <SidebarLink 
-                to="/chat" 
-                icon={<MessageCircle size={18} />} 
-                label="Chat" 
-                active={location.pathname === '/chat'} 
               />
             </li>
             <li className="pt-4 mt-4 border-t border-gray-200 dark:border-gray-800">
@@ -288,7 +290,7 @@ export default function MainLayout({ children }: MainLayoutProps) {
                 <Avatar className="h-8 w-8 cursor-pointer">
                   <AvatarImage 
                     src={user?.profileImage || "https://ui-avatars.com/api/?name=User"} 
-                    alt={user?.name || "User"} 
+                    alt={user?.username || "User"} 
                   />
                   <AvatarFallback>
                     <User className="h-4 w-4" />
@@ -316,11 +318,8 @@ export default function MainLayout({ children }: MainLayoutProps) {
         <footer className="mt-auto py-6 px-4 lg:px-6 border-t border-gray-200 dark:border-gray-800">
           <div className="container mx-auto flex flex-col md:flex-row items-center justify-between">
             <div className="flex items-center mb-4 md:mb-0">
-              <div className="bg-primary rounded-md h-8 w-8 flex items-center justify-center text-white mr-2">
-                <BadgeDollarSign className="h-5 w-5" />
-              </div>
               <div>
-                <p className="text-sm font-medium text-gray-600 dark:text-gray-400">© 2023 Jahazii. All rights reserved.</p>
+                <p className="text-sm font-medium text-gray-600 dark:text-gray-400">© 20235Jahazii. All rights reserved.</p>
               </div>
             </div>
             <div className="flex space-x-4">

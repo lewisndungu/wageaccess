@@ -2,16 +2,35 @@ import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 import { createServer } from 'http';
+// @ts-ignore
 import { Server } from 'socket.io';
+// @ts-ignore
 import { calculateKenyanPayroll } from './payroll-utils';
+// @ts-ignore
 import { createChatService } from './chat-service';
 
 const app = express();
-app.use(express.json());
-app.use(express.urlencoded({ extended: false }));
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ extended: false, limit: '50mb' }));
 
 // Create chat service
 export const chatService = createChatService();
+
+// Add CORS headers to API responses
+app.use((req, res, next) => {
+  // Only add CORS headers for API routes
+  if (req.path.startsWith('/api/')) {
+    res.header('Access-Control-Allow-Origin', '*');
+    res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+    res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+    
+    // Handle preflight requests
+    if (req.method === 'OPTIONS') {
+      return res.status(200).end();
+    }
+  }
+  next();
+});
 
 app.use((req, res, next) => {
   const start = Date.now();
@@ -26,48 +45,56 @@ app.use((req, res, next) => {
 
   res.on("finish", () => {
     const duration = Date.now() - start;
-    if (path.startsWith("/api")) {
-      let logLine = `${req.method} ${path} ${res.statusCode} in ${duration}ms`;
-      if (capturedJsonResponse) {
-        logLine += ` :: ${JSON.stringify(capturedJsonResponse)}`;
-      }
-
-      if (logLine.length > 80) {
-        logLine = logLine.slice(0, 79) + "…";
-      }
-
-      log(logLine);
+    
+    log(`${req.method} ${path} ${res.statusCode} ${duration}ms`);
+    
+    if (path.startsWith('/api/') && capturedJsonResponse) {
+      log(`Response: ${JSON.stringify(capturedJsonResponse).slice(0, 200)}...`);
     }
   });
 
   next();
 });
 
+// Register API routes before setting up Vite middleware
+// This ensures API routes are handled by Express and not by Vite
 (async () => {
-  const server = await registerRoutes(app);
-
-  app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
-    const status = err.status || err.statusCode || 500;
-    const message = err.message || "Internal Server Error";
-
-    res.status(status).json({ message });
-    throw err;
-  });
-
-  // importantly only setup vite in development and after
-  // setting up all the other routes so the catch-all route
-  // doesn't interfere with the other routes
-  if (app.get("env") === "development") {
-    await setupVite(app, server);
-  } else {
-    serveStatic(app);
+  try {
+    // First register all API routes
+    const server = await registerRoutes(app);
+    
+    // Now set up Vite middleware for handling frontend requests
+    if (process.env.NODE_ENV !== "production") {
+      // In development, use Vite's dev server
+      await setupVite(app, server);
+    } else {
+      // In production, serve static files
+      serveStatic(app);
+      
+      // For any route not matching /api, serve the index.html
+      app.get("*", (req, res) => {
+        if (!req.path.startsWith('/api/')) {
+          res.sendFile('index.html', { root: './dist' });
+        }
+      });
+    }
+    
+    // Catch-all error handler
+    app.use((err: Error, req: Request, res: Response, next: NextFunction) => {
+      console.error(err.stack);
+      res.status(500).json({
+        error: err.message || "Something went wrong",
+        stack: process.env.NODE_ENV === 'development' ? err.stack : undefined
+      });
+    });
+    
+    // Start the server
+    const PORT = process.env.PORT || 3000;
+    server.listen(PORT, () => {
+      log(`Server running on port ${PORT}`);
+    });
+  } catch (error) {
+    console.error("Failed to start server:", error);
+    process.exit(1);
   }
-
-  // ALWAYS serve the app on port 5000
-  // this serves both the API and the client.
-  // It is the only port that is not firewalled.
-  const port = 3000;
-  server.listen(port, () => {
-    log(`serving on port ${port}`);
-  });
 })();

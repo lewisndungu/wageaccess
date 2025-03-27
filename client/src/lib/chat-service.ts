@@ -1,6 +1,7 @@
-import { Employee } from "@/lib/store";
+import { Employee } from "@shared/schema";
 import { formatKEDate, formatKESCurrency } from "@/lib/format-utils";
 import axios from 'axios';
+import { queryClient } from '@/lib/queryClient';
 
 export type MessageType = 'user' | 'system' | 'file' | 'extraction' | 'error' | 'confirm' | 'employee';
 
@@ -21,6 +22,14 @@ export interface ChatAction {
   label: string;
   icon?: string;
   action: () => void;
+}
+
+// Used by server-side code for storage
+export interface ChatHistory {
+  userId: string;
+  messages: Message[];
+  commands: string[];
+  searches: string[];
 }
 
 // Common actions that can be suggested based on context
@@ -78,6 +87,18 @@ export const chatService = {
   // Get user ID (should be replaced with actual auth implementation)
   getUserId(): string {
     return localStorage.getItem('userId') || 'anonymous-user';
+  },
+  
+  // Added to support HelpDialog.tsx
+  getHistory(): ChatHistory {
+    const userId = this.getUserId();
+    // Default empty history if we can't get it from the server
+    return {
+      userId,
+      messages: [],
+      commands: [],
+      searches: []
+    };
   },
   
   async getRecentMessages(): Promise<Message[]> {
@@ -200,11 +221,35 @@ export const chatService = {
   
   async importEmployees(data: any[]): Promise<any> {
     try {
+      // Generate diagnostics
+      console.log(`Importing ${data.length} employees`);
+      
+      // Log a sample of employee data (without IDs, which will be generated server-side)
+      if (data.length > 0) {
+        const sampleEmployees = data.slice(0, 2).map(emp => {
+          const { id, ...rest } = emp; // Remove any existing id
+          return {
+            employeeNumber: emp.employeeNumber || emp['Emp No'],
+            name: `${emp.other_names || emp['First Name']} ${emp.surname || emp['Last Name']}`.trim()
+          };
+        });
+        console.log(`Sample employee data being sent: ${JSON.stringify(sampleEmployees)}`);
+      }
+      
+      // Remove any client-side IDs before sending to server
+      const cleanData = data.map(emp => {
+        const { id, ...rest } = emp;
+        return rest;
+      });
+      
       const userId = this.getUserId();
       const response = await axios.post('/api/chat/import-employees', {
-        data,
+        data: cleanData,
         userId
       });
+      
+      // Invalidate the employees query cache to ensure fresh data is fetched
+      queryClient.invalidateQueries({ queryKey: ['/api/employees/active'] });
       
       return response.data;
     } catch (error) {
@@ -243,11 +288,11 @@ export const chatService = {
   // Format employee data for display in chat
   formatEmployeeInfo(employee: Employee): string {
     return `
-**${employee.name}**
+**${employee.other_names} ${employee.surname}**
 Position: ${employee.position}
 Department: ${employee.department}
-Hire Date: ${formatKEDate(employee.hireDate)}
-Salary: ${formatKESCurrency(employee.salary)}
+Hire Date: ${formatKEDate(employee.created_at)}
+Salary: ${formatKESCurrency(employee.gross_income)}
     `.trim();
   },
   
@@ -257,7 +302,7 @@ Salary: ${formatKESCurrency(employee.salary)}
     const actions: ChatAction[] = [];
     
     // If user has been searching for employees but hasn't uploaded data
-    if (history.lastSearches.length > 0 && !recentCommands.includes('upload')) {
+    if (history.searches.length > 0 && !recentCommands.includes('upload')) {
       actions.push(COMMON_ACTIONS.UPLOAD_EMPLOYEES);
     }
     

@@ -11,88 +11,51 @@ import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { DataTable } from "@/components/ui/data-table";
 import { ColumnDef } from "@tanstack/react-table";
-
-// Define Employee interface with all required properties
-interface EmployeeDetails {
-  id: number;
-  employeeNumber: string;
-  userId: number;
-  departmentId: number;
-  position: string;
-  status: string; 
-  hourlyRate: string | number;
-  startDate: string;
-  active: boolean | null;
-  phoneNumber: string | null;
-  emergencyContact: string | null;
-  address: string | null;
-  user: {
-    id: number;
-    name: string;
-    username: string;
-    email?: string;
-    profileImage: string | null;
-    role: string;
-  };
-  department: {
-    id: number;
-    name: string;
-    description: string | null;
-  };
-}
-
-interface AttendanceRecord {
-  id: number;
-  date: string;
-  clockInTime: string | null;
-  clockOutTime: string | null;
-  status: string;
-  hoursWorked: number;
-}
-
-interface PayrollRecord {
-  id: number;
-  periodStart: string;
-  periodEnd: string;
-  hoursWorked: number;
-  grossPay: number;
-  netPay: number;
-  status: string;
-}
-
-interface EWARequest {
-  id: number;
-  requestDate: string;
-  amount: number;
-  status: string;
-}
+import { Employee, Attendance, Payroll, EwaRequest } from '../../../../shared/schema';
+import axios from "axios";
 
 export default function EmployeeDetailPage() {
   const params = useParams<{ id: string }>();
-  const employeeId = parseInt(params.id || "0");
+  const employeeId = params.id;
   const navigate = useNavigate();
   
-  const { data: employee, isLoading } = useQuery<EmployeeDetails>({
+  const { data: employee, isLoading } = useQuery<Employee>({
     queryKey: [`/api/employees/${employeeId}`],
-    enabled: !isNaN(employeeId)
+    enabled: !!employeeId,
+    queryFn: async () => {
+      const response = await axios.get(`/api/employees/${employeeId}`);
+      return response.data;
+    }
   });
   
   // Get attendance records for this employee
-  const { data: attendanceData = [] } = useQuery<AttendanceRecord[]>({
+  const { data: attendanceData = [] } = useQuery<Attendance[]>({
     queryKey: [`/api/attendance/employee/${employeeId}`],
-    enabled: !isNaN(employeeId) && !!employee
+    enabled: !!employeeId,
+    queryFn: async () => {
+      const response = await axios.get(`/api/attendance/employee/${employeeId}`);
+      return response.data;
+    }
   });
   
   // Get payroll records for this employee
-  const { data: payrollData = [] } = useQuery<PayrollRecord[]>({
+  const { data: payrollData = [] } = useQuery<Payroll[]>({
     queryKey: [`/api/payroll/employee/${employeeId}`],
-    enabled: !isNaN(employeeId) && !!employee
+    enabled: !!employeeId,
+    queryFn: async () => {
+      const response = await axios.get(`/api/payroll/employee/${employeeId}`);
+      return response.data;
+    }
   });
   
   // Get EWA requests for this employee
-  const { data: ewaRequestsData = [] } = useQuery<EWARequest[]>({
+  const { data: ewaRequestsData = [] } = useQuery<EwaRequest[]>({
     queryKey: [`/api/ewa/requests/employee/${employeeId}`],
-    enabled: !isNaN(employeeId) && !!employee
+    enabled: !!employeeId,
+    queryFn: async () => {
+      const response = await axios.get(`/api/ewa/requests/employee/${employeeId}`);
+      return response.data;
+    }
   });
   
   const [activeTab, setActiveTab] = useState("personal");
@@ -100,6 +63,26 @@ export default function EmployeeDetailPage() {
   if (isLoading || !employee) {
     return <div className="p-10 text-center">Loading employee details...</div>;
   }
+  
+  // Helper function to get full name from MongoDB structure
+  const getFullName = (employee: Employee): string => {
+    return `${employee.other_names || ''} ${employee.surname || ''}`.trim() || 'N/A';
+  };
+  
+  // Helper function to get employee ID/number
+  const getEmployeeId = (employee: Employee): string => {
+    return employee.employeeNumber || employee.id || 'N/A';
+  };
+  
+  // Helper function to get phone number
+  const getPhoneNumber = (employee: Employee): string => {
+    return employee.contact?.phoneNumber || 'N/A';
+  };
+  
+  // Helper function to get employee status
+  const getEmployeeStatus = (employee: Employee): string => {
+    return employee.status || 'inactive';
+  };
   
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -114,90 +97,118 @@ export default function EmployeeDetailPage() {
     }
   };
   
+  // Helper function to format parsed address or contact objects
+  const formatParsedAddressOrContact = (obj: any): string => {
+    // If null or undefined, return N/A
+    if (!obj) return 'N/A';
+    
+    try {
+      // Check if this is actually the entire employee object being incorrectly passed as address
+      // These fields should not be part of an address but appear in the employee object
+      if (obj.id_no !== undefined || obj.tax_pin !== undefined || obj.statutory_deductions !== undefined) {
+        // This is likely the employee object itself, not a proper address
+        // Return just city and country if available
+        if (obj.city) {
+          return `${obj.city}${obj.country ? `, ${obj.country}` : ''}`;
+        }
+        if (obj.contact && obj.contact.city) {
+          return `${obj.contact.city}${obj.country ? `, ${obj.country}` : ''}`;
+        }
+        return 'N/A'; // Not a proper address object
+      }
+      
+      // Handle proper address object
+      if (obj.street || obj.city || obj.address) {
+        let formattedAddress = '';
+        
+        // Sometimes address is stored as a single field
+        if (obj.address) {
+          return obj.address;
+        }
+        
+        if (obj.street) {
+          formattedAddress = obj.street;
+        }
+        
+        if (obj.city) {
+          formattedAddress += formattedAddress ? `, ${obj.city}` : obj.city;
+        }
+        
+        if (obj.postalCode) {
+          formattedAddress += formattedAddress ? ` ${obj.postalCode}` : obj.postalCode;
+        }
+        
+        if (obj.state) {
+          formattedAddress += formattedAddress ? `, ${obj.state}` : obj.state;
+        }
+        
+        if (obj.country) {
+          formattedAddress += formattedAddress ? `, ${obj.country}` : obj.country;
+        } else if (formattedAddress) {
+          // Add Kenya as default country if not empty and no country specified
+          formattedAddress += ', Kenya';
+        }
+        
+        return formattedAddress || 'N/A';
+      }
+      
+      // Handle emergency contact object
+      if (obj.name && (obj.phone || obj.phoneNumber || obj.contact)) {
+        const phone = obj.phone || obj.phoneNumber || obj.contact || '';
+        const relationship = obj.relationship || 'Contact';
+        return `${obj.name} (${relationship}) - ${phone}`;
+      }
+      
+      // Handle special case for the data shown in screenshot
+      if (obj.id_no || obj.tax_pin) {
+        // Just return N/A for these nested objects that should be displayed elsewhere
+        return 'N/A';
+      }
+      
+      // Fallback for other objects, safer with try/catch in case of circular references
+      try {
+        return JSON.stringify(obj).length > 100 ? 'Complex data - see details tabs' : JSON.stringify(obj);
+      } catch (e) {
+        return 'Object data (too complex to display)';
+      }
+    } catch (e) {
+      return 'Error parsing data';
+    }
+  };
+  
   const formatAddressOrContact = (value: any): string => {
     if (!value) return 'N/A';
     
-    // If the value is a string that looks like JSON, try to parse it
-    if (typeof value === 'string' && (value.startsWith('{') || value.startsWith('['))) {
-      try {
-        const parsedValue = JSON.parse(value);
-        
-        // Handle address object
-        if (parsedValue.street && parsedValue.city) {
-          let formattedAddress = parsedValue.street;
-          
-          if (parsedValue.city) {
-            formattedAddress += `, ${parsedValue.city}`;
-          }
-          
-          if (parsedValue.postalCode) {
-            formattedAddress += ` ${parsedValue.postalCode}`;
-          }
-          
-          if (parsedValue.country) {
-            formattedAddress += `, ${parsedValue.country}`;
-          } else {
-            formattedAddress += ', Kenya';
-          }
-          
-          return formattedAddress;
+    try {
+      // Handle string that looks like JSON
+      if (typeof value === 'string' && (value.startsWith('{') || value.startsWith('['))) {
+        try {
+          const parsedValue = JSON.parse(value);
+          return formatParsedAddressOrContact(parsedValue);
+        } catch (e) {
+          // If parsing fails, return the original string if it's reasonable length
+          return value.length > 100 ? 'Long data - see details' : value.toString();
         }
-        // Handle emergency contact object
-        else if (parsedValue.name && (parsedValue.phone || parsedValue.phoneNumber)) {
-          return `${parsedValue.name} (${parsedValue.relationship || 'Contact'}) - ${parsedValue.phone || parsedValue.phoneNumber}`;
-        }
-        // Fallback for other objects
-        return JSON.stringify(parsedValue);
-      } catch (e) {
-        console.error("Error parsing JSON:", e);
-        return value.toString();
       }
-    }
-    
-    // If it's already an object (not a string)
-    if (typeof value === 'object' && value !== null) {
-      try {
-        // Handle address object
-        if (value.street && value.city) {
-          let formattedAddress = value.street;
-          
-          if (value.city) {
-            formattedAddress += `, ${value.city}`;
-          }
-          
-          if (value.postalCode) {
-            formattedAddress += ` ${value.postalCode}`;
-          }
-          
-          if (value.country) {
-            formattedAddress += `, ${value.country}`;
-          } else {
-            formattedAddress += ', Kenya';
-          }
-          
-          return formattedAddress;
-        }
-        // Handle emergency contact object
-        else if (value.name && (value.phone || value.phoneNumber)) {
-          return `${value.name} (${value.relationship || 'Contact'}) - ${value.phone || value.phoneNumber}`;
-        }
-        // Fallback for other objects
-        return JSON.stringify(value);
-      } catch (e) {
-        console.error("Error processing object:", e);
-        return 'Invalid format';
+      
+      // If it's already an object
+      if (typeof value === 'object' && value !== null) {
+        return formatParsedAddressOrContact(value);
       }
+      
+      // Just return as string if it's not an object or JSON string
+      return value.toString();
+    } catch (e) {
+      return 'Error formatting data';
     }
-    
-    return value.toString();
   };
   
   // Attendance records columns
-  const attendanceColumns: ColumnDef<AttendanceRecord>[] = [
+  const attendanceColumns: ColumnDef<Attendance>[] = [
     {
       accessorKey: "date",
       header: "Date",
-      cell: ({ row }) => formatDate(row.original.date),
+      cell: ({ row }) => row.original.date ? formatDate(row.original.date) : '-',
     },
     {
       accessorKey: "clockInTime",
@@ -219,12 +230,12 @@ export default function EmployeeDetailPage() {
       header: "Hours",
       cell: ({ row }) => typeof row.original.hoursWorked === 'number' ? 
         row.original.hoursWorked.toFixed(2) : 
-        parseFloat(row.original.hoursWorked).toFixed(2),
+        row.original.hoursWorked ? parseFloat(row.original.hoursWorked).toFixed(2) : '-',
     },
   ];
   
   // Payroll records columns
-  const payrollColumns: ColumnDef<PayrollRecord>[] = [
+  const payrollColumns: ColumnDef<Payroll>[] = [
     {
       accessorKey: "periodStart",
       header: "Period",
@@ -233,17 +244,17 @@ export default function EmployeeDetailPage() {
     {
       accessorKey: "hoursWorked",
       header: "Hours",
-      cell: ({ row }) => row.original.hoursWorked.toString(),
+      cell: ({ row }) => row.original.hoursWorked ? row.original.hoursWorked.toString() : '-',
     },
     {
       accessorKey: "grossPay",
       header: "Gross Pay",
-      cell: ({ row }) => formatCurrency(row.original.grossPay),
+      cell: ({ row }) => row.original.grossPay ? formatCurrency(row.original.grossPay) : '-',
     },
     {
       accessorKey: "netPay",
       header: "Net Pay",
-      cell: ({ row }) => formatCurrency(row.original.netPay),
+      cell: ({ row }) => row.original.netPay ? formatCurrency(row.original.netPay) : '-',
     },
     {
       accessorKey: "status",
@@ -266,7 +277,7 @@ export default function EmployeeDetailPage() {
   ];
   
   // EWA requests columns
-  const ewaColumns: ColumnDef<EWARequest>[] = [
+  const ewaColumns: ColumnDef<EwaRequest>[] = [
     {
       accessorKey: "requestDate",
       header: "Request Date",
@@ -298,6 +309,69 @@ export default function EmployeeDetailPage() {
     }
   ];
 
+  // Helper function to extract fields from potentially nested JSON
+  const extractField = (obj: any, field: string, defaultValue: any = 'N/A') => {
+    if (!obj) return defaultValue;
+    
+    try {
+      // Direct field access
+      if (obj[field] !== undefined && obj[field] !== null) {
+        return obj[field];
+      }
+      
+      // Check address field for misplaced data (fix for incorrect nesting)
+      if (obj.address && obj.address[field] !== undefined && obj.address[field] !== null) {
+        return obj.address[field];
+      }
+      
+      // Try nested statutory_deductions if field is a deduction type
+      if (['paye', 'nssf', 'nhif', 'levies'].includes(field)) {
+        // Check direct statutory_deductions
+        if (obj.statutory_deductions && obj.statutory_deductions[field] !== undefined) {
+          return obj.statutory_deductions[field];
+        }
+        
+        // Check address.statutory_deductions (misplaced data)
+        if (obj.address && obj.address.statutory_deductions && 
+            obj.address.statutory_deductions[field] !== undefined) {
+          return obj.address.statutory_deductions[field];
+        }
+      }
+      
+      // Handle bank info fields
+      if (['bank_name', 'acc_no'].includes(field)) {
+        if (obj.bank_info && obj.bank_info[field] !== undefined) {
+          return obj.bank_info[field];
+        }
+      }
+      
+      // Special case for contact info
+      if (field === 'city' && obj.contact && obj.contact.city !== undefined) {
+        return obj.contact.city;
+      }
+      
+      if (field === 'phoneNumber' && obj.contact && obj.contact.phoneNumber !== undefined) {
+        return obj.contact.phoneNumber;
+      }
+      
+      // Check if it's a JSON string
+      if (typeof obj === 'string' && (obj.startsWith('{') || obj.startsWith('['))) {
+        try {
+          const parsed = JSON.parse(obj);
+          if (parsed[field] !== undefined && parsed[field] !== null) {
+            return parsed[field];
+          }
+        } catch (e) {
+          // Parsing failed, continue with other methods
+        }
+      }
+    } catch (e) {
+      console.error(`Error extracting field ${field}:`, e);
+    }
+    
+    return defaultValue;
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center">
@@ -313,48 +387,50 @@ export default function EmployeeDetailPage() {
         <Card className="lg:col-span-1 shadow-glass dark:shadow-glass-dark">
           <CardHeader className="pb-0 flex flex-col items-center text-center">
             <Avatar className="h-24 w-24 mb-2">
-              <AvatarImage src={employee.user.profileImage || undefined} alt={employee.user.name} />
+              <AvatarImage src={employee.avatar_url || undefined} alt={getFullName(employee)} />
               <AvatarFallback>
                 <User className="h-10 w-10" />
               </AvatarFallback>
             </Avatar>
-            <CardTitle className="text-xl">{employee.user.name}</CardTitle>
+            <CardTitle className="text-xl">{getFullName(employee)}</CardTitle>
             <CardDescription className="flex items-center mt-1">
               <Badge className="mr-2 bg-primary/10 text-primary hover:bg-primary/20">
-                {employee.employeeNumber}
+                {getEmployeeId(employee)}
               </Badge>
-              {getStatusColor(employee.status)}
+              {getStatusColor(getEmployeeStatus(employee))}
             </CardDescription>
           </CardHeader>
           <CardContent className="pt-4">
             <div className="space-y-3">
               <div className="flex items-center">
                 <Briefcase className="h-4 w-4 mr-2 text-gray-500" />
-                <span className="text-sm">{employee.position}</span>
+                <span className="text-sm">{employee.position || 'N/A'}</span>
               </div>
               <div className="flex items-center">
                 <BadgeCheck className="h-4 w-4 mr-2 text-gray-500" />
-                <span className="text-sm">{employee.department.name}</span>
+                <span className="text-sm">{employee.department?.name || 'N/A'}</span>
               </div>
               <div className="flex items-center">
                 <Phone className="h-4 w-4 mr-2 text-gray-500" />
-                <span className="text-sm">{employee.phoneNumber || 'N/A'}</span>
+                <span className="text-sm">{employee.contact?.phoneNumber || 'N/A'}</span>
               </div>
               <div className="flex items-center">
                 <Mail className="h-4 w-4 mr-2 text-gray-500" />
-                <span className="text-sm">{employee.user.email || employee.user.username}</span>
+                <span className="text-sm">{employee.contact?.email || 'N/A'}</span>
               </div>
               <div className="flex items-center">
                 <Calendar className="h-4 w-4 mr-2 text-gray-500" />
-                <span className="text-sm">Joined: {formatDate(employee.startDate)}</span>
+                <span className="text-sm">Joined: {formatDate(employee.startDate || employee.created_at || '')}</span>
               </div>
               <div className="flex items-center">
                 <DollarSign className="h-4 w-4 mr-2 text-gray-500" />
-                <span className="text-sm">Rate: {formatCurrency(typeof employee.hourlyRate === 'string' ? parseFloat(employee.hourlyRate) : employee.hourlyRate)}/hr</span>
+                <span className="text-sm">Salary: {formatCurrency(employee.gross_income || 0)}</span>
               </div>
               <div className="flex items-center">
                 <MapPin className="h-4 w-4 mr-2 text-gray-500" />
-                <span className="text-sm">{formatAddressOrContact(employee.address)}</span>
+                <span className="text-sm">
+                  {employee.address || 'N/A'}
+                </span>
               </div>
             </div>
             
@@ -383,27 +459,42 @@ export default function EmployeeDetailPage() {
                 <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-1">
                     <p className="text-sm font-medium text-muted-foreground">Full Name</p>
-                    <p>{employee.user.name}</p>
+                    <p>{getFullName(employee)}</p>
                   </div>
                   <div className="space-y-1">
                     <p className="text-sm font-medium text-muted-foreground">Employee ID</p>
-                    <p>{employee.employeeNumber}</p>
+                    <p>{getEmployeeId(employee)}</p>
                   </div>
                   <div className="space-y-1">
-                    <p className="text-sm font-medium text-muted-foreground">Email</p>
-                    <p>{employee.user.email || employee.user.username}</p>
+                    <p className="text-sm font-medium text-muted-foreground">ID Number</p>
+                    <p>{employee.id_no || 'N/A'}</p>
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-sm font-medium text-muted-foreground">Tax PIN</p>
+                    <p>{employee.tax_pin || 'N/A'}</p>
                   </div>
                   <div className="space-y-1">
                     <p className="text-sm font-medium text-muted-foreground">Phone</p>
-                    <p>{employee.phoneNumber || 'N/A'}</p>
+                    <p>{employee.contact?.phoneNumber || 'N/A'}</p>
                   </div>
                   <div className="space-y-1">
                     <p className="text-sm font-medium text-muted-foreground">Address</p>
-                    <p>{formatAddressOrContact(employee.address)}</p>
+                    <p>{employee.address || 'N/A'}</p>
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-sm font-medium text-muted-foreground">Gender</p>
+                    <p>{employee.sex ? employee.sex.charAt(0).toUpperCase() + employee.sex.slice(1) : 'N/A'}</p>
                   </div>
                   <div className="space-y-1">
                     <p className="text-sm font-medium text-muted-foreground">Emergency Contact</p>
-                    <p>{formatAddressOrContact(employee.emergencyContact)}</p>
+                    <p>{employee.emergencyContact ? 
+                        (typeof employee.emergencyContact === 'object' ? 
+                          `${employee.emergencyContact.name}${employee.emergencyContact.relationship ? ` (${employee.emergencyContact.relationship})` : ''}${employee.emergencyContact.phone ? ` - ${employee.emergencyContact.phone}` : ''}` : 
+                          employee.emergencyContact
+                        ) : 
+                        'N/A'
+                      }
+                    </p>
                   </div>
                 </CardContent>
               </Card>
@@ -415,27 +506,83 @@ export default function EmployeeDetailPage() {
                 <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-1">
                     <p className="text-sm font-medium text-muted-foreground">Department</p>
-                    <p>{employee.department.name}</p>
+                    <p>{employee.department?.name || 'N/A'}</p>
                   </div>
                   <div className="space-y-1">
                     <p className="text-sm font-medium text-muted-foreground">Position</p>
-                    <p>{employee.position}</p>
+                    <p>{employee.position || 'N/A'}</p>
                   </div>
                   <div className="space-y-1">
-                    <p className="text-sm font-medium text-muted-foreground">Start Date</p>
-                    <p>{formatDate(employee.startDate)}</p>
+                    <p className="text-sm font-medium text-muted-foreground">Role</p>
+                    <p>{employee.role || 'N/A'}</p>
                   </div>
                   <div className="space-y-1">
                     <p className="text-sm font-medium text-muted-foreground">Status</p>
-                    <p>{employee.active ? "Active" : "Inactive"}</p>
+                    <p>{getEmployeeStatus(employee).charAt(0).toUpperCase() + getEmployeeStatus(employee).slice(1)}</p>
                   </div>
                   <div className="space-y-1">
-                    <p className="text-sm font-medium text-muted-foreground">Employment Type</p>
-                    <p>Full-time</p>
+                    <p className="text-sm font-medium text-muted-foreground">Probation</p>
+                    <p>{employee.is_on_probation ? 'Yes' : 'No'}</p>
                   </div>
                   <div className="space-y-1">
-                    <p className="text-sm font-medium text-muted-foreground">Manager</p>
-                    <p>Sophia Wanjiku</p>
+                    <p className="text-sm font-medium text-muted-foreground">Start Date</p>
+                    <p>{employee.startDate ? formatDate(employee.startDate) : 'N/A'}</p>
+                  </div>
+                </CardContent>
+              </Card>
+              
+              <Card>
+                <CardHeader>
+                  <CardTitle>Financial Information</CardTitle>
+                </CardHeader>
+                <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-1">
+                    <p className="text-sm font-medium text-muted-foreground">Gross Salary</p>
+                    <p>{formatCurrency(employee.gross_income)}</p>
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-sm font-medium text-muted-foreground">Net Salary</p>
+                    <p>{formatCurrency(employee.net_income)}</p>
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-sm font-medium text-muted-foreground">PAYE</p>
+                    <p>{formatCurrency(employee.statutory_deductions.paye)}</p>
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-sm font-medium text-muted-foreground">NSSF</p>
+                    <p>{formatCurrency(employee.statutory_deductions.nssf)}</p>
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-sm font-medium text-muted-foreground">NHIF</p>
+                    <p>{formatCurrency(employee.statutory_deductions.nhif)}</p>
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-sm font-medium text-muted-foreground">Housing Levy</p>
+                    <p>{formatCurrency(employee.statutory_deductions.levies)}</p>
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-sm font-medium text-muted-foreground">Loan Deductions</p>
+                    <p>{formatCurrency(employee.loan_deductions)}</p>
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-sm font-medium text-muted-foreground">Total Deductions</p>
+                    <p>{formatCurrency(employee.total_deductions)}</p>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle>Banking Information</CardTitle>
+                </CardHeader>
+                <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-1">
+                    <p className="text-sm font-medium text-muted-foreground">Bank Name</p>
+                    <p>{employee.bank_info.bank_name || 'N/A'}</p>
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-sm font-medium text-muted-foreground">Account Number</p>
+                    <p>{employee.bank_info.acc_no || 'N/A'}</p>
                   </div>
                 </CardContent>
               </Card>
@@ -447,34 +594,39 @@ export default function EmployeeDetailPage() {
                 <CardContent>
                   <p className="text-sm text-muted-foreground mb-4">Employee documents and contracts</p>
                   <div className="space-y-2">
-                    <div className="flex items-center justify-between p-2 border rounded-md">
-                      <div className="flex items-center">
-                        <svg className="h-8 w-8 text-gray-500 mr-2" viewBox="0 0 384 512">
-                          <path fill="currentColor" d="M224 136V0H24C10.7 0 0 10.7 0 24v464c0 13.3 10.7 24 24 24h336c13.3 0 24-10.7 24-24V160H248c-13.2 0-24-10.8-24-24zm76.45 211.36l-96.42 95.7c-6.65 6.61-17.39 6.61-24.04 0l-96.42-95.7C73.42 337.29 80.54 320 94.82 320H160v-80c0-8.84 7.16-16 16-16h32c8.84 0 16 7.16 16 16v80h65.18c14.28 0 21.4 17.29 11.27 27.36z" />
-                        </svg>
-                        <div>
-                          <p className="font-medium text-sm">Employment Contract</p>
-                          <p className="text-xs text-muted-foreground">Added on {formatDate("2021-03-15")}</p>
+                    {employee.documents && employee.documents.length > 0 ? (
+                      employee.documents.map((docId: string, index: number) => (
+                        <div key={index} className="flex items-center justify-between p-2 border rounded-md">
+                          <div className="flex items-center">
+                            <svg className="h-8 w-8 text-gray-500 mr-2" viewBox="0 0 384 512">
+                              <path fill="currentColor" d="M224 136V0H24C10.7 0 0 10.7 0 24v464c0 13.3 10.7 24 24 24h336c13.3 0 24-10.7 24-24V160H248c-13.2 0-24-10.8-24-24zm76.45 211.36l-96.42 95.7c-6.65 6.61-17.39 6.61-24.04 0l-96.42-95.7C73.42 337.29 80.54 320 94.82 320H160v-80c0-8.84 7.16-16 16-16h32c8.84 0 16 7.16 16 16v80h65.18c14.28 0 21.4 17.29 11.27 27.36z" />
+                            </svg>
+                            <div>
+                              <p className="font-medium text-sm">Document {index + 1}</p>
+                              <p className="text-xs text-muted-foreground">ID: {docId}</p>
+                            </div>
+                          </div>
+                          <Button variant="ghost" size="sm">
+                            <DownloadIcon className="h-4 w-4" />
+                          </Button>
                         </div>
-                      </div>
-                      <Button variant="ghost" size="sm">
-                        <DownloadIcon className="h-4 w-4" />
-                      </Button>
-                    </div>
-                    <div className="flex items-center justify-between p-2 border rounded-md">
-                      <div className="flex items-center">
-                        <svg className="h-8 w-8 text-gray-500 mr-2" viewBox="0 0 384 512">
-                          <path fill="currentColor" d="M224 136V0H24C10.7 0 0 10.7 0 24v464c0 13.3 10.7 24 24 24h336c13.3 0 24-10.7 24-24V160H248c-13.2 0-24-10.8-24-24zm76.45 211.36l-96.42 95.7c-6.65 6.61-17.39 6.61-24.04 0l-96.42-95.7C73.42 337.29 80.54 320 94.82 320H160v-80c0-8.84 7.16-16 16-16h32c8.84 0 16 7.16 16 16v80h65.18c14.28 0 21.4 17.29 11.27 27.36z" />
-                        </svg>
-                        <div>
-                          <p className="font-medium text-sm">ID Documents</p>
-                          <p className="text-xs text-muted-foreground">Added on {formatDate("2021-03-15")}</p>
+                      ))
+                    ) : (
+                      <div className="flex items-center justify-between p-2 border rounded-md">
+                        <div className="flex items-center">
+                          <svg className="h-8 w-8 text-gray-500 mr-2" viewBox="0 0 384 512">
+                            <path fill="currentColor" d="M224 136V0H24C10.7 0 0 10.7 0 24v464c0 13.3 10.7 24 24 24h336c13.3 0 24-10.7 24-24V160H248c-13.2 0-24-10.8-24-24zm76.45 211.36l-96.42 95.7c-6.65 6.61-17.39 6.61-24.04 0l-96.42-95.7C73.42 337.29 80.54 320 94.82 320H160v-80c0-8.84 7.16-16 16-16h32c8.84 0 16 7.16 16 16v80h65.18c14.28 0 21.4 17.29 11.27 27.36z" />
+                          </svg>
+                          <div>
+                            <p className="font-medium text-sm">Employment Contract</p>
+                            <p className="text-xs text-muted-foreground">No documents available</p>
+                          </div>
                         </div>
+                        <Button variant="ghost" size="sm">
+                          <DownloadIcon className="h-4 w-4" />
+                        </Button>
                       </div>
-                      <Button variant="ghost" size="sm">
-                        <DownloadIcon className="h-4 w-4" />
-                      </Button>
-                    </div>
+                    )}
                   </div>
                   <Button variant="outline" size="sm" className="mt-4">
                     <svg className="h-4 w-4 mr-2" viewBox="0 0 24 24">
@@ -529,12 +681,44 @@ export default function EmployeeDetailPage() {
                     <CardTitle>Earned Wage Access Requests</CardTitle>
                     <CardDescription>View EWA transaction history</CardDescription>
                   </div>
-                  <Button variant="outline" size="sm">
-                    <DownloadIcon className="h-4 w-4 mr-2" />
-                    Export
-                  </Button>
+                  <div className="flex space-x-2">
+                    <Button variant="outline" size="sm">
+                      <DownloadIcon className="h-4 w-4 mr-2" />
+                      Export
+                    </Button>
+                    <Button variant="default" size="sm">
+                      Request EWA
+                    </Button>
+                  </div>
                 </CardHeader>
                 <CardContent>
+                  <div className="mb-6 grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <Card className="bg-primary/5">
+                      <CardContent className="pt-6">
+                        <div className="text-sm font-medium">Available Limit</div>
+                        <div className="text-2xl font-bold mt-1">
+                          {formatCurrency(employee.available_salary_advance_limit || 0)}
+                        </div>
+                      </CardContent>
+                    </Card>
+                    <Card className="bg-primary/5">
+                      <CardContent className="pt-6">
+                        <div className="text-sm font-medium">Max Limit</div>
+                        <div className="text-2xl font-bold mt-1">
+                          {formatCurrency(employee.max_salary_advance_limit || 0)}
+                        </div>
+                      </CardContent>
+                    </Card>
+                    <Card className="bg-primary/5">
+                      <CardContent className="pt-6">
+                        <div className="text-sm font-medium">Last Withdrawal</div>
+                        <div className="text-2xl font-bold mt-1">
+                          {employee.last_withdrawal_time ? formatDate(employee.last_withdrawal_time) : 'None'}
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </div>
+                  
                   <DataTable columns={ewaColumns} data={ewaRequestsData} />
                 </CardContent>
               </Card>
@@ -545,3 +729,4 @@ export default function EmployeeDetailPage() {
     </div>
   );
 }
+

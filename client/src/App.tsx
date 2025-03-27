@@ -11,6 +11,7 @@ import EmployeesPage from "@/pages/employees/index";
 import EmployeeDetailPage from "@/pages/employees/detail";
 import AttendancePage from "@/pages/attendance/index";
 import SelfLogPage from "@/pages/attendance/self-log";
+import TestStats from "@/pages/attendance/TestStats";
 import PayrollPage from "@/pages/payroll/index";
 import PayrollDetailPage from "@/pages/payroll/detail";
 import ProcessPayrollPage from "@/pages/payroll/process";
@@ -103,6 +104,7 @@ function App() {
                   <Route path="/employees/:id" element={<MainLayout><EmployeeDetailPage /></MainLayout>} />
                   <Route path="/attendance" element={<MainLayout><AttendancePage /></MainLayout>} />
                   <Route path="/attendance/self-log" element={<MainLayout><SelfLogPage /></MainLayout>} />
+                  <Route path="/attendance/test-stats" element={<MainLayout><TestStats /></MainLayout>} />
                   <Route path="/payroll" element={<MainLayout><PayrollPage /></MainLayout>} />
                   <Route path="/payroll/process" element={<MainLayout><ProcessPayrollPage /></MainLayout>} />
                   <Route path="/payroll/:id" element={<MainLayout><PayrollDetailPage /></MainLayout>} />

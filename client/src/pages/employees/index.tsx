@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useState, useRef } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { EmployeeTable } from "@/components/dashboard/EmployeeTable";
 import { Button } from "@/components/ui/button";
@@ -8,15 +8,91 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Upload, Search, Filter, UserPlus } from "lucide-react";
-import type { BasicEmployee } from "@/types/employee";
+import { toast } from "@/hooks/use-toast";
+import axios from "axios";
+import { Employee } from "@shared/schema";
 
 export default function EmployeesPage() {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState("list");
+  const [file, setFile] = useState<File | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const queryClient = useQueryClient();
   
-  const { data: employeeData, isLoading, error } = useQuery<BasicEmployee[]>({
+  const { data: employeeData, isLoading, error } = useQuery<Employee[]>({
     queryKey: ['/api/employees/active'],
+    queryFn: async () => {
+      const response = await fetch('/api/employees/active');
+      if (!response.ok) {
+        throw new Error('Failed to fetch employees');
+      }
+      return response.json();
+    }
   });
+
+  // Import employees mutation
+  const importEmployeesMutation = useMutation({
+    mutationFn: async (formData: FormData) => {
+      const response = await axios.post('/api/import/employees', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data'
+        }
+      });
+      return response.data;
+    },
+    onSuccess: () => {
+      toast({
+        title: "Import successful",
+        description: "Employees have been imported successfully.",
+      });
+      // Invalidate employees queries to refresh the list
+      queryClient.invalidateQueries({ queryKey: ['/api/employees/active'] });
+      setActiveTab("list");
+      setFile(null);
+      setIsUploading(false);
+    },
+    onError: (error) => {
+      console.error('Error importing employees:', error);
+      toast({
+        title: "Import failed",
+        description: "Failed to import employees. Please try again.",
+        variant: "destructive",
+      });
+      setIsUploading(false);
+    }
+  });
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      setFile(e.target.files[0]);
+    }
+  };
+
+  const handleUpload = async () => {
+    if (!file) {
+      toast({
+        title: "No file selected",
+        description: "Please select a file to upload.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsUploading(true);
+    const formData = new FormData();
+    formData.append('file', file);
+    
+    try {
+      await importEmployeesMutation.mutateAsync(formData);
+    } catch (err) {
+      // Error handling is done in the mutation's onError
+    }
+  };
+
+  const handleSelectFile = () => {
+    fileInputRef.current?.click();
+  };
 
   // Show loading state
   if (isLoading) {
@@ -95,11 +171,30 @@ export default function EmployeesPage() {
               
               <div className="flex flex-col space-y-2">
                 <Label htmlFor="file">Upload File</Label>
-                <div className="border-2 border-dashed rounded-md p-8 text-center">
+                <input
+                  type="file"
+                  id="file"
+                  ref={fileInputRef}
+                  accept=".csv,.xlsx"
+                  onChange={handleFileChange}
+                  className="hidden"
+                />
+                <div 
+                  className="border-2 border-dashed rounded-md p-8 text-center cursor-pointer hover:bg-muted/50 transition-colors"
+                  onClick={handleSelectFile}
+                >
                   <Upload className="h-8 w-8 mx-auto mb-4 text-muted-foreground" />
-                  <p className="text-sm font-medium mb-1">Drag and drop your file here</p>
-                  <p className="text-xs text-muted-foreground mb-4">Supports CSV and XLSX files up to 10MB</p>
-                  <Button size="sm">Select File</Button>
+                  <p className="text-sm font-medium mb-1">
+                    {file ? file.name : "Drag and drop your file here"}
+                  </p>
+                  <p className="text-xs text-muted-foreground mb-4">
+                    {file 
+                      ? `${(file.size / 1024 / 1024).toFixed(2)} MB` 
+                      : "Supports CSV and XLSX files up to 10MB"}
+                  </p>
+                  <Button size="sm" type="button" onClick={(e) => { e.stopPropagation(); handleSelectFile(); }}>
+                    Select File
+                  </Button>
                 </div>
               </div>
               
@@ -126,7 +221,19 @@ export default function EmployeesPage() {
               
               <div className="flex justify-end space-x-2 pt-4">
                 <Button variant="outline" onClick={() => setActiveTab("list")}>Cancel</Button>
-                <Button disabled>Upload and Import</Button>
+                <Button 
+                  onClick={handleUpload} 
+                  disabled={!file || isUploading}
+                >
+                  {isUploading ? (
+                    <>
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                      Uploading...
+                    </>
+                  ) : (
+                    'Upload and Import'
+                  )}
+                </Button>
               </div>
             </CardContent>
           </Card>

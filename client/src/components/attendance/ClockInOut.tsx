@@ -8,21 +8,11 @@ import { Clock, MapPin } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useQuery, useMutation } from "@tanstack/react-query";
+import { Employee } from 'server/shared/schema';
+
 
 interface ClockInOutProps {
   onSuccess?: () => void;
-}
-
-interface Employee {
-  id: number;
-  employeeNumber: string;
-  name: string;
-  department: string;
-  profileImage?: string;
-  user?: {
-    name: string;
-    profileImage?: string;
-  };
 }
 
 export function ClockInOut({ onSuccess }: ClockInOutProps) {
@@ -43,7 +33,7 @@ export function ClockInOut({ onSuccess }: ClockInOutProps) {
   // Get employee name and department safely
   const getEmployeeName = (employee: any) => {
     if (!employee) return '';
-    return employee.user?.name || employee.name || 'Unknown';
+    return employee.user?.name || employee.other_names || employee.surname || 'Unknown';
   };
 
   const getEmployeeDepartment = (employee: any) => {
@@ -276,7 +266,7 @@ export function ClockInOut({ onSuccess }: ClockInOutProps) {
             <SelectContent>
               {employeeList.map(emp => (
                 <SelectItem key={emp.id} value={emp.id.toString()}>
-                  {emp.name}
+                  {emp.other_names} {emp.surname}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -287,9 +277,9 @@ export function ClockInOut({ onSuccess }: ClockInOutProps) {
           <div className="border p-3 rounded-md bg-primary/5">
             <div className="flex items-center">
               <div className="w-10 h-10 rounded-full bg-primary/20 flex items-center justify-center mr-3">
-                {selectedEmployee.profileImage || (selectedEmployee.user && selectedEmployee.user.profileImage) ? (
+                {selectedEmployee.avatar_url ? (
                   <img 
-                    src={selectedEmployee.profileImage || (selectedEmployee.user?.profileImage || '')} 
+                    src={selectedEmployee.avatar_url} 
                     alt={getEmployeeName(selectedEmployee)} 
                     className="w-full h-full rounded-full object-cover"
                   />

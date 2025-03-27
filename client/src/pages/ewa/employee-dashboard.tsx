@@ -3,7 +3,10 @@ import { useParams } from "react-router-dom";
 
 export default function EmployeeEWADashboardPage() {
   const { id } = useParams<{ id: string }>();
-  const employeeId = id ? parseInt(id) : 1; // Default to employee 1 if no ID is provided
+
+  if (!id) {
+    return <div>No employee ID provided</div>;
+  }
   
   return (
     <div className="space-y-6">
@@ -11,7 +14,7 @@ export default function EmployeeEWADashboardPage() {
         <h1 className="text-2xl font-bold tracking-tight">My Earned Wage Access</h1>
       </div>
       
-      <EmployeeEWADashboard employeeId={employeeId} />
+      <EmployeeEWADashboard employeeId={id} />
     </div>
   );
 }

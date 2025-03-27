@@ -8,15 +8,16 @@ import { ChevronLeft, Download, Printer, Send } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { User } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
+import type { Payroll as PayrollType } from "@/types/schema";
 
 export default function PayrollDetailPage() {
   const params = useParams<{ id: string }>();
-  const payrollId = parseInt(params.id || "0");
+  const payrollId = params.id || "0";
   const navigate = useNavigate();
   
-  const { data: payroll, isLoading } = useQuery({
+  const { data: payroll, isLoading } = useQuery<PayrollType>({
     queryKey: [`/api/payroll/${payrollId}`],
-    enabled: !isNaN(payrollId),
+    enabled: !!payrollId,
     initialData: payrollRecords.find(p => p.id === payrollId)
   });
   

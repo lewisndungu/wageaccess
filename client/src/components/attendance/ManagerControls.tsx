@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { SetStateAction, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { 
   Card, 
@@ -77,48 +77,17 @@ import { DatePicker } from "@/components/ui/date-picker";
 import { toast } from "@/hooks/use-toast";
 import { formatDate } from '@/lib/date-utils';
 import { formatTime } from '@/lib/date-utils';
-
-interface Employee {
-  id: number;
-  employeeNumber: string;
-  name: string;
-  department: string;
-  position: string;
-  contact: string;
-  email: string;
-  status: string;
-  profileImage?: string;
-}
-
-interface Department {
-  id: number;
-  name: string;
-}
-
-interface AttendanceRecord {
-  id: number;
-  employeeId: number;
-  employeeName: string;
-  department: string;
-  date: string;
-  clockInTime: string | null;
-  clockOutTime: string | null;
-  status: string;
-  hoursWorked: string;
-}
+import { Employee, Department, Attendance } from '../../../../shared/schema';
 
 interface AttendanceCorrection {
-  id: number;
-  employeeId: number;
-  employeeName: string;
-  date: string;
-  type: 'clock_in' | 'clock_out';
-  originalTime: string | null;
-  correctedTime: string;
-  reason: string;
-  status: 'pending' | 'approved' | 'rejected';
-  requestedBy: string;
-  requestedAt: string;
+  id: string;
+  employeeId: string;
+  date: Date;
+  clockInTime?: Date;
+  clockOutTime?: Date;
+  status: string;
+  notes?: string;
+  employee?: Employee;
 }
 
 export function ManagerControls() {
@@ -126,15 +95,15 @@ export function ManagerControls() {
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [selectedDepartment, setSelectedDepartment] = useState<string>('all');
   const [selectedStatus, setSelectedStatus] = useState<string>("present");
-  const [selectedEmployees, setSelectedEmployees] = useState<number[]>([]);
+  const [selectedEmployees, setSelectedEmployees] = useState<string[]>([]);
   const [manualReason, setManualReason] = useState<string>("");
   const [bulkReason, setBulkReason] = useState<string>("");
   const [searchQuery, setSearchQuery] = useState('');
   const [showCurrentlyCheckedIn, setShowCurrentlyCheckedIn] = useState(true);
   const [selectedTab, setSelectedTab] = useState<string>("manual");
-  const [selectedAttendanceId, setSelectedAttendanceId] = useState<number | null>(null);
-  const [selectedCorrectionId, setSelectedCorrectionId] = useState<number | null>(null);
-  const [editRecord, setEditRecord] = useState<AttendanceRecord | null>(null);
+  const [selectedAttendanceId, setSelectedAttendanceId] = useState<string | null>(null);
+  const [selectedCorrectionId, setSelectedCorrectionId] = useState<string | null>(null);
+  const [editRecord, setEditRecord] = useState<Attendance | null>(null);
   
   // Form states for manual entry
   const [manualEmployee, setManualEmployee] = useState<string>("");
@@ -161,14 +130,14 @@ export function ManagerControls() {
   });
   
   // Query to fetch attendance records
-  const { data: rawRecords = [], isLoading: isLoadingRecords } = useQuery<AttendanceRecord[]>({
+  const { data: rawRecords = [], isLoading: isLoadingRecords } = useQuery<Attendance[]>({
     queryKey: ['/api/attendance', selectedDate],
   });
   
   // Enhanced records with employee data
   const records = rawRecords.map(record => {
     // If record already has employeeName and department, use those
-    if (record.employeeName && record.department) {
+    if (record.employee?.other_names && record.employee?.department) {
       return record;
     }
     
@@ -176,8 +145,8 @@ export function ManagerControls() {
     const employee = employeeList.find(emp => emp.id === record.employeeId);
     return {
       ...record,
-      employeeName: employee?.name || 'Unknown Employee',
-      department: employee?.department || 'Unknown Department'
+      employeeName: employee?.other_names || 'Unknown Employee',
+      department: employee?.department?.name || 'Unknown Department'
     };
   });
   
@@ -187,45 +156,34 @@ export function ManagerControls() {
   });
   
   // Query to fetch currently checked in employees
-  const { data: checkedInEmployees = [] } = useQuery<AttendanceRecord[]>({
+  const { data: checkedInEmployees = [] } = useQuery<Attendance[]>({
     queryKey: ['/api/attendance/checked-in'],
     refetchInterval: showCurrentlyCheckedIn ? 30000 : false,
   });
 
   // Filter employees based on department and search
   const filteredEmployees = employeeList.filter(employee => {
-    const matchesDepartment = !selectedDepartment || employee.department === selectedDepartment;
+    const matchesDepartment = !selectedDepartment || employee.department?.name === selectedDepartment;
     const matchesSearch = !searchQuery || 
-      employee.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      employee.other_names.toLowerCase().includes(searchQuery.toLowerCase()) ||
       employee.employeeNumber.includes(searchQuery);
     return matchesDepartment && matchesSearch;
   });
   
   // Filter checked-in employees based on department filter
   const filteredCheckedIn = checkedInEmployees.filter(record => {
-    return shiftDepartmentFilter === "all" || record.department === shiftDepartmentFilter;
+    return shiftDepartmentFilter === "all" || record.employee?.department?.name === shiftDepartmentFilter;
   });
   
   // Filter recent attendance records for correction view
   const recentAttendanceRecords = records.filter(record => {
     return !searchQuery || 
-      record.employeeName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      record.employee?.other_names.toLowerCase().includes(searchQuery.toLowerCase()) ||
       record.employeeId.toString() === searchQuery;
   });
 
-  // Function to extract unique departments from employees
-  function extractDepartments(employees: Employee[]): Department[] {
-    const uniqueDepartments = new Set<string>();
-    employees.forEach(emp => uniqueDepartments.add(emp.department));
-    
-    return Array.from(uniqueDepartments).map((name, index) => ({
-      id: index + 1,
-      name
-    }));
-  }
-
   // Function to handle toggling employee selection in bulk mode
-  const handleSelectEmployee = (employeeId: number) => {
+  const handleSelectEmployee = (employeeId: string) => {
     setSelectedEmployees(prev => {
       if (prev.includes(employeeId)) {
         return prev.filter(id => id !== employeeId);
@@ -360,7 +318,7 @@ export function ManagerControls() {
   };
 
   // Function to handle correction approval/rejection
-  const handleCorrectionAction = async (correctionId: number, action: 'approve' | 'reject') => {
+  const handleCorrectionAction = async (correctionId: string, action: 'approve' | 'reject') => {
     try {
       // In a real implementation, this would call an API endpoint
       await new Promise(resolve => setTimeout(resolve, 800));
@@ -413,13 +371,13 @@ export function ManagerControls() {
         return (
           <div className="flex items-center">
             <Avatar className="h-8 w-8 mr-2">
-              <AvatarImage src={employee.profileImage} alt={employee.name} />
+              <AvatarImage src={employee.profileImage} alt={employee.other_names} />
               <AvatarFallback>
                 <User className="h-4 w-4" />
               </AvatarFallback>
             </Avatar>
             <div>
-              <p className="font-medium text-sm">{employee.name}</p>
+              <p className="font-medium text-sm">{employee.other_names} {employee.surname}</p>
               <p className="text-xs text-muted-foreground">{employee.position}</p>
             </div>
           </div>
@@ -433,7 +391,7 @@ export function ManagerControls() {
   ];
 
   // Column definition for the attendance records table in correction mode
-  const attendanceRecordColumns: ColumnDef<AttendanceRecord>[] = [
+  const attendanceRecordColumns: ColumnDef<Attendance>[] = [
     {
       accessorKey: "employeeName",
       header: "Employee",
@@ -443,14 +401,14 @@ export function ManagerControls() {
         return (
           <div className="flex items-center">
             <Avatar className="h-8 w-8 mr-2">
-              <AvatarImage src={employee?.profileImage} alt={record.employeeName} />
+              <AvatarImage src={employee?.profileImage} alt={record.employee?.other_names} />
               <AvatarFallback>
                 <User className="h-4 w-4" />
               </AvatarFallback>
             </Avatar>
             <div>
-              <p className="font-medium text-sm">{record.employeeName}</p>
-              <p className="text-xs text-muted-foreground">{record.department}</p>
+              <p className="font-medium text-sm">{record.employee?.other_names} {record.employee?.surname}</p>
+              <p className="text-xs text-muted-foreground">{record.employee?.department?.name}</p>
             </div>
           </div>
         );
@@ -459,7 +417,7 @@ export function ManagerControls() {
     {
       accessorKey: "date",
       header: "Date",
-      cell: ({ row }) => formatDate(row.original.date),
+      cell: ({ row }) => formatDate(row.original.date?.toISOString() || ""),
     },
     {
       accessorKey: "clockInTime",
@@ -515,14 +473,14 @@ export function ManagerControls() {
         return (
           <div className="flex items-center">
             <Avatar className="h-8 w-8 mr-2">
-              <AvatarImage src={employee?.profileImage} alt={correction.employeeName} />
+              <AvatarImage src={employee?.profileImage} alt={correction.employee?.other_names} />
               <AvatarFallback>
                 <User className="h-4 w-4" />
               </AvatarFallback>
             </Avatar>
             <div>
-              <p className="font-medium text-sm">{correction.employeeName}</p>
-              <p className="text-xs text-muted-foreground">{formatDate(correction.date)}</p>
+              <p className="font-medium text-sm">{correction.employee?.other_names} {correction.employee?.surname}</p>
+              <p className="text-xs text-muted-foreground">{formatDate(correction.date?.toISOString() || "")}</p>
             </div>
           </div>
         );
@@ -531,28 +489,29 @@ export function ManagerControls() {
     {
       accessorKey: "originalClockIn",
       header: "Original In",
-      cell: ({ row }) => formatTime(row.original.originalTime || ""),
+      cell: ({ row }) => formatTime(row.original.clockInTime || ""),
     },
     {
       accessorKey: "correctedTime",
       header: "Corrected Time",
-      cell: ({ row }) => formatTime(row.original.correctedTime || ""),
+      cell: ({ row }) => formatTime(row.original.clockOutTime || ""),
     },
     {
       accessorKey: "reason",
       header: "Reason",
       cell: ({ row }) => {
-        const reason = row.original.reason;
-        return reason.length > 30 ? reason.substring(0, 30) + "..." : reason;
+        const reason = row.original.notes;
+        if (reason) return reason?.length > 30 ? reason?.substring(0, 30) + "..." : reason;
+        return reason
       },
     },
     {
       accessorKey: "status",
       header: "Status",
-      cell: ({ row }) => getCorrectionStatusBadge(row.original.status),
+      cell: ({ row }) => getCorrectionStatusBadge(row.original.status as 'pending' | 'approved' | 'rejected'),
     },
     {
-      id: "actions",
+      id: "actions", 
       header: "Actions",
       cell: ({ row }) => (
         <div className="flex space-x-2">
@@ -670,7 +629,7 @@ export function ManagerControls() {
                       <SelectContent>
                         {employeeList.map(emp => (
                           <SelectItem key={emp.id} value={emp.id.toString()}>
-                            {emp.name}
+                            {emp.other_names} {emp.surname}
                           </SelectItem>
                         ))}
                       </SelectContent>
@@ -924,10 +883,10 @@ export function ManagerControls() {
                                 <div className="flex items-center">
                                   <Avatar className="h-7 w-7 mr-2">
                                     <AvatarFallback>
-                                      {correction.employeeName.charAt(0)}
+                                      {correction.employee?.other_names.charAt(0)}
                                     </AvatarFallback>
                                   </Avatar>
-                                  <p className="font-medium text-sm">{correction.employeeName}</p>
+                                  <p className="font-medium text-sm">{correction.employee?.other_names} {correction.employee?.surname}</p>
                                 </div>
                                 <p className="text-xs mt-1 text-muted-foreground">
                                   {formatDate(correction.date)}
@@ -935,14 +894,14 @@ export function ManagerControls() {
                                 <div className="mt-1.5 text-xs">
                                   <p>
                                     <span className="font-semibold">From: </span>
-                                    {formatTime(correction.originalTime || "")}
+                                    {formatTime(correction.clockInTime?.toISOString() || "")}
                                   </p>
                                   <p>
                                     <span className="font-semibold">To: </span>
-                                    {formatTime(correction.correctedTime || "")}
+                                    {formatTime(correction.clockOutTime?.toISOString() || "")}
                                   </p>
                                 </div>
-                                <p className="mt-1.5 text-xs italic">"{correction.reason}"</p>
+                                <p className="mt-1.5 text-xs italic">"{correction.notes}"</p>
                               </div>
                               <Badge
                                 variant="outline"
@@ -983,12 +942,12 @@ export function ManagerControls() {
                       <div className="flex items-center mb-4">
                         <Avatar className="h-10 w-10 mr-3">
                           <AvatarFallback>
-                            {editRecord.employeeName.charAt(0)}
+                            {editRecord.employee?.other_names.charAt(0)}
                           </AvatarFallback>
                         </Avatar>
                         <div>
-                          <h4 className="font-medium">{editRecord.employeeName}</h4>
-                          <p className="text-sm text-muted-foreground">{formatDate(editRecord.date)}</p>
+                          <h4 className="font-medium">{editRecord.employee?.other_names} {editRecord.employee?.surname}</h4>
+                          <p className="text-sm text-muted-foreground">{formatDate(editRecord.date?.toISOString() || "")}</p>
                         </div>
                         {getStatusBadge(editRecord.status)}
                       </div>
@@ -1077,15 +1036,15 @@ export function ManagerControls() {
                           <Avatar className="h-12 w-12 mr-4">
                             <AvatarImage 
                               src={employeeList.find(e => e.id === record.employeeId)?.profileImage} 
-                              alt={record.employeeName} 
+                              alt={record.employee?.other_names} 
                             />
                             <AvatarFallback>
-                              {record.employeeName.charAt(0)}
+                              {record.employee?.other_names.charAt(0)}
                             </AvatarFallback>
                           </Avatar>
                           <div>
-                            <h3 className="font-semibold text-lg">{record.employeeName}</h3>
-                            <p className="text-sm text-muted-foreground">{record.department}</p>
+                            <h3 className="font-semibold text-lg">{record.employee?.other_names} {record.employee?.surname}</h3>
+                            <p className="text-sm text-muted-foreground">{record.employee?.department?.name}</p>
                           </div>
                           <div className="ml-auto">
                             {getStatusBadge(record.status)}
@@ -1095,7 +1054,7 @@ export function ManagerControls() {
                         <div className="grid grid-cols-2 gap-4 border-t border-b py-4">
                           <div>
                             <p className="text-sm text-muted-foreground">Date</p>
-                            <p className="font-medium">{formatDate(record.date)}</p>
+                            <p className="font-medium">{formatDate(record.date?.toISOString() || "")}</p>
                           </div>
                           
                           <div>
@@ -1153,34 +1112,34 @@ export function ManagerControls() {
                     return (
                       <div className="py-2">
                         <div className="mb-4">
-                          <p className="text-sm font-medium">{correction.employeeName}</p>
+                          <p className="text-sm font-medium">{correction.employee?.other_names} {correction.employee?.surname}</p>
                           <p className="text-xs text-muted-foreground">{formatDate(correction.date)}</p>
                         </div>
                         
                         <div className="grid grid-cols-2 gap-4 mb-4">
                           <div className="bg-muted p-3 rounded-md">
                             <p className="text-xs font-medium mb-1">Original Time</p>
-                            <p className="text-sm">In: {formatTime(correction.originalTime || "")}</p>
-                            <p className="text-sm">Out: {formatTime(correction.correctedTime || "")}</p>
+                            <p className="text-sm">In: {formatTime(correction.clockInTime || "")}</p>
+                            <p className="text-sm">Out: {formatTime(correction.clockOutTime || "")}</p>
                           </div>
                           
                           <div className="bg-primary/5 border border-primary/20 p-3 rounded-md">
                             <p className="text-xs font-medium mb-1">Requested Change</p>
-                            <p className="text-sm">In: {formatTime(correction.correctedTime || "")}</p>
-                            <p className="text-sm">Out: {formatTime(correction.correctedTime || "")}</p>
+                            <p className="text-sm">In: {formatTime(correction.clockInTime || "")}</p>
+                            <p className="text-sm">Out: {formatTime(correction.clockOutTime || "")}</p>
                           </div>
                         </div>
                         
                         <div className="mb-4">
                           <p className="text-xs font-medium mb-1">Reason</p>
                           <div className="bg-muted p-3 rounded-md text-sm">
-                            {correction.reason}
+                            {correction.notes}
                           </div>
                         </div>
                         
                         <div className="text-xs text-muted-foreground">
-                          <p>Requested by: {correction.requestedBy}</p>
-                          <p>Requested on: {new Date(correction.requestedAt).toLocaleString()}</p>
+                          <p>Requested by: {correction.employee?.other_names} {correction.employee?.surname}</p>
+                          <p>Requested on: {new Date().toLocaleString()}</p>
                         </div>
                       </div>
                     );
@@ -1251,21 +1210,21 @@ export function ManagerControls() {
                     return (
                       <Card key={record.id} className={`
                         shadow-glass dark:shadow-glass-dark
-                        ${calculateElapsedTime(record.clockInTime).split('h')[0] >= '8' ? 'border-green-200 dark:border-green-900' : ''}
+                        ${calculateElapsedTime(record.clockInTime?.toISOString() || "").split('h')[0] >= '8' ? 'border-green-200 dark:border-green-900' : ''}
                       `}>
                         <CardContent className="pt-6">
                           <div className="flex items-start">
                             <Avatar className="h-12 w-12 mr-3">
-                              <AvatarImage src={employee?.profileImage} alt={record.employeeName} />
+                              <AvatarImage src={employee?.profileImage} alt={record.employee?.other_names} />
                               <AvatarFallback>
-                                {record.employeeName.charAt(0)}
+                                {record.employee?.other_names.charAt(0)}
                               </AvatarFallback>
                             </Avatar>
                             <div className="flex-1">
                               <div className="flex justify-between">
-                                <h3 className="font-medium text-base">{record.employeeName}</h3>
+                                <h3 className="font-medium text-base">{record.employee?.other_names} {record.employee?.surname}</h3>
                                 <Badge variant="outline" className="ml-auto">
-                                  {record.department}
+                                  {record.employee?.department?.name}
                                 </Badge>
                               </div>
                               <p className="text-sm text-muted-foreground">{employee?.position}</p>
@@ -1278,12 +1237,12 @@ export function ManagerControls() {
                                 
                                 <div className="bg-muted rounded-lg p-2">
                                   <p className="text-xs text-muted-foreground">Expected Out</p>
-                                  <p className="font-medium">{calculateExpectedCheckout(record.clockInTime)}</p>
+                                  <p className="font-medium">{calculateExpectedCheckout(record.clockInTime?.toISOString() || "")}</p>
                                 </div>
                                 
                                 <div className="bg-muted rounded-lg p-2">
                                   <p className="text-xs text-muted-foreground">Time Elapsed</p>
-                                  <p className="font-medium">{calculateElapsedTime(record.clockInTime)}</p>
+                                  <p className="font-medium">{calculateElapsedTime(record.clockInTime?.toISOString() || "")}</p>
                                 </div>
                                 
                                 <div className="bg-muted rounded-lg p-2">
@@ -1311,7 +1270,7 @@ export function ManagerControls() {
                                     <AlertDialogHeader>
                                       <AlertDialogTitle>Manual Clock Out</AlertDialogTitle>
                                       <AlertDialogDescription>
-                                        You are about to manually clock out {record.employeeName}.
+                                        You are about to manually clock out {record.employee?.other_names} {record.employee?.surname}.
                                         This action will be logged in the system.
                                       </AlertDialogDescription>
                                     </AlertDialogHeader>

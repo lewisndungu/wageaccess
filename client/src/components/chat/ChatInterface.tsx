@@ -40,7 +40,9 @@ import { toast } from 'sonner';
 import * as XLSX from 'xlsx';
 import { processFile, downloadTransformedData } from '@/lib/spreadsheet-processor';
 import { calculatePayrollBasedOnAttendance } from '@/lib/kenyan-payroll';
-import { useEmployeeStore, Employee as StoreEmployee, Advance as StoreAdvance } from '@/lib/store';
+import { useEmployeeStore } from '@/lib/store';
+import type { Advance as StoreAdvance } from '@/lib/store';
+import type { Employee } from "@shared/schema";
 import { cn } from '@/lib/utils';
 import { 
   formatKESCurrency, 
@@ -54,6 +56,7 @@ import HelpDialog from './HelpDialog';
 import EmployeeCard from './EmployeeCard';
 import ActionPills from './ActionPills';
 import { useTheme } from '../ui/theme-provider';
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 
 type ExtractedRow = Record<string, any> & {
   id: string;
@@ -72,9 +75,9 @@ type ProcessedData = {
 };
 
 const TARGET_HEADERS = [
-  'Emp No', 'First Name', 'Last Name', 'ID Number', 'KRA Pin', 
-  'NSSF No', 'Position', 'Gross Pay', 'PAYE', 'NSSF', 
-  'NHIF', 'Levy', 'Loan Deduction', 'Employer Advance'
+  'Emp No', 'First Name', 'Last Name', 'Full Name', 'ID Number', 
+  'NSSF No', 'KRA Pin', 'NHIF', 'Position', 'Gross Pay', 
+  'Employer Advance', 'PAYE', 'Levy', 'Loan Deduction'
 ];
 
 // Local storage for employees is now handled by chatService
@@ -136,7 +139,27 @@ const mockAttendanceData = {
   }
 };
 
-const ChatInterface: React.FC = () => {
+// Create a simplified employee type for the store
+type StoreEmployee = {
+  id: string;
+  name: string;
+  email: string;
+  phone: string;
+  position: string;
+  department: string;
+  hireDate: string;
+  salary: number;
+  address: string;
+  advances: any[];
+  attendance: {
+    present: number;
+    absent: number;
+    late: number;
+    total: number;
+  };
+};
+
+const ChatInterface = () => {
   // Load saved messages from local storage
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -144,7 +167,7 @@ const ChatInterface: React.FC = () => {
   const [isUploading, setIsUploading] = useState(false);
   const [currentData, setCurrentData] = useState<ProcessedData | null>(null);
   const [showPreview, setShowPreview] = useState(false);
-  const [editingCell, setEditingCell] = useState<{rowId: string, column: string, value: any} | null>(null);
+  const [editingCell, setEditingCell] = useState<{rowId: string, column: string, value: any, fieldName?: string} | null>(null);
   const [showHelpDialog, setShowHelpDialog] = useState(false);
   
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -154,6 +177,7 @@ const ChatInterface: React.FC = () => {
   const allEmployees = useEmployeeStore((state) => state.employees);
   const navigate = useNavigate();
   const { theme, setTheme } = useTheme();
+  const queryClient = useQueryClient();
   
   // Load message history from API when component mounts
   useEffect(() => {
@@ -231,7 +255,7 @@ const ChatInterface: React.FC = () => {
         ...response,
         actions: response.actions?.map(action => ({
           ...action,
-          action: () => handleActionClick(action.id, action)
+          action: () => handleActionClick(action)
         }))
       };
       
@@ -247,39 +271,44 @@ const ChatInterface: React.FC = () => {
     }
   };
   
-  const handleActionClick = (actionId: string, action: any) => {
-    switch (actionId) {
-      case 'view-all-employees':
-        navigate('/employees');
-        break;
-      case 'add-employee':
-        navigate('/employees?new=true');
-        break;
-      case 'upload-employees':
-      case 'upload-data':
-        handleUploadClick();
-        break;
-      case 'find-employee':
-        setInputMessage('Find employee ');
-        break;
-      case 'calculate-payroll':
-        processUserMessage('Calculate payroll for all employees');
-        break;
-      case 'help':
-        setShowHelpDialog(true);
-        break;
-      case 'view-data':
-        setShowPreview(true);
-        break;
-      case 'import-data':
-        handleImportEmployees();
-        break;
-      // Add more action handlers as needed
-      default:
-        if (action.action && typeof action.action === 'function') {
-          action.action();
-        }
-        break;
+  const handleActionClick = (action: ChatAction) => {
+    // First check if the action already has a client-side handler
+    if (action.action && typeof action.action === 'function') {
+      action.action();
+      return;
+    }
+    
+    // Fall back to mapping by ID if the action comes from the server
+    if (action.id) {
+      switch (action.id) {
+        case 'view-all-employees':
+          navigate('/employees');
+          break;
+        case 'add-employee':
+          navigate('/employees?new=true');
+          break;
+        case 'upload-employees':
+        case 'upload-data':
+          handleUploadClick();
+          break;
+        case 'find-employee':
+          setInputMessage('Find employee ');
+          break;
+        case 'calculate-payroll':
+          processUserMessage('Calculate payroll for all employees');
+          break;
+        case 'help':
+          setShowHelpDialog(true);
+          break;
+        case 'view-data':
+          setShowPreview(true);
+          break;
+        case 'import-data':
+          handleImportEmployees();
+          break;
+        default:
+          break;
+      }
     }
   };
   
@@ -291,7 +320,7 @@ const ChatInterface: React.FC = () => {
       timestamp: new Date()
     };
     
-    setMessages(prev => [...prev, userMessage]);
+    setMessages((prev: Message[]) => [...prev, userMessage]);
     
     try {
       // Process message on server
@@ -302,14 +331,14 @@ const ChatInterface: React.FC = () => {
         ...response,
         actions: response.actions?.map(action => ({
           ...action,
-          action: () => handleActionClick(action.id, action)
+          action: () => handleActionClick(action)
         }))
       };
       
-      setMessages(prev => [...prev, processedResponse]);
+      setMessages((prev: Message[]) => [...prev, processedResponse]);
     } catch (error) {
       console.error('Error processing message:', error);
-      setMessages(prev => [...prev, {
+      setMessages((prev: Message[]) => [...prev, {
         id: Date.now().toString(),
         type: 'error',
         content: 'Sorry, I encountered an error processing your message. Please try again.',
@@ -443,13 +472,27 @@ const ChatInterface: React.FC = () => {
     e.target.value = '';
   };
   
+  // Create a mutation for importing employees
+  const importEmployeesMutation = useMutation({
+    mutationFn: async (employeeData: any[]) => {
+      return await chatService.importEmployees(employeeData);
+    },
+    onSuccess: () => {
+      // Invalidate employees queries to refetch the data
+      queryClient.invalidateQueries({ queryKey: ['/api/employees/active'] });
+    },
+    onError: (error) => {
+      console.error('Error importing employees:', error);
+    }
+  });
+
   const handleImportEmployees = async () => {
     if (!currentData || !currentData.extractedData.length) return;
     
     const confirmAction = async () => {
       try {
-        // Use API to import employees
-        await chatService.importEmployees(currentData.extractedData);
+        // Use the mutation to import employees
+        await importEmployeesMutation.mutateAsync(currentData.extractedData);
         
         // Transform and add imported employees to the Employees component store
         const transformedEmployees = currentData.extractedData.map((emp): StoreEmployee => {
@@ -462,7 +505,7 @@ const ChatInterface: React.FC = () => {
             position: emp['Position'] || emp['Job Title'] || emp['Designation'] || 'Employee',
             department: emp['Department'] || 'General',
             hireDate: emp['Hire Date'] || emp['Start Date'] || new Date().toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' }),
-            salary: parseFloat(emp['Gross Pay']) || parseFloat(emp['Salary']) || 0,
+            salary: parseFloat(emp['Gross Pay'] || '0') || parseFloat(emp['Salary'] || '0') || 0,
             address: emp['Address'] || 'No address provided',
             advances: [],
             attendance: {
@@ -475,7 +518,7 @@ const ChatInterface: React.FC = () => {
         });
         
         // Add the transformed employees to the store
-        addEmployeesToStore(transformedEmployees);
+        addEmployeesToStore(transformedEmployees as any);
         
         setMessages(prev => [...prev, {
           id: Date.now().toString(),
@@ -529,6 +572,101 @@ const ChatInterface: React.FC = () => {
 
   const displayHeaders = currentData?.headers || TARGET_HEADERS;
   
+  const handleDownload = () => {
+    if (!currentData) return;
+    
+    try {
+      downloadTransformedData(currentData.extractedData, currentData.fileName);
+      toast.success('File downloaded successfully');
+    } catch (error) {
+      console.error('Error downloading file:', error);
+      toast.error('Failed to download the file');
+    }
+  };
+  
+  const handleDownloadFailedRows = () => {
+    if (!currentData || !currentData.failedRows.length) return;
+    
+    try {
+      const wb = XLSX.utils.book_new();
+      
+      const failedData = currentData.failedRows.map(({ rowIndex, errors, originalData }) => ({
+        'Row Number': rowIndex,
+        'Errors': errors.join('; '),
+        'Original Data': JSON.stringify(originalData)
+      }));
+      
+      const ws = XLSX.utils.json_to_sheet(failedData);
+      
+      XLSX.utils.book_append_sheet(wb, ws, 'Failed Extractions');
+      
+      const fileName = currentData.fileName.split('.')[0];
+      const timestamp = new Date().toISOString().replace(/:/g, '-').substring(0, 19);
+      const outputFileName = `${fileName}_failed_rows_${timestamp}.csv`;
+      
+      XLSX.writeFile(wb, outputFileName);
+      
+      toast.success('Failed rows downloaded successfully');
+    } catch (error) {
+      console.error('Error downloading failed rows:', error);
+      toast.error('Failed to download failed rows');
+    }
+  };
+  
+  const handleCellEdit = (rowId: string, column: string, value: any) => {
+    const fieldName = getFieldName(column);
+    setEditingCell({ rowId, column, value, fieldName });
+  };
+  
+  const handleCellSave = () => {
+    if (!editingCell || !currentData) return;
+    
+    const { rowId, column, value, fieldName } = editingCell;
+    
+    const updatedData = {
+      ...currentData,
+      extractedData: currentData.extractedData.map(row => {
+        if (row.id === rowId) {
+          return { ...row, [fieldName || column]: value };
+        }
+        return row;
+      })
+    };
+    
+    setCurrentData(updatedData);
+    setEditingCell(null);
+    
+    setMessages(prev => prev.map(msg => {
+      if (msg.fileData && msg.type === 'file') {
+        return { ...msg, fileData: updatedData };
+      }
+      return msg;
+    }));
+    
+    toast.success(`Updated ${column} value`);
+  };
+  
+  const handleCellEditCancel = () => {
+    setEditingCell(null);
+  };
+  
+  const handleConfirmAction = (confirm: boolean, message: Message) => {
+    if (confirm && message.confirmAction) {
+      message.confirmAction();
+    } else if (!confirm && message.cancelAction) {
+      message.cancelAction();
+    }
+  };
+
+  // Filter the headers to only include the ones in TARGET_HEADERS order
+  const filteredDisplayHeaders = TARGET_HEADERS;
+
+  // Map display header names to actual data field names
+  const getFieldName = (displayHeader: string) => {
+    if (displayHeader === 'Full Name') return 'fullName';
+    return displayHeader;
+  };
+
   return (
     <div className="flex flex-col h-full">
       <div className="flex justify-between items-center mb-6">
@@ -577,12 +715,12 @@ const ChatInterface: React.FC = () => {
                 ) : (
                   <Card className={cn(
                     "max-w-[80%] overflow-hidden",
-                    message.type === 'user' ? "bg-primary text-primary-foreground" : 
+                    message.type === 'user' ? "bg-primary text-white" : 
                     message.type === 'error' ? "bg-destructive text-destructive-foreground" : 
                     message.type === 'file' ? "bg-muted" : 
                     message.type === 'confirm' ? "bg-amber-50 border-amber-300 dark:bg-amber-900/30 dark:border-amber-800" :
                     message.type === 'extraction' ? "bg-accent text-accent-foreground" : 
-                    "bg-secondary"
+                    "bg-primary text-white"
                   )}>
                     <CardContent className="p-3">
                       <div className="flex flex-col gap-2">
@@ -654,7 +792,7 @@ const ChatInterface: React.FC = () => {
                         {message.actions && message.actions.length > 0 && (
                           <ActionPills 
                             actions={message.actions}
-                            onActionClick={handleActionClick}
+                            onActionClick={(action) => handleActionClick(action)}
                           />
                         )}
                       </div>
@@ -772,7 +910,7 @@ const ChatInterface: React.FC = () => {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      {displayHeaders.map((header) => (
+                      {filteredDisplayHeaders.map((header) => (
                         <TableHead key={header} className="whitespace-nowrap">{header}</TableHead>
                       ))}
                       <TableHead>Actions</TableHead>
@@ -781,7 +919,7 @@ const ChatInterface: React.FC = () => {
                   <TableBody>
                     {currentData.extractedData.map((row) => (
                       <TableRow key={row.id}>
-                        {displayHeaders.map((header) => (
+                        {filteredDisplayHeaders.map((header) => (
                           <TableCell key={`${row.id}-${header}`} className="py-2">
                             {editingCell && editingCell.rowId === row.id && editingCell.column === header ? (
                               <div className="flex gap-2">
@@ -800,12 +938,22 @@ const ChatInterface: React.FC = () => {
                             ) : (
                               <div className="flex items-center justify-between group">
                                 <span className="truncate max-w-[200px]">
-                                  {row[header] !== undefined ? row[header].toString() : ''}
+                                  {row[getFieldName(header)] !== undefined && row[getFieldName(header)] !== null ? 
+                                    typeof row[getFieldName(header)] === 'number' ? 
+                                      Number.isInteger(row[getFieldName(header)]) ? 
+                                        row[getFieldName(header)].toString() : 
+                                        row[getFieldName(header)].toFixed(2) 
+                                      : typeof row[getFieldName(header)] === 'boolean' ?
+                                        row[getFieldName(header)] ? 'Yes' : 'No'
+                                        : typeof row[getFieldName(header)] === 'object' ?
+                                          JSON.stringify(row[getFieldName(header)]).substring(0, 50) + (JSON.stringify(row[getFieldName(header)]).length > 50 ? '...' : '')
+                                          : row[getFieldName(header)].toString()
+                                    : ''}
                                 </span>
                                 <Button 
                                   size="sm"
                                   variant="ghost"
-                                  onClick={() => handleCellEdit(row.id, header, row[header] || '')}
+                                  onClick={() => handleCellEdit(row.id, header, row[getFieldName(header)] || '')}
                                   className="opacity-0 group-hover:opacity-100 h-6 w-6 p-0"
                                 >
                                   <Edit className="h-3 w-3" />

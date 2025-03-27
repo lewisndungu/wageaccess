@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Employee } from '../types/employee';
+import { Employee } from '@shared/schema';
 
 // Define the interface for attendance records
 interface AttendanceRecord {
   id: number;
-  employeeId: number;
+  employeeId: string;
   employeeName: string;
   department: string;
   date: string;

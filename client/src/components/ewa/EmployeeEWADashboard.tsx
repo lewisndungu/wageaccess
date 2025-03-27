@@ -10,6 +10,8 @@ import { calculateEarnedWage, formatKES } from "@/lib/tax-utils";
 import { Calendar, CreditCard, ArrowRight, PieChart, CircleAlert, Clock, CheckCircle2, InfoIcon } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Link } from "react-router-dom";
+import { Employee } from '@shared/schema';
+import axios from 'axios';
 
 interface EwaHistoryItem {
   id: number;
@@ -21,7 +23,7 @@ interface EwaHistoryItem {
 }
 
 interface EmployeeEWADashboardProps {
-  employeeId: number;
+  employeeId: string;
 }
 
 export function EmployeeEWADashboard({ employeeId }: EmployeeEWADashboardProps) {
@@ -57,15 +59,12 @@ export function EmployeeEWADashboard({ employeeId }: EmployeeEWADashboardProps) 
   }, []);
   
   // Fetch employee data
-  const { data: employee } = useQuery({
+  const { data: employee } = useQuery<Employee>({
     queryKey: ['/api/employees', employeeId],
-    // Mock data for now
-    initialData: {
-      id: employeeId,
-      monthlySalary: 85000,
-      name: "James Mwangi",
-      position: "Senior Developer",
-      department: "IT"
+    enabled: !!employeeId,
+    queryFn: async () => {
+      const response = await axios.get(`/api/employees/${employeeId}`);
+      return response.data;
     }
   });
   
@@ -82,8 +81,8 @@ export function EmployeeEWADashboard({ employeeId }: EmployeeEWADashboardProps) 
   
   // Calculate EWA metrics
   useEffect(() => {
-    if (employee?.monthlySalary) {
-      const salary = employee.monthlySalary;
+    if (employee?.gross_income) {
+      const salary = employee.gross_income;
       setMonthlySalary(salary);
       
       // Calculate earned wages so far based on days worked
@@ -211,10 +210,10 @@ export function EmployeeEWADashboard({ employeeId }: EmployeeEWADashboardProps) 
                 <div key={item.id} className="flex justify-between items-center border-b pb-4 last:border-b-0 last:pb-0">
                   <div className="flex items-center">
                     <div className="h-9 w-9 rounded-full bg-primary/10 flex items-center justify-center mr-3">
-                      {item.status === 'disbursed' ? (
-                        <CheckCircle2 className="h-5 w-5 text-green-600" />
-                      ) : (
+                      {item.status === 'pending' ? (
                         <Clock className="h-5 w-5 text-yellow-600" />
+                      ) : (
+                        <CheckCircle2 className="h-5 w-5 text-green-600" />
                       )}
                     </div>
                     <div>

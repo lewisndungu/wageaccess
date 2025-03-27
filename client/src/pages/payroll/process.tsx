@@ -143,6 +143,8 @@ import { Calendar } from "@/components/ui/calendar";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 import { DateRange } from "react-day-picker";
+// Import from the unified types directory
+import type { Employee, Department } from "@/types/schema";
 
 // Workflow stages
 const STAGES = {
@@ -171,7 +173,7 @@ interface EmployeePayrollCalculation {
   grossPay: number;
   taxableIncome: number;
   paye: number;
-  nhif: number; // SHIF
+  nhif: number;
   nssf: number;
   housingLevy: number;
   ewaDeductions: number;
@@ -188,22 +190,6 @@ interface EmployeePayrollCalculation {
   bankName?: string;
   bankAccountNumber?: string;
   processedId?: string; // Optional reference ID from the API
-}
-
-interface Department {
-  id: number;
-  name: string;
-  description: string;
-}
-
-interface Employee {
-  id: number;
-  employeeNumber: string;
-  name: string;
-  department: string;
-  position: string;
-  hourlyRate: number;
-  active: boolean;
 }
 
 interface AttendanceRecord {
@@ -253,13 +239,13 @@ export default function ProcessPayrollPage() {
     endDate: new Date().toISOString().split("T")[0],
   });
   const [selectedDepartment, setSelectedDepartment] = useState<string>("all");
-  const [excludedEmployees, setExcludedEmployees] = useState<number[]>([]);
+  const [excludedEmployees, setExcludedEmployees] = useState<string[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [isCalculating, setIsCalculating] = useState<boolean>(false);
   const [calculationProgress, setCalculationProgress] = useState<number>(0);
   const [validationIssues, setValidationIssues] = useState<
     {
-      employeeId: number;
+      employeeId: string;
       issue: string;
     }[]
   >([]);
@@ -337,7 +323,7 @@ export default function ProcessPayrollPage() {
 
   // Calculate eligible employees count
   const eligibleEmployeeCount = employeeData.filter(
-    (emp) => !excludedEmployees.includes(emp.id)
+    (emp) => !excludedEmployees.includes(String(emp.id))
   ).length;
 
   // Define table columns
@@ -523,7 +509,7 @@ export default function ProcessPayrollPage() {
   };
 
   // Toggle employee exclusion
-  const toggleEmployeeExclusion = (employeeId: number) => {
+  const toggleEmployeeExclusion = (employeeId: string) => {
     if (excludedEmployees.includes(employeeId)) {
       setExcludedEmployees(excludedEmployees.filter((id) => id !== employeeId));
     } else {
@@ -563,7 +549,7 @@ export default function ProcessPayrollPage() {
 
       // Get eligible employees
       const eligibleEmployees = employeeData.filter(
-        (emp) => !excludedEmployees.includes(emp.id)
+        (emp) => !excludedEmployees.includes(String(emp.id))
       );
 
       // Calculate progress increment per employee
@@ -630,7 +616,7 @@ export default function ProcessPayrollPage() {
 
     // Get eligible employees
     const eligibleEmployees = employeeData.filter(
-      (emp) => !excludedEmployees.includes(emp.id)
+      (emp) => !excludedEmployees.includes(String(emp.id))
     );
 
     const newIssues = [];
@@ -640,7 +626,7 @@ export default function ProcessPayrollPage() {
       // Check for missing hourly rate
       if (!employee.hourlyRate) {
         newIssues.push({
-          employeeId: employee.id,
+          employeeId: String(employee.id),
           issue: "Missing hourly rate",
         });
       }
@@ -650,13 +636,13 @@ export default function ProcessPayrollPage() {
       const hasCompleteAttendance = Math.random() > 0.1; // 10% chance of incomplete attendance
       if (!hasCompleteAttendance) {
         newIssues.push({
-          employeeId: employee.id,
+          employeeId: String(employee.id),
           issue: "Incomplete attendance records",
         });
       }
     }
 
-    setValidationIssues(newIssues);
+    setValidationIssues(newIssues as any);
   };
 
   // Helper function to round to nearest half hour
@@ -1797,7 +1783,7 @@ export default function ProcessPayrollPage() {
                           size="sm"
                           onClick={() =>
                             setExcludedEmployees(
-                              employeeData.map((emp) => emp.id)
+                              employeeData.map((emp) => String(emp.id))
                             )
                           }
                           className="text-xs h-7"
@@ -1867,7 +1853,7 @@ export default function ProcessPayrollPage() {
                                         setExcludedEmployees([]);
                                       } else {
                                         setExcludedEmployees(
-                                          employeeData.map((emp) => emp.id)
+                                          employeeData.map((emp) => String(emp.id))
                                         );
                                       }
                                     }}
@@ -1887,7 +1873,7 @@ export default function ProcessPayrollPage() {
                                 <TableRow
                                   key={employee.id}
                                   className={
-                                    excludedEmployees.includes(employee.id)
+                                    excludedEmployees.includes(String(employee.id))
                                       ? "opacity-60"
                                       : ""
                                   }
@@ -1896,10 +1882,10 @@ export default function ProcessPayrollPage() {
                                     <Checkbox
                                       id={`exclude-${employee.id}`}
                                       checked={
-                                        !excludedEmployees.includes(employee.id)
+                                        !excludedEmployees.includes(String(employee.id))
                                       }
                                       onCheckedChange={(checked) => {
-                                        toggleEmployeeExclusion(employee.id);
+                                        toggleEmployeeExclusion(String(employee.id));
                                       }}
                                     />
                                   </TableCell>
@@ -3560,7 +3546,7 @@ async function fetchEmployeeDeductions(employeeId: number) {
 function calculateEmployeeGrossPay(employee: Employee) {
   const { regularHours, overtimeHours } = calculateWorkHours([]);
   return (
-    regularHours * employee.hourlyRate +
-    overtimeHours * employee.hourlyRate * 1.5
+    regularHours * parseFloat(employee.hourlyRate || "0") +
+    overtimeHours * parseFloat(employee.hourlyRate || "0") * 1.5
   );
 }

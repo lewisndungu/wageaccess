@@ -1,6 +1,7 @@
 import { apiRequest, queryClient } from './queryClient';
 import { formatCurrency, formatDate } from './mock-data';
 import { calculateEarnedWage, calculateKenyanDeductions } from './tax-utils';
+import { Employee } from '@shared/schema';
 
 /**
  * Integration Service
@@ -13,16 +14,6 @@ import { calculateEarnedWage, calculateKenyanDeductions } from './tax-utils';
  */
 
 // Define types for better TypeScript support
-interface Employee {
-  id: number;
-  name: string;
-  department: string;
-  salary: number;
-  hourlyRate?: number;
-  position?: string;
-  status?: string;
-}
-
 interface AttendanceRecord {
   id: number;
   employeeId: number;
@@ -81,19 +72,24 @@ export async function calculateEarnedWageFromAttendance(
       0
     );
     
-    // Calculate earned wage based on days worked
+    // Ensure grossIncome is always a number
+    const grossIncome = employee.gross_income || 0;
+    
+    // Use grossIncome in calculations
     const earned = calculateEarnedWage(
-      employee.salary, 
-      daysWorked, 
+      grossIncome,
+      daysWorked,
       getWorkingDaysInMonth()
     );
+    
+    const totalSalary = grossIncome;
     
     return {
       employeeId,
       daysWorked,
       hoursWorked,
       earnedWage: earned,
-      totalSalary: employee.salary,
+      totalSalary,
       asOfDate: date || new Date()
     };
   } catch (error) {
@@ -208,10 +204,10 @@ export async function calculatePayrollFromAttendance(
     );
     
     // Calculate gross pay based on hours worked and hourly rate
-    // Assuming employee.salary is monthly salary
+    // Assuming employee.gross_income is monthly salary
     const workingDays = getWorkingDaysInMonth(periodStart, periodEnd);
     const hoursPerDay = 8; // Standard work day hours
-    const hourlyRate = employee.salary / (workingDays * hoursPerDay);
+    const hourlyRate = employee.hourlyRate || 0;
     const grossPay = hoursWorked * hourlyRate;
     
     // Calculate tax and other deductions
@@ -234,10 +230,16 @@ export async function calculatePayrollFromAttendance(
     // Calculate final net pay
     const finalNetPay = netPay - ewaDeductions;
     
+    // Replace name with a combination of other_names and surname
+    const employeeName = `${employee.other_names} ${employee.surname}`.trim();
+
+    // Replace department with departmentId
+    const department = employee.departmentId;
+    
     return {
       employeeId,
-      employeeName: employee.name,
-      department: employee.department,
+      employeeName,
+      department,
       periodStart: formatDate(periodStart.toISOString()),
       periodEnd: formatDate(periodEnd.toISOString()),
       hoursWorked,

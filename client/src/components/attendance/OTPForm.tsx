@@ -10,6 +10,7 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { Search, Clock } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
+import { Employee } from '@shared/schema';
 
 interface OTPFormProps {
   onSuccess?: () => void;
@@ -25,36 +26,6 @@ interface GenerateOTPResponse {
   otp: string;
 }
 
-interface Employee {
-  id: number;
-  employeeNumber: string;
-  userId: number;
-  departmentId: number;
-  position: string;
-  status: string;
-  hourlyRate: string | number;
-  startDate: string;
-  active: boolean | null;
-  phoneNumber: string | null;
-  emergencyContact: string | null;
-  address: string | null;
-  user?: {
-    id: number;
-    name: string;
-    username: string;
-    profileImage: string | null;
-    role: string;
-  };
-  department?: {
-    id: number;
-    name: string;
-    description: string | null;
-  };
-  // For backward compatibility
-  name?: string;
-  profileImage?: string;
-}
-
 export function OTPForm({ onSuccess }: OTPFormProps) {
   const [otp, setOtp] = useState('');
   const [employeeId, setEmployeeId] = useState('');
@@ -68,12 +39,13 @@ export function OTPForm({ onSuccess }: OTPFormProps) {
   // Fetch employees from server
   const { data: employeeList = [], isLoading: isLoadingEmployees } = useQuery<Employee[]>({
     queryKey: ['/api/employees/active'],
+    queryFn: () => apiRequest<Employee[]>('GET', '/api/employees/active'),
   });
 
   // Filter employees based on search query
   const filteredEmployees = searchQuery
     ? employeeList.filter(emp => {
-        const employeeName = emp.user?.name || emp.name || '';
+        const employeeName = `${emp.other_names} ${emp.surname}`;
         const employeeNumber = emp.employeeNumber || '';
         const departmentName = typeof emp.department === 'object' ? emp.department.name || '' : (emp.department || '');
         
@@ -117,7 +89,7 @@ export function OTPForm({ onSuccess }: OTPFormProps) {
   const generateOtpMutation = useMutation({
     mutationFn: async () => {
       const response = await apiRequest<GenerateOTPResponse>('POST', '/api/attendance/otp', { 
-        employeeId: parseInt(employeeId) 
+        employeeId: employeeId
       });
       return response;
     },
@@ -129,7 +101,7 @@ export function OTPForm({ onSuccess }: OTPFormProps) {
       
       toast({
         title: "OTP Generated",
-        description: `OTP for ${selectedEmployee?.user?.name || selectedEmployee?.name || 'Employee'} has been generated.`,
+        description: `OTP for ${getEmployeeName(selectedEmployee)} has been generated.`,
       });
     },
     onError: (error) => {
@@ -145,15 +117,17 @@ export function OTPForm({ onSuccess }: OTPFormProps) {
   const verifyOtpMutation = useMutation({
     mutationFn: async () => {
       const response = await apiRequest<VerifyOTPResponse>('POST', '/api/attendance/verify-otp', {
+        employeeId: employeeId,
         code: otp,
         action: clockAction
       });
       return response;
     },
     onSuccess: (data) => {
+      console.log("OTP verification successful:", data);
       toast({
         title: "Success",
-        description: `${selectedEmployee?.user?.name || selectedEmployee?.name || 'Employee'} has been clocked ${clockAction === 'clockIn' ? 'in' : 'out'} successfully at ${currentTime}.`,
+        description: `${getEmployeeName(selectedEmployee)} has been clocked ${clockAction === 'clockIn' ? 'in' : 'out'} successfully at ${currentTime}.`,
       });
 
       // Reset form
@@ -168,6 +142,12 @@ export function OTPForm({ onSuccess }: OTPFormProps) {
       // Invalidate queries to refresh attendance data
       queryClient.invalidateQueries({ queryKey: ['/api/attendance'] });
       queryClient.invalidateQueries({ queryKey: ['/api/attendance/recent-events'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/statistics/dashboard'] });
+      
+      // Force a page reload after a small delay
+      setTimeout(() => {
+        window.location.reload();
+      }, 1500);
     },
     onError: (error) => {
       const errorMessage = error instanceof Error ? error.message : "Failed to verify OTP";
@@ -177,7 +157,7 @@ export function OTPForm({ onSuccess }: OTPFormProps) {
       if (errorMessage.includes("Already clocked in")) {
         toast({
           title: "Already Clocked In",
-          description: `${selectedEmployee?.user?.name || selectedEmployee?.name || 'Employee'} has already clocked in for today.`,
+          description: `${getEmployeeName(selectedEmployee)} has already clocked in for today.`,
           variant: "destructive",
         });
         
@@ -195,7 +175,7 @@ export function OTPForm({ onSuccess }: OTPFormProps) {
       } else if (errorMessage.includes("Already clocked out")) {
         toast({
           title: "Already Clocked Out",
-          description: `${selectedEmployee?.user?.name || selectedEmployee?.name || 'Employee'} has already clocked out for today.`,
+          description: `${getEmployeeName(selectedEmployee)} has already clocked out for today.`,
           variant: "destructive",
         });
         
@@ -262,6 +242,11 @@ export function OTPForm({ onSuccess }: OTPFormProps) {
     }
   };
 
+  const getEmployeeName = (emp: Employee | null | undefined) => {
+    if (!emp) return 'Employee';
+    return `${emp.other_names} ${emp.surname}`;
+  };
+
   return (
     <Card className="shadow-glass dark:shadow-glass-dark">
       <CardHeader>
@@ -299,11 +284,11 @@ export function OTPForm({ onSuccess }: OTPFormProps) {
                     >
                       <div className="flex items-center">
                         <Avatar className="h-8 w-8 mr-2">
-                          <AvatarImage src={emp.profileImage} alt={emp.name} />
-                          <AvatarFallback>{(emp.user?.name || emp.name || '').charAt(0)}</AvatarFallback>
+                          <AvatarImage src={emp.avatar_url || undefined} alt={`${emp.other_names} ${emp.surname}`} />
+                          <AvatarFallback>{(emp.other_names || emp.surname || '').charAt(0)}</AvatarFallback>
                         </Avatar>
                         <div>
-                          <p className="text-sm font-medium">{emp.user?.name || emp.name || 'Unknown'}</p>
+                          <p className="text-sm font-medium">{`${emp.other_names} ${emp.surname}`}</p>
                           <p className="text-xs text-muted-foreground">{typeof emp.department === 'object' ? emp.department.name : emp.department} • #{emp.employeeNumber}</p>
                         </div>
                       </div>
@@ -324,12 +309,12 @@ export function OTPForm({ onSuccess }: OTPFormProps) {
             <div className="border p-4 rounded-md bg-card mt-2">
               <div className="flex items-center">
                 <Avatar className="h-12 w-12 mr-3">
-                  <AvatarImage src={selectedEmployee.profileImage} alt={selectedEmployee.user?.name || selectedEmployee.name || 'Employee'} />
-                  <AvatarFallback>{(selectedEmployee.user?.name || selectedEmployee.name || '').charAt(0)}</AvatarFallback>
+                  <AvatarImage src={selectedEmployee.avatar_url || undefined} alt={`${selectedEmployee.other_names} ${selectedEmployee.surname}` || 'Employee'} />
+                  <AvatarFallback>{(selectedEmployee.other_names || selectedEmployee.surname || '').charAt(0)}</AvatarFallback>
                 </Avatar>
                 <div>
                   <div className="flex items-center">
-                    <h3 className="font-medium">{selectedEmployee.user?.name || selectedEmployee.name || 'Unknown'}</h3>
+                    <h3 className="font-medium">{`${selectedEmployee.other_names} ${selectedEmployee.surname}` || 'Unknown'}</h3>
                     <Badge variant="outline" className="ml-2 text-xs">
                       #{selectedEmployee.employeeNumber}
                     </Badge>
@@ -363,7 +348,7 @@ export function OTPForm({ onSuccess }: OTPFormProps) {
           
           {generatedOtp && (
             <div className="p-5 border rounded-md bg-primary/5 text-center">
-              <p className="font-medium text-sm mb-2">Generated OTP for {selectedEmployee?.user?.name || selectedEmployee?.name || 'Employee'}:</p>
+              <p className="font-medium text-sm mb-2">Generated OTP for {`${selectedEmployee?.other_names} ${selectedEmployee?.surname}` || 'Employee'}:</p>
               <p className="text-3xl font-bold tracking-wider text-primary">{generatedOtp}</p>
               <div className="flex items-center justify-center text-xs mt-2 text-muted-foreground">
                 <Clock className="h-3 w-3 mr-1" />

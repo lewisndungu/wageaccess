@@ -2,18 +2,9 @@ import { createContext, useContext, useState, useEffect, ReactNode } from "react
 import { apiRequest } from "@/lib/queryClient";
 import { useQuery } from "@tanstack/react-query";
 import { toast } from "@/hooks/use-toast";
+import { User } from '../../../shared/schema';
 
 type UserRole = "employee" | "supervisor" | "hr" | "admin";
-
-interface User {
-  id: number;
-  username: string;
-  name: string;
-  email: string;
-  role: UserRole;
-  profileImage?: string;
-  departmentId?: number;
-}
 
 interface UserContextType {
   user: User | null;
@@ -21,6 +12,7 @@ interface UserContextType {
   error: Error | null;
   login: (username: string, password: string) => Promise<void>;
   logout: () => void;
+  setUser: (user: User | null) => void;
 }
 
 const UserContext = createContext<UserContextType | undefined>(undefined);
@@ -59,7 +51,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
       
       toast({
         title: "Login successful",
-        description: `Welcome back, ${response.user.name}!`,
+        description: `Welcome back, ${response.user.username}!`,
       });
     } catch (error) {
       toast({
@@ -80,7 +72,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <UserContext.Provider value={{ user, isLoading, error: error as Error, login, logout }}>
+    <UserContext.Provider value={{ user, isLoading, error: error as Error, login, logout, setUser }}>
       {children}
     </UserContext.Provider>
   );

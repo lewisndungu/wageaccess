@@ -1,32 +1,93 @@
 import type { Express, Request, Response } from "express";
 import { createServer, type Server } from "http";
-import { storage } from "./storage";
+import { storage, saveCommand, saveSearch, addEmployees } from "./storage";
 import { z } from "zod";
-import { insertUserSchema, insertEmployeeSchema, insertAttendanceSchema, insertPayrollSchema, insertEwaRequestSchema, type InsertAttendance, type Attendance } from "@shared/schema";
+import { 
+  User, 
+  Employee, 
+  Department, 
+  EmployeeWithDetails,
+  Payroll,
+  EwaRequest,
+  Wallet,
+  WalletTransaction,
+  InsertWalletTransaction,
+  OtpCode,
+  Attendance,
+  InsertAttendance,
+  InsertEmployee,
+  InsertPayroll,
+  InsertEwaRequest,
+  InsertUser
+} from "@shared/schema";
 import { faker } from '@faker-js/faker';
 import { generateEmptyAttendance } from './mock-data-generator';
 import { subDays, addDays, formatISO, startOfMonth, endOfMonth, parseISO, startOfDay, getTime, addSeconds, isSameDay, differenceInHours, differenceInMinutes } from 'date-fns';
+import { chatService } from './index';
+import multer from 'multer';
+import * as XLSX from 'xlsx';
 
-// Define a type for the enhanced employee object sent to the client
-interface EnhancedEmployee {
-  id: number;
-  employeeNumber: string;
-  userId: number;
-  departmentId: number;
-  position: string;
-  status: string;
-  hourlyRate: string | number;
-  startDate: string | Date;
-  active: boolean | null;
-  phoneNumber: string | null;
-  emergencyContact: string | object | null;
-  address: string | object | null;
-  // Additional fields for frontend
-  name: string;
-  email: string;
-  profileImage: string | null;
-  department: string;
-}
+// Create validation schemas using zod
+const insertUserSchema = z.object({
+  username: z.string(),
+  password: z.string(),
+  role: z.string(),
+  profileImage: z.string().optional(),
+  departmentId: z.string().optional()
+});
+
+const insertEmployeeSchema = z.object({
+  userId: z.string(),
+  employeeNumber: z.string(),
+  departmentId: z.string(),
+  surname: z.string(),
+  other_names: z.string(),
+  id_no: z.string(),
+  sex: z.string(),
+  position: z.string(),
+  status: z.string().default("active"),
+  is_on_probation: z.boolean().default(false),
+  role: z.string().default("employee"),
+  gross_income: z.number().or(z.string()),
+  net_income: z.number().or(z.string()),
+  active: z.boolean().default(true)
+});
+
+const insertAttendanceSchema = z.object({
+  employeeId: z.string(),
+  date: z.date().optional(),
+  clockInTime: z.date().optional(),
+  clockOutTime: z.date().optional(),
+  status: z.string(),
+  hoursWorked: z.number().or(z.string()).optional(),
+  notes: z.string().optional()
+});
+
+const insertPayrollSchema = z.object({
+  employeeId: z.string(),
+  periodStart: z.date(),
+  periodEnd: z.date(),
+  hoursWorked: z.number().or(z.string()),
+  grossPay: z.number().or(z.string()),
+  netPay: z.number().or(z.string()),
+  status: z.string().default("pending")
+});
+
+const insertEwaRequestSchema = z.object({
+  employeeId: z.string(),
+  amount: z.number().or(z.string()),
+  reason: z.string().optional(),
+  status: z.string().default("pending")
+});
+
+// Configure multer for file uploads
+const multerStorage = multer.memoryStorage();
+const upload = multer({
+  storage: multerStorage,
+  limits: {
+    fileSize: 50 * 1024 * 1024, // Increased to 50MB limit
+  }
+});
 
 // Helper to validate request body
 function validateBody<T extends z.ZodType>(schema: T) {
@@ -52,6 +113,230 @@ function determineAttendanceStatus(clockInTime: Date, scheduledStartTimeMinutes:
   } else {
     return 'late'; // After grace period (e.g., after 9:15 AM)
   }
+}
+
+// Utility functions to get data that might not be directly in the interface
+function getEmployeeName(employee: any): string {
+  // Try to get the name in various ways to handle different data structures
+  if (employee?.name) return employee.name;
+  if (employee?.user?.name) return employee.user.name;
+  if (employee?.surname && employee?.other_names) {
+    return `${employee.other_names} ${employee.surname}`;
+  }
+  return 'Unknown Employee';
+}
+
+function getDepartmentName(employee: any): string {
+  // Try to get the department name in various ways
+  if (employee?.department?.name) return employee.department.name;
+  return 'Unknown Department';
+}
+
+// Helper function to transform employee data
+async function transformEmployeeData(employee: any): Promise<Employee> {
+  // Get user details
+  const user = await storage.getUser(ensureStringId(employee.userId));
+  
+  // Get department details
+  const department = await storage.getDepartment(ensureStringId(employee.departmentId));
+  
+  // Helper function to ensure string type for IDs
+  const ensureString = (value: any): string => {
+    if (typeof value === 'number') {
+      return value.toString();
+    }
+    return value || '';
+  };
+  
+  // Helper function to convert string or number to number
+  const toNumber = (value: any): number => {
+    if (typeof value === 'string') {
+      return parseFloat(value) || 0;
+    }
+    return typeof value === 'number' ? value : 0;
+  };
+  
+  // Create department data that matches the Department interface
+  const departmentData: Department = {
+    id: ensureString(department?.id || ''),
+    name: department?.name || 'Unknown Department',
+    description: department?.description
+  };
+  
+  // Create a complete enhanced employee object
+  const transformedEmployee: Employee = {
+    // User properties (Employee extends User)
+    id: ensureString(employee.id),
+    username: user?.username || employee.username || '',
+    password: user?.password || employee.password || '',
+    role: employee.role || 'employee',
+    profileImage: employee.profileImage || user?.profileImage,
+    departmentId: ensureString(employee.departmentId),
+    created_at: employee.created_at || new Date(),
+    modified_at: employee.modified_at || new Date(),
+    
+    // Employee specific properties
+    employeeNumber: ensureString(employee.employeeNumber),
+    userId: ensureString(employee.userId),
+    surname: employee.surname || '',
+    other_names: employee.other_names || '',
+    id_no: employee.id_no || '',
+    tax_pin: employee.tax_pin,
+    sex: employee.sex || '',
+    position: employee.position || '',
+    status: employee.status || 'active',
+    is_on_probation: employee.is_on_probation === true,
+    gross_income: toNumber(employee.gross_income),
+    net_income: toNumber(employee.net_income),
+    total_deductions: toNumber(employee.total_deductions),
+    loan_deductions: toNumber(employee.loan_deductions),
+    employer_advances: toNumber(employee.employer_advances), 
+    total_loan_deductions: toNumber(employee.total_loan_deductions),
+    statutory_deductions: employee.statutory_deductions || {
+      nhif: 0,
+      nssf: 0,
+      paye: 0,
+      levies: 0
+    },
+    max_salary_advance_limit: toNumber(employee.max_salary_advance_limit),
+    available_salary_advance_limit: toNumber(employee.available_salary_advance_limit),
+    last_withdrawal_time: employee.last_withdrawal_time,
+    contact: {
+      email: employee.contact?.email || '',
+      phoneNumber: employee.contact?.phoneNumber || employee.phoneNumber || ''
+    },
+    address: employee.address,
+    bank_info: employee.bank_info || {},
+    id_confirmed: employee.id_confirmed === true,
+    mobile_confirmed: employee.mobile_confirmed === true,
+    tax_pin_verified: employee.tax_pin_verified === true,
+    country: employee.country || 'KE',
+    documents: employee.documents || [],
+    crb_reports: employee.crb_reports || [],
+    avatar_url: employee.avatar_url,
+    hourlyRate: toNumber(employee.hourlyRate),
+    phoneNumber: employee.phoneNumber,
+    startDate: employee.startDate,
+    emergencyContact: employee.emergencyContact || {},
+    active: employee.active === true,
+    department: departmentData
+  };
+  
+  return transformedEmployee;
+}
+
+// Helper function to transform attendance records to match the schema
+function transformAttendanceRecord(record: any, employee?: any): Attendance {
+  // Convert hoursWorked to number if it's a string
+  const hoursWorked = typeof record.hoursWorked === 'string' 
+    ? parseFloat(record.hoursWorked) 
+    : record.hoursWorked;
+  
+  return {
+    id: record.id,
+    employeeId: record.employeeId,
+    clockInTime: record.clockInTime || undefined,
+    clockOutTime: record.clockOutTime || undefined,
+    date: record.date || undefined,
+    status: record.status || 'absent',
+    hoursWorked: hoursWorked !== undefined ? hoursWorked : undefined,
+    geoLocation: record.geoLocation || null,
+    approvedBy: record.approvedBy || undefined,
+    notes: record.notes || undefined,
+    employee: employee || undefined
+  };
+}
+
+// Helper function to transform EWA requests to match the schema
+function transformEwaRequest(request: any, employee?: any): EwaRequest {
+  // Convert amount to number if it's a string
+  const amount = typeof request.amount === 'string' 
+    ? parseFloat(request.amount) 
+    : request.amount;
+  
+  // Convert processingFee to number if it's a string
+  const processingFee = typeof request.processingFee === 'string' 
+    ? parseFloat(request.processingFee) 
+    : request.processingFee;
+  
+  return {
+    id: request.id,
+    employeeId: request.employeeId,
+    requestDate: request.requestDate || new Date(),
+    amount: amount || 0,
+    status: request.status || 'pending',
+    processingFee: processingFee,
+    approvedBy: request.approvedBy || undefined,
+    approvedAt: request.approvedAt || undefined,
+    disbursedAt: request.disbursedAt || undefined,
+    reason: request.reason || undefined,
+    rejectionReason: request.rejectionReason || undefined,
+    employee: employee || undefined
+  };
+}
+
+// Helper function to transform payroll records to match the schema
+function transformPayrollRecord(record: any, employee?: any): Payroll {
+  // Convert numeric fields to numbers if they're strings
+  const hoursWorked = typeof record.hoursWorked === 'string' 
+    ? parseFloat(record.hoursWorked) 
+    : record.hoursWorked || 0;
+  
+  const grossPay = typeof record.grossPay === 'string' 
+    ? parseFloat(record.grossPay) 
+    : record.grossPay || 0;
+  
+  const netPay = typeof record.netPay === 'string' 
+    ? parseFloat(record.netPay) 
+    : record.netPay || 0;
+  
+  const ewaDeductions = typeof record.ewaDeductions === 'string' 
+    ? parseFloat(record.ewaDeductions) 
+    : record.ewaDeductions;
+  
+  const taxDeductions = typeof record.taxDeductions === 'string' 
+    ? parseFloat(record.taxDeductions) 
+    : record.taxDeductions;
+  
+  const otherDeductions = typeof record.otherDeductions === 'string' 
+    ? parseFloat(record.otherDeductions) 
+    : record.otherDeductions;
+  
+  return {
+    id: record.id,
+    employeeId: record.employeeId,
+    periodStart: record.periodStart || new Date(),
+    periodEnd: record.periodEnd || new Date(),
+    hoursWorked: hoursWorked,
+    grossPay: grossPay,
+    netPay: netPay,
+    ewaDeductions: ewaDeductions,
+    taxDeductions: taxDeductions,
+    otherDeductions: otherDeductions,
+    status: record.status || 'pending',
+    processedAt: record.processedAt || undefined,
+    processedBy: record.processedBy || undefined,
+    employee: employee || undefined
+  };
+}
+
+// Helper function to format currency values
+function formatCurrency(value: number | string): string {
+  const numValue = typeof value === 'string' ? parseFloat(value) : value;
+  return numValue.toFixed(2);
+}
+
+// Helper function to format date values
+function formatDate(date: Date | string): string {
+  if (typeof date === 'string') {
+    return date;
+  }
+  return date.toISOString();
+}
+
+// Helper to ensure ID is string
+function ensureStringId(id: string | number): string {
+  return typeof id === 'number' ? id.toString() : id;
 }
 
 export async function registerRoutes(app: Express): Promise<Server> {
@@ -95,65 +380,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Employee routes
   app.get("/api/employees", async (_req, res) => {
     const employees = await storage.getAllEmployees();
-    return res.status(200).json(employees);
+    
+    // Transform the employee data using our helper function
+    const transformedEmployees = await Promise.all(employees.map(transformEmployeeData));
+    
+    return res.status(200).json(transformedEmployees);
   });
   
   app.get("/api/employees/active", async (_req, res) => {
+    console.log("GET /api/employees/active endpoint called");
     const employees = await storage.getAllActiveEmployees();
+    console.log(`/api/employees/active: Got ${employees.length} active employees from storage`);
     
-    // Transform the employee data to parse JSON strings and include user/department details
-    const transformedEmployees = await Promise.all(employees.map(async employee => {
-      // Get user details
-      const user = await storage.getUser(employee.userId);
-      
-      // Get department details
-      const department = await storage.getDepartment(employee.departmentId);
-      
-      // Process address and emergency contact fields
-      let addressObj = employee.address;
-      let emergencyContactObj = employee.emergencyContact;
-      
-      // Parse the address field if it's a JSON string
-      if (typeof addressObj === 'string' && 
-          (addressObj.startsWith('{') || addressObj.startsWith('['))) {
-        try {
-          addressObj = JSON.parse(addressObj);
-        } catch (e) {
-          console.error(`Failed to parse address for employee ${employee.id}: ${e}`);
-        }
-      }
-      
-      // Parse the emergencyContact field if it's a JSON string
-      if (typeof emergencyContactObj === 'string' && 
-          (emergencyContactObj.startsWith('{') || emergencyContactObj.startsWith('['))) {
-        try {
-          emergencyContactObj = JSON.parse(emergencyContactObj);
-        } catch (e) {
-          console.error(`Failed to parse emergencyContact for employee ${employee.id}: ${e}`);
-        }
-      }
-      
-      // Create a complete enhanced employee object
-      return {
-        id: employee.id,
-        employeeNumber: employee.employeeNumber,
-        userId: employee.userId,
-        departmentId: employee.departmentId,
-        position: employee.position,
-        status: employee.status,
-        hourlyRate: employee.hourlyRate,
-        startDate: employee.startDate,
-        active: employee.active,
-        phoneNumber: employee.phoneNumber,
-        address: addressObj,
-        emergencyContact: emergencyContactObj,
-        // Additional fields for frontend
-        name: user ? user.name : 'Unknown',
-        email: user ? user.email || user.username : 'Unknown',
-        profileImage: user && user.profileImage ? user.profileImage : faker.image.avatar(),
-        department: department ? department.name : 'Unknown'
-      };
-    }));
+    // Transform the employee data using our helper function
+    const transformedEmployees = await Promise.all(employees.map(transformEmployeeData));
+    console.log(`/api/employees/active: Transformed ${transformedEmployees.length} employees`);
+    
+    // Log some examples of employees to debug
+    if (transformedEmployees.length > 0) {
+      console.log(`First active employee example:`, {
+        id: transformedEmployees[0].id,
+        name: transformedEmployees[0].other_names + ' ' + transformedEmployees[0].surname,
+        employeeNumber: transformedEmployees[0].employeeNumber,
+        active: transformedEmployees[0].active
+      });
+    }
     
     return res.status(200).json(transformedEmployees);
   });
@@ -161,107 +412,59 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/employees/inactive", async (_req, res) => {
     const employees = await storage.getAllInactiveEmployees();
     
-    // Transform the employee data to parse JSON strings and include user/department details
-    const transformedEmployees = await Promise.all(employees.map(async employee => {
-      // Get user details
-      const user = await storage.getUser(employee.userId);
-      
-      // Get department details
-      const department = await storage.getDepartment(employee.departmentId);
-      
-      // Process address and emergency contact fields
-      let addressObj = employee.address;
-      let emergencyContactObj = employee.emergencyContact;
-      
-      // Parse the address field if it's a JSON string
-      if (typeof addressObj === 'string' && 
-          (addressObj.startsWith('{') || addressObj.startsWith('['))) {
-        try {
-          addressObj = JSON.parse(addressObj);
-        } catch (e) {
-          console.error(`Failed to parse address for employee ${employee.id}: ${e}`);
-        }
-      }
-      
-      // Parse the emergencyContact field if it's a JSON string
-      if (typeof emergencyContactObj === 'string' && 
-          (emergencyContactObj.startsWith('{') || emergencyContactObj.startsWith('['))) {
-        try {
-          emergencyContactObj = JSON.parse(emergencyContactObj);
-        } catch (e) {
-          console.error(`Failed to parse emergencyContact for employee ${employee.id}: ${e}`);
-        }
-      }
-      
-      // Create a complete enhanced employee object
-      return {
-        id: employee.id,
-        employeeNumber: employee.employeeNumber,
-        userId: employee.userId,
-        departmentId: employee.departmentId,
-        position: employee.position,
-        status: employee.status,
-        hourlyRate: employee.hourlyRate,
-        startDate: employee.startDate,
-        active: employee.active,
-        phoneNumber: employee.phoneNumber,
-        address: addressObj,
-        emergencyContact: emergencyContactObj,
-        // Additional fields for frontend
-        name: user ? user.name : 'Unknown',
-        email: user ? user.email || user.username : 'Unknown',
-        profileImage: user && user.profileImage ? user.profileImage : faker.image.avatar(),
-        department: department ? department.name : 'Unknown'
-      };
-    }));
+    // Transform the employee data using our helper function
+    const transformedEmployees = await Promise.all(employees.map(transformEmployeeData));
     
     return res.status(200).json(transformedEmployees);
   });
   
   app.get("/api/employees/:id", async (req, res) => {
-    const id = parseInt(req.params.id);
-    
-    if (isNaN(id)) {
-      return res.status(400).json({ message: "Invalid employee ID" });
-    }
-    
-    const employee = await storage.getEmployeeWithDetails(id);
-    
-    if (!employee) {
-      return res.status(404).json({ message: "Employee not found" });
-    }
-    
-    // Parse JSON strings in the employee object
-    const transformedEmployee = { ...employee };
-    
-    // Parse the address field if it's a JSON string
-    if (typeof transformedEmployee.address === 'string' && 
-        (transformedEmployee.address.startsWith('{') || transformedEmployee.address.startsWith('['))) {
-      try {
-        transformedEmployee.address = JSON.parse(transformedEmployee.address);
-      } catch (e) {
-        // If parsing fails, keep the original string
-        console.error(`Failed to parse address for employee ${employee.id}: ${e}`);
+    try {
+      const id = ensureStringId(req.params.id);
+      console.log(`GET /api/employees/${id} - Looking up employee with ID: ${id}`);
+      
+      // First try to get the employee directly
+      const employee = await storage.getEmployee(id);
+      
+      if (!employee) {
+        console.log(`Employee with ID ${id} not found in direct lookup`);
+        
+        // If direct lookup fails, try to get with employee details (which also calls getEmployee)
+        const employeeWithDetails = await storage.getEmployeeWithDetails(id);
+        
+        if (!employeeWithDetails) {
+          console.log(`Employee with ID ${id} also not found with getEmployeeWithDetails`);
+          
+          // Log all employee IDs to help debug
+          const allEmployees = await storage.getAllEmployees();
+          console.log(`Available employee IDs: ${allEmployees.slice(0, 5).map(e => e.id).join(', ')}... (total: ${allEmployees.length})`);
+          
+          return res.status(404).json({ message: "Employee not found" });
+        }
+        
+        const Employee = await transformEmployeeData(employeeWithDetails);
+        console.log(`Employee found with getEmployeeWithDetails: ${Employee.id}`);
+        return res.status(200).json(Employee);
       }
-    }
-    
-    // Parse the emergencyContact field if it's a JSON string
-    if (typeof transformedEmployee.emergencyContact === 'string' && 
-        (transformedEmployee.emergencyContact.startsWith('{') || transformedEmployee.emergencyContact.startsWith('['))) {
-      try {
-        transformedEmployee.emergencyContact = JSON.parse(transformedEmployee.emergencyContact);
-      } catch (e) {
-        // If parsing fails, keep the original string
-        console.error(`Failed to parse emergencyContact for employee ${employee.id}: ${e}`);
+      
+      // If direct lookup succeeded, continue as before
+      const employeeWithDetails = await storage.getEmployeeWithDetails(id);
+      
+      if (!employeeWithDetails) {
+        console.log(`Found employee directly but couldn't get details for ID ${id}`);
+        return res.status(500).json({ message: "Failed to fetch employee details" });
       }
+      
+      const Employee = await transformEmployeeData(employeeWithDetails);
+      console.log(`Employee found and returned: ${Employee.id}`);
+      return res.status(200).json(Employee);
+    } catch (error) {
+      console.error('Error fetching employee:', error);
+      return res.status(500).json({ 
+        message: "Failed to fetch employee", 
+        error: error instanceof Error ? error.message : "Unknown error"
+      });
     }
-    
-    // Add avatar URL if no profile image exists
-    if (transformedEmployee.user && !transformedEmployee.user.profileImage) {
-      transformedEmployee.user.profileImage = faker.image.avatar();
-    }
-    
-    return res.status(200).json(transformedEmployee);
   });
   
   app.post("/api/employees", validateBody(insertEmployeeSchema), async (req, res) => {
@@ -273,20 +476,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
   
-  app.patch("/api/employees/:id", async (req, res) => {
-    const id = parseInt(req.params.id);
-    
-    if (isNaN(id)) {
-      return res.status(400).json({ message: "Invalid employee ID" });
+  app.put("/api/employees/:id", async (req, res) => {
+    try {
+      const id = ensureStringId(req.params.id);
+      const employee = await storage.updateEmployee(id, req.body);
+      
+      if (!employee) {
+        return res.status(404).json({ message: "Employee not found" });
+      }
+      
+      return res.status(200).json(employee);
+    } catch (error) {
+      console.error('Error updating employee:', error);
+      return res.status(500).json({ 
+        message: "Failed to update employee", 
+        error: error instanceof Error ? error.message : "Unknown error"
+      });
     }
-    
-    const employee = await storage.updateEmployee(id, req.body);
-    
-    if (!employee) {
-      return res.status(404).json({ message: "Employee not found" });
-    }
-    
-    return res.status(200).json(employee);
   });
   
   // Attendance routes
@@ -318,78 +524,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
         console.log(`Retrieved ${attendance.length} raw attendance records from storage`);
       }
       
-      // Enhance the records with additional info for the frontend
-      console.log("Enhancing records with employee details...");
-      const enhancedRecords = await Promise.all(attendance.map(async (record: Attendance) => {
-        const employee = await storage.getEmployeeWithDetails(record.employeeId);
-        return {
-          ...record,
-          employeeName: employee ? employee.user.name : 'Unknown Employee',
-          department: employee ? employee.department.name : 'Unknown Department'
-        };
-      }));
+      // Transform the records to ensure they match the schema
+      console.log("Transforming records to match schema...");
+      const transformedRecords = await Promise.all(
+        attendance.map(async (record: Attendance) => {
+          const employee = await storage.getEmployeeWithDetails(record.employeeId);
+          return transformAttendanceRecord(record, employee);
+        })
+      );
       
-      console.log(`Found and enhanced ${enhancedRecords.length} attendance records`);
+      console.log(`Transformed ${transformedRecords.length} attendance records`);
       
-      // If we still have no records, generate some mock data
-      if (enhancedRecords.length === 0) {
-        console.log("No attendance records found, creating mock data");
-        
-        // Get some employees to use for mock data
-        const employees = await storage.getAllActiveEmployees();
-        if (employees.length > 0) {
-          console.log(`Using ${employees.length} employees for mock data`);
-          
-          // Generate mock attendance for the last 7 days
-          const mockAttendance = [];
-          const today = new Date();
-          
-          for (let i = 0; i < 7; i++) {
-            const date = new Date(today);
-            date.setDate(date.getDate() - i);
-            
-            for (const employee of employees.slice(0, 5)) { // Use only first 5 employees
-              const employeeWithDetails = await storage.getEmployeeWithDetails(employee.id);
-              
-              // Create a mock attendance record
-              const clockInHour = 8 + Math.floor(Math.random() * 2); // 8-9 AM
-              const clockInMinute = Math.floor(Math.random() * 60);
-              
-              const clockIn = new Date(date);
-              clockIn.setHours(clockInHour, clockInMinute, 0, 0);
-              
-              const hoursWorked = 7 + Math.random() * 2; // 7-9 hours
-              
-              const clockOut = new Date(clockIn);
-              clockOut.setHours(clockOut.getHours() + Math.floor(hoursWorked));
-              clockOut.setMinutes(clockOut.getMinutes() + Math.floor((hoursWorked % 1) * 60));
-              
-              // Determine status based on clock-in time
-              let status = 'present';
-              if (clockInHour > 8 || (clockInHour === 8 && clockInMinute > 15)) {
-                status = 'late';
-              }
-              
-              mockAttendance.push({
-                id: 1000 + mockAttendance.length, // Use IDs starting from 1000
-                employeeId: employee.id,
-                employeeName: employeeWithDetails ? employeeWithDetails.user.name : 'Unknown Employee',
-                department: employeeWithDetails ? employeeWithDetails.department.name : 'Unknown Department',
-                date: formatISO(date),
-                clockInTime: formatISO(clockIn),
-                clockOutTime: formatISO(clockOut),
-                status,
-                hoursWorked: hoursWorked.toFixed(2)
-              });
-            }
-          }
-          
-          console.log(`Generated ${mockAttendance.length} mock attendance records`);
-          return res.status(200).json(mockAttendance);
-        }
-      }
-      
-      return res.status(200).json(enhancedRecords);
+      return res.status(200).json(transformedRecords);
     } catch (error) {
       console.error("Error fetching attendance:", error);
       return res.status(500).json({ 
@@ -399,27 +545,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
   
-  app.get("/api/attendance/employee/:id", async (req, res) => {
-    const id = parseInt(req.params.id);
-    const { startDate, endDate } = req.query;
-    
-    if (isNaN(id)) {
-      return res.status(400).json({ message: "Invalid employee ID" });
-    }
-    
+  app.get("/api/employees/:id/attendance", async (req, res) => {
     try {
+      const id = ensureStringId(req.params.id);
       let attendanceRecords;
       
-      // If date range is provided, filter by date range
+      const { startDate, endDate } = req.query;
+      
       if (startDate && endDate) {
-        console.log(`Fetching attendance for employee ${id} from ${startDate} to ${endDate}`);
-        
-        // Validate dates
-        const parsedStartDate = parseISO(startDate as string);
-        const parsedEndDate = parseISO(endDate as string);
+        const parsedStartDate = new Date(startDate as string);
+        const parsedEndDate = new Date(endDate as string);
         
         if (isNaN(parsedStartDate.getTime()) || isNaN(parsedEndDate.getTime())) {
-          throw new Error(`Invalid date format: startDate=${startDate}, endDate=${endDate}`);
+          return res.status(400).json({ message: "Invalid date format" });
         }
         
         attendanceRecords = await storage.getAttendanceByEmployeeAndDateRange(
@@ -428,21 +566,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
           parsedEndDate
         );
       } else {
-        // Get all attendance records for this employee
         attendanceRecords = await storage.getAttendanceForEmployee(id);
       }
       
-      // Enhance the records with additional info for the frontend
       const employee = await storage.getEmployeeWithDetails(id);
-      const enhancedRecords = attendanceRecords.map(record => ({
-        ...record,
-        employeeName: employee ? employee.user.name : 'Unknown Employee',
-        department: employee ? employee.department.name : 'Unknown Department'
-      }));
       
-      return res.status(200).json(enhancedRecords);
+      // Transform attendance records
+      const transformedRecords = attendanceRecords.map(record => 
+        transformAttendanceRecord(record, employee)
+      );
+      
+      // Return attendance records with schema-compliant structure
+      return res.status(200).json(transformedRecords);
     } catch (error) {
-      console.error(`Error fetching attendance for employee ${id}:`, error);
+      console.error(`Error fetching attendance:`, error);
       return res.status(500).json({ 
         message: "Failed to fetch attendance records", 
         error: error instanceof Error ? error.message : "Unknown error"
@@ -488,12 +625,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const absenceRecord = await storage.createAttendance({
           employeeId: employee.id,
           date: normalizedDate,
-          clockInTime: null,
-          clockOutTime: null,
+          clockInTime: undefined, // Changed from null to undefined
+          clockOutTime: undefined, // Changed from null to undefined
           status: 'absent',
-          hoursWorked: "0", // No hours worked for absences
+          hoursWorked: 0, // Changed from string "0" to number 0
           geoLocation: null,
-          approvedBy: null,
+          approvedBy: undefined, // Changed from null to undefined
           notes: 'Automatically marked as absent'
         });
         
@@ -523,7 +660,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     const events = await Promise.all(
       attendanceRecords.map(async (record) => {
         const employeeWithDetails = await storage.getEmployeeWithDetails(record.employeeId);
-        if (!employeeWithDetails || !employeeWithDetails.user) {
+        if (!employeeWithDetails) {
           return null;
         }
 
@@ -544,9 +681,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return {
           id: record.id,
           employeeId: record.employeeId,
-          employeeName: employeeWithDetails.user.name,
-          employeeAvatar: employeeWithDetails.user.profileImage,
-          department: employeeWithDetails.department?.name || 'Unknown Department',
+          employeeName: employeeWithDetails.other_names + ' ' + employeeWithDetails.surname,
+          employeeAvatar: employeeWithDetails?.profileImage,
+          department: employeeWithDetails?.department?.name || employeeWithDetails?.role || 'Unknown Department',
           event,
           time,
           status: record.status,
@@ -623,40 +760,54 @@ export async function registerRoutes(app: Express): Promise<Server> {
   
   app.post("/api/attendance", validateBody(insertAttendanceSchema), async (req, res) => {
     try {
-      const attendance = await storage.createAttendance(req.body);
-      return res.status(201).json(attendance);
+      // Handle the hoursWorked conversion (string to number)
+      let attendanceData = { ...req.body };
+      if (typeof attendanceData.hoursWorked === 'string') {
+        attendanceData.hoursWorked = parseFloat(attendanceData.hoursWorked);
+      }
+      
+      const attendance = await storage.createAttendance(attendanceData);
+      
+      // Transform to ensure schema compliance
+      const transformedAttendance = transformAttendanceRecord(attendance);
+      
+      return res.status(201).json(transformedAttendance);
     } catch (error) {
       return res.status(500).json({ message: "Failed to create attendance record" });
     }
   });
   
   // Update an attendance record
-  app.patch("/api/attendance/:id", async (req, res) => {
+  app.put("/api/attendance/:id", async (req, res) => {
     try {
-      const id = parseInt(req.params.id);
+      const id = ensureStringId(req.params.id);
       
-      if (isNaN(id)) {
-        return res.status(400).json({ message: "Invalid attendance ID" });
+      // Handle the hoursWorked conversion (string to number)
+      let attendanceData = { ...req.body };
+      if (typeof attendanceData.hoursWorked === 'string') {
+        attendanceData.hoursWorked = parseFloat(attendanceData.hoursWorked);
       }
       
-      const updatedAttendance = await storage.updateAttendance(id, req.body);
+      const attendance = await storage.updateAttendance(id, attendanceData);
       
-      return res.status(200).json(updatedAttendance);
+      if (!attendance) {
+        return res.status(404).json({ message: "Attendance record not found" });
+      }
+      
+      // Transform to ensure schema compliance
+      const transformedAttendance = transformAttendanceRecord(attendance);
+      
+      return res.status(200).json(transformedAttendance);
     } catch (error) {
-      console.error("Error updating attendance record:", error);
-      return res.status(500).json({ message: "Failed to update attendance record" });
+      console.error('Error updating attendance:', error);
+      return res.status(500).json({ message: "Failed to update attendance", error: error instanceof Error ? error.message : "Unknown error" });
     }
   });
   
   // Delete an attendance record
   app.delete("/api/attendance/:id", async (req, res) => {
     try {
-      const id = parseInt(req.params.id);
-      
-      if (isNaN(id)) {
-        return res.status(400).json({ message: "Invalid attendance ID" });
-      }
-      
+      const id = ensureStringId(req.params.id);
       const deleted = await storage.deleteAttendance(id);
       
       if (deleted) {
@@ -665,8 +816,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "Attendance record not found" });
       }
     } catch (error) {
-      console.error("Error deleting attendance record:", error);
-      return res.status(500).json({ message: "Failed to delete attendance record" });
+      console.error('Error deleting attendance:', error);
+      return res.status(500).json({ 
+        message: "Failed to delete attendance", 
+        error: error instanceof Error ? error.message : "Unknown error"
+      });
     }
   });
   
@@ -681,6 +835,265 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error fetching all attendance records:", error);
       return res.status(500).json({ message: "Failed to fetch attendance records" });
+    }
+  });
+  
+  // Attendance statistics endpoint
+  app.get("/api/attendance/stats", async (req, res) => {
+    try {
+      // Get query parameters with defaults
+      const startDateParam = req.query.startDate as string;
+      const endDateParam = req.query.endDate as string;
+      
+      // Set default dates if not provided (last 30 days)
+      const endDate = endDateParam ? new Date(endDateParam) : new Date();
+      const startDate = startDateParam ? new Date(startDateParam) : new Date(endDate);
+      if (!startDateParam) {
+        startDate.setDate(startDate.getDate() - 30); // Default to last 30 days
+      }
+      
+      // Get all attendance records within date range
+      const attendanceRecords = await storage.getAllAttendanceByDateRange(startDate, endDate);
+      
+      // Get all active employees
+      const activeEmployees = await storage.getAllActiveEmployees();
+      
+      // Calculate statistics
+      const totalDays = Math.round((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+      const workdaysCount = countWorkdays(startDate, endDate);
+      
+      // Count clockIns and clockOuts
+      let totalClockIns = 0;
+      let totalClockOuts = 0;
+      let clockInTimes: Date[] = [];
+      
+      for (const record of attendanceRecords) {
+        if (record.clockInTime) {
+          totalClockIns++;
+          clockInTimes.push(new Date(record.clockInTime));
+        }
+        if (record.clockOutTime) {
+          totalClockOuts++;
+        }
+      }
+      
+      // Calculate average clock-in time
+      let averageClockInTime = "--:--";
+      if (clockInTimes.length > 0) {
+        let totalMinutes = 0;
+        for (const time of clockInTimes) {
+          totalMinutes += time.getHours() * 60 + time.getMinutes();
+        }
+        const avgMinutes = Math.round(totalMinutes / clockInTimes.length);
+        const hours = Math.floor(avgMinutes / 60);
+        const minutes = avgMinutes % 60;
+        averageClockInTime = `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
+      }
+      
+      // Count unique employees who clocked in
+      const uniqueEmployees = new Set(attendanceRecords.map(record => record.employeeId)).size;
+      
+      // Count today's attendance
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const todayCount = attendanceRecords.filter(record => {
+        const recordDate = record.date ? new Date(record.date) : undefined;
+        if (!recordDate) return false;
+        recordDate.setHours(0, 0, 0, 0);
+        return recordDate.getTime() === today.getTime();
+      }).length;
+      
+      // Calculate absence count
+      // This is an approximation: total expected attendance minus actual attendance
+      const expectedAttendance = activeEmployees.length * workdaysCount;
+      const actualAttendance = attendanceRecords.filter(r => r.status === 'present' || r.status === 'late').length;
+      const absenceCount = Math.max(0, expectedAttendance - actualAttendance);
+      
+      // Create response matching TestStats interface
+      const response = {
+        totalClockIns,
+        totalClockOuts,
+        averageClockInTime,
+        uniqueEmployees,
+        todayCount,
+        absenceCount
+      };
+      
+      // Also include the original dashboard stats for the AttendanceDashboard component
+      const statusCounts: { 
+        present: number; 
+        late: number; 
+        absent: number; 
+        leave: number; 
+        total: number;
+        [key: string]: number; 
+      } = {
+        present: 0,
+        late: 0,
+        absent: 0,
+        leave: 0,
+        total: 0
+      };
+      
+      // Calculate attendance by status
+      for (const record of attendanceRecords) {
+        if (record.status) {
+          statusCounts[record.status] = (statusCounts[record.status] || 0) + 1;
+          statusCounts.total += 1;
+        }
+      }
+      
+      // Calculate daily averages
+      const averageDailyAttendance = activeEmployees.length > 0 
+        ? Math.round((statusCounts.present + statusCounts.late) / workdaysCount)
+        : 0;
+      
+      const averageAttendanceRate = activeEmployees.length > 0 && workdaysCount > 0
+        ? ((statusCounts.present + statusCounts.late) / (activeEmployees.length * workdaysCount) * 100).toFixed(1)
+        : '0';
+      
+      // Calculate punctuality rate
+      const punctualityRate = (statusCounts.present && (statusCounts.present + statusCounts.late) > 0)
+        ? ((statusCounts.present / (statusCounts.present + statusCounts.late)) * 100).toFixed(1)
+        : '100.0';
+      
+      // Calculate average hours worked
+      let totalHoursWorked = 0;
+      let recordsWithHours = 0;
+      
+      for (const record of attendanceRecords) {
+        if (record.hoursWorked) {
+          totalHoursWorked += parseFloat(record.hoursWorked.toString());
+          recordsWithHours++;
+        }
+      }
+      
+      const averageHoursWorked = recordsWithHours > 0
+        ? (totalHoursWorked / recordsWithHours).toFixed(1)
+        : '0.0';
+      
+      // Get data for attendance trend (last 7 days)
+      const recordsByDate = new Map();
+      for (const record of attendanceRecords) {
+        if (!record.date) continue;
+        
+        const dateStr = new Date(record.date).toISOString().split('T')[0];
+        if (!recordsByDate.has(dateStr)) {
+          recordsByDate.set(dateStr, []);
+        }
+        recordsByDate.get(dateStr).push(record);
+      }
+      
+      const trendDates = getLast7Days(endDate);
+      const attendanceTrend = trendDates.map(date => {
+        const dateStr = date.toISOString().split('T')[0];
+        const dayRecords = recordsByDate.get(dateStr) || [];
+        const presentCount = dayRecords.filter((r: any) => r.status === 'present' || r.status === 'late').length;
+        const totalEmployees = activeEmployees.length;
+        const rate = totalEmployees > 0 ? (presentCount / totalEmployees) * 100 : 0;
+        
+        return {
+          date: dateStr,
+          rate: parseFloat(rate.toFixed(1)),
+          count: presentCount
+        };
+      });
+      
+      // Include dashboard stats in a nested object for backward compatibility
+      const responseWithStats = {
+        ...response,
+        _dashboardStats: {
+          summary: {
+            attendanceRate: `${averageAttendanceRate}%`,
+            punctualityRate: `${punctualityRate}%`,
+            averageHoursWorked,
+            averageDailyAttendance,
+            totalEmployees: activeEmployees.length,
+          },
+          statusCounts,
+          trend: attendanceTrend
+        }
+      };
+      
+      return res.status(200).json(responseWithStats);
+    } catch (error) {
+      console.error("Error generating attendance statistics:", error);
+      return res.status(500).json({ 
+        message: "Failed to generate attendance statistics", 
+        error: error instanceof Error ? error.message : "Unknown error"
+      });
+    }
+  });
+  
+  // Helper function to count workdays between two dates
+  function countWorkdays(startDate: Date, endDate: Date): number {
+    let count = 0;
+    const currentDate = new Date(startDate);
+    
+    while (currentDate <= endDate) {
+      const dayOfWeek = currentDate.getDay();
+      if (dayOfWeek !== 0 && dayOfWeek !== 6) { // Not Sunday or Saturday
+        count++;
+      }
+      currentDate.setDate(currentDate.getDate() + 1);
+    }
+    
+    return count;
+  }
+  
+  // Helper function to get last 7 days
+  function getLast7Days(endDate: Date): Date[] {
+    const dates: Date[] = [];
+    const end = new Date(endDate);
+    
+    for (let i = 6; i >= 0; i--) {
+      const date = new Date(end);
+      date.setDate(date.getDate() - i);
+      dates.push(date);
+    }
+    
+    return dates;
+  }
+  
+  app.get("/api/attendance/employee/:id", async (req, res) => {
+    try {
+      const id = ensureStringId(req.params.id);
+      let attendanceRecords;
+      
+      const { startDate, endDate } = req.query;
+      
+      if (startDate && endDate) {
+        const parsedStartDate = new Date(startDate as string);
+        const parsedEndDate = new Date(endDate as string);
+        
+        if (isNaN(parsedStartDate.getTime()) || isNaN(parsedEndDate.getTime())) {
+          return res.status(400).json({ message: "Invalid date format" });
+        }
+        
+        attendanceRecords = await storage.getAttendanceByEmployeeAndDateRange(
+          id,
+          parsedStartDate,
+          parsedEndDate
+        );
+      } else {
+        attendanceRecords = await storage.getAttendanceForEmployee(id);
+      }
+      
+      const employee = await storage.getEmployeeWithDetails(id);
+      
+      // Transform attendance records
+      const transformedRecords = attendanceRecords.map(record => 
+        transformAttendanceRecord(record, employee)
+      );
+      
+      // Return attendance records with schema-compliant structure
+      return res.status(200).json(transformedRecords);
+    } catch (error) {
+      console.error(`Error fetching attendance:`, error);
+      return res.status(500).json({ 
+        message: "Failed to fetch attendance records", 
+        error: error instanceof Error ? error.message : "Unknown error"
+      });
     }
   });
   
@@ -714,10 +1127,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
   
   app.post("/api/attendance/verify-otp", async (req, res) => {
     try {
-      const { code, action } = req.body;
+      const { employeeId, code, action } = req.body;
       
-      if (!code || !action) {
-        return res.status(400).json({ message: "OTP code and action are required" });
+      if (!employeeId || !code || !action) {
+        return res.status(400).json({ message: "Missing required fields" });
+      }
+      
+      // Get the employee record
+      const employee = await storage.getEmployee(ensureStringId(employeeId));
+      
+      if (!employee) {
+        return res.status(404).json({ error: "Employee not found" });
       }
       
       // Find the OTP code
@@ -729,7 +1149,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Check if OTP is expired
       const now = new Date();
-      if (now > otpCode.expiresAt) {
+      if (now > new Date(otpCode.expiresAt)) {
         return res.status(400).json({ message: "OTP code has expired" });
       }
       
@@ -737,16 +1157,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (otpCode.used) {
         return res.status(400).json({ message: "OTP code has already been used" });
       }
-      
-      // Get the employee with details (includes user and department info)
-      const employee = await storage.getEmployeeWithDetails(otpCode.employeeId);
-      
-      if (!employee) {
-        return res.status(404).json({ message: "Employee not found" });
-      }
-      
-      // Clear attendance cache to ensure we get fresh data
-      storage.clearTodayAttendanceCache?.();
       
       // Get today's date (reset to start of day)
       const today = startOfDay(now);
@@ -770,7 +1180,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (action === 'clockIn') {
         // Check if the employee has already clocked in today
         // Only consider a valid clock-in if there's an actual clockInTime value
-        if (todayRecord && todayRecord.clockInTime !== null) {
+        if (todayRecord && todayRecord.clockInTime) {
           return res.status(400).json({ message: "Already clocked in for today" });
         }
         
@@ -778,10 +1188,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         
         if (todayRecord) {
           // Update existing record with clock in
-          attendance = await storage.updateAttendance(todayRecord.id, {
+          attendance = await storage.updateAttendance(ensureStringId(todayRecord.id), {
             clockInTime: now,
             status: status,
-            hoursWorked: "0",
+            hoursWorked: 0,
             notes: `Self-logged via OTP: ${action}`
           });
         } else {
@@ -790,11 +1200,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
             employeeId: otpCode.employeeId,
             date: today,
             clockInTime: now,
-            clockOutTime: null,
+            clockOutTime: undefined,
             status: status,
-            hoursWorked: "0",
-            geoLocation: null,
-            approvedBy: null,
+            hoursWorked: 0,
+            geoLocation: undefined,
+            approvedBy: undefined,
             notes: `Self-logged via OTP: ${action}`
           });
         }
@@ -815,36 +1225,36 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const clockIn = new Date(todayRecord.clockInTime);
         const hoursWorked = differenceInHours(now, clockIn) + (differenceInMinutes(now, clockIn) % 60) / 60;
         
-        attendance = await storage.updateAttendance(todayRecord.id, {
+        attendance = await storage.updateAttendance(ensureStringId(todayRecord.id), {
           clockOutTime: now,
-          hoursWorked: hoursWorked.toFixed(2),
+          hoursWorked: hoursWorked,
           notes: `Self-logged via OTP: ${action}`
         });
       }
       
       // Mark OTP as used
-      await storage.updateOtpCode(otpCode.id, { used: true });
-      
-      // Clear today's attendance cache again to force refresh
-      storage.clearTodayAttendanceCache?.();
+      await storage.updateOtpCode(ensureStringId(otpCode.id), { used: true });
       
       // Return success with employee details included
+      const employeeWithDetails = await storage.getEmployeeWithDetails(ensureStringId(employee.id));
+      
       return res.status(200).json({ 
         success: true, 
         attendance,
+        // Use a simplified employee data object with just the necessary fields
+        // This is not returning a full Employee interface, but a simplified representation
         employee: {
           id: employee.id,
-          name: employee.user.name,
-          department: employee.department.name,
-          profileImage: employee.user.profileImage
+          fullName: employeeWithDetails ? `${employeeWithDetails.other_names} ${employeeWithDetails.surname}` : 'Unknown',
+          department: employeeWithDetails?.department?.name || 'Unknown',
+          profileImage: employeeWithDetails?.profileImage || null
         }
       });
     } catch (error) {
-      console.error("Error in verify-otp:", error);
+      console.error('Error verifying OTP:', error);
       return res.status(500).json({ 
-        success: false,
-        message: "Failed to process attendance", 
-        error: error instanceof Error ? error.message : "Unknown error" 
+        message: "Failed to verify OTP", 
+        error: error instanceof Error ? error.message : "Unknown error"
       });
     }
   });
@@ -889,8 +1299,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return {
           id: record.id,
           employeeId: record.employeeId,
-          employeeName: employee ? employee.user.name : 'Unknown Employee',
-          department: employee ? employee.department.name : 'Unknown Department',
+          employeeName: employee ? `${employee.other_names} ${employee.surname}` : 'Unknown Employee', // Changed from employee.user.name
+          department: employee ? employee?.department?.name || employee?.role : 'Unknown Department',
           periodStart: record.periodStart,
           periodEnd: record.periodEnd,
           hoursWorked: Number(record.hoursWorked) || 0,
@@ -918,39 +1328,74 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
   
   app.get("/api/payroll/employee/:id", async (req, res) => {
-    const id = parseInt(req.params.id);
-    
-    if (isNaN(id)) {
-      return res.status(400).json({ message: "Invalid employee ID" });
+    try {
+      const id = ensureStringId(req.params.id);
+      const payrollRecords = await storage.getPayrollForEmployee(id);
+      return res.status(200).json(payrollRecords);
+    } catch (error) {
+      console.error('Error fetching payroll:', error);
+      return res.status(500).json({ 
+        message: "Failed to fetch payroll records", 
+        error: error instanceof Error ? error.message : "Unknown error"
+      });
     }
-    
-    const payrollRecords = await storage.getPayrollForEmployee(id);
-    return res.status(200).json(payrollRecords);
   });
   
   app.post("/api/payroll", validateBody(insertPayrollSchema), async (req, res) => {
     try {
-      const payroll = await storage.createPayroll(req.body);
-      return res.status(201).json(payroll);
+      // Handle numeric fields conversion (string to number)
+      let payrollData = { ...req.body };
+      if (typeof payrollData.hoursWorked === 'string') {
+        payrollData.hoursWorked = parseFloat(payrollData.hoursWorked);
+      }
+      if (typeof payrollData.grossPay === 'string') {
+        payrollData.grossPay = parseFloat(payrollData.grossPay);
+      }
+      if (typeof payrollData.netPay === 'string') {
+        payrollData.netPay = parseFloat(payrollData.netPay);
+      }
+      
+      const payroll = await storage.createPayroll(payrollData);
+      
+      // Transform to ensure schema compliance
+      const transformedPayroll = transformPayrollRecord(payroll);
+      
+      return res.status(201).json(transformedPayroll);
     } catch (error) {
       return res.status(500).json({ message: "Failed to create payroll record" });
     }
   });
   
-  app.patch("/api/payroll/:id", async (req, res) => {
-    const id = parseInt(req.params.id);
-    
-    if (isNaN(id)) {
-      return res.status(400).json({ message: "Invalid payroll ID" });
+  app.put("/api/payroll/:id", async (req, res) => {
+    try {
+      const id = ensureStringId(req.params.id);
+      
+      // Handle numeric fields conversion (string to number)
+      let payrollData = { ...req.body };
+      if (typeof payrollData.hoursWorked === 'string') {
+        payrollData.hoursWorked = parseFloat(payrollData.hoursWorked);
+      }
+      if (typeof payrollData.grossPay === 'string') {
+        payrollData.grossPay = parseFloat(payrollData.grossPay);
+      }
+      if (typeof payrollData.netPay === 'string') {
+        payrollData.netPay = parseFloat(payrollData.netPay);
+      }
+      
+      const payroll = await storage.updatePayroll(id, payrollData);
+      
+      if (!payroll) {
+        return res.status(404).json({ message: "Payroll record not found" });
+      }
+      
+      // Transform to ensure schema compliance
+      const transformedPayroll = transformPayrollRecord(payroll);
+      
+      return res.status(200).json(transformedPayroll);
+    } catch (error) {
+      console.error('Error updating payroll:', error);
+      return res.status(500).json({ message: "Failed to update payroll", error: error instanceof Error ? error.message : "Unknown error" });
     }
-    
-    const payroll = await storage.updatePayroll(id, req.body);
-    
-    if (!payroll) {
-      return res.status(404).json({ message: "Payroll record not found" });
-    }
-    
-    return res.status(200).json(payroll);
   });
   
   // Process payroll endpoint
@@ -982,7 +1427,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           taxDeductions: (employeePayroll.paye + employeePayroll.nhif + employeePayroll.nssf + employeePayroll.housingLevy).toString(),
           otherDeductions: (employeePayroll.loanDeductions + employeePayroll.otherDeductions).toString(),
           status: "processed",
-          processedBy: 1 // Default admin user ID
+          processedBy: "1" // Default admin user ID
         });
         
         createdPayrolls.push(payroll);
@@ -1026,24 +1471,50 @@ export async function registerRoutes(app: Express): Promise<Server> {
         ];
     }
     
-    return res.status(200).json(ewaRequests);
+    // Transform the records to ensure they match the schema
+    const transformedRequests = await Promise.all(
+      ewaRequests.map(async (request: EwaRequest) => {
+        const employee = await storage.getEmployeeWithDetails(request.employeeId);
+        return transformEwaRequest(request, employee);
+      })
+    );
+    
+    return res.status(200).json(transformedRequests);
   });
   
-  app.get("/api/ewa/requests/employee/:id", async (req, res) => {
-    const id = parseInt(req.params.id);
-    
-    if (isNaN(id)) {
-      return res.status(400).json({ message: "Invalid employee ID" });
+  app.get("/api/ewa/employee/:id", async (req, res) => {
+    try {
+      const id = ensureStringId(req.params.id);
+      const ewaRequests = await storage.getEwaRequestsForEmployee(id);
+      return res.status(200).json(ewaRequests);
+    } catch (error) {
+      console.error('Error fetching EWA requests:', error);
+      return res.status(500).json({ 
+        message: "Failed to fetch EWA requests", 
+        error: error instanceof Error ? error.message : "Unknown error"
+      });
     }
-    
-    const ewaRequests = await storage.getEwaRequestsForEmployee(id);
-    return res.status(200).json(ewaRequests);
   });
   
   app.post("/api/ewa/requests", validateBody(insertEwaRequestSchema), async (req, res) => {
     try {
-      const ewaRequest = await storage.createEwaRequest(req.body);
-      return res.status(201).json(ewaRequest);
+      // Handle numeric fields conversion (string to number)
+      let ewaData = { ...req.body };
+      if (typeof ewaData.amount === 'string') {
+        ewaData.amount = parseFloat(ewaData.amount);
+      }
+      
+      // Set requestDate to current date if not provided
+      if (!ewaData.requestDate) {
+        ewaData.requestDate = new Date();
+      }
+      
+      const ewaRequest = await storage.createEwaRequest(ewaData);
+      
+      // Transform to ensure schema compliance
+      const transformedRequest = transformEwaRequest(ewaRequest);
+      
+      return res.status(201).json(transformedRequest);
     } catch (error) {
       return res.status(500).json({ message: "Failed to create EWA request" });
     }
@@ -1063,9 +1534,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!employeeWithDetails) {
         return res.status(404).json({ message: "Employee not found" });
       }
-      
-      // Use the employee data directly from employeeWithDetails
-      const user = employeeWithDetails.user;
       
       // 1. Validate attendance records exist for this employee
       const now = new Date();
@@ -1093,7 +1561,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const totalWorkingDays = 22; // Average working days in a month
       
       // Calculate monthly salary from hourly rate (assuming 8-hour workday)
-      const hourlyRate = parseFloat(employeeWithDetails.hourlyRate?.toString() || "0");
+      const hourlyRate = employeeWithDetails.hourlyRate || 0;
       const monthlySalary = hourlyRate * 8 * totalWorkingDays; // 8 hours/day, 22 days/month
       
       const calculatedEarnedWage = monthlySalary * (daysWorked / totalWorkingDays);
@@ -1102,65 +1570,78 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const maxAllowedPercentage = 0.5; // 50% of earned wage
       const maxAllowedAmount = calculatedEarnedWage * maxAllowedPercentage;
       
-      if (amount > maxAllowedAmount) {
+      const requestAmount = typeof amount === 'string' ? parseFloat(amount) : amount;
+      
+      if (requestAmount > maxAllowedAmount) {
         return res.status(400).json({ 
           message: `Requested amount exceeds maximum allowed EWA (${maxAllowedAmount.toFixed(2)})`
         });
       }
       
       // 4. Create the EWA request
-      const processingFee = amount * 0.05; // 5% processing fee
+      const processingFee = requestAmount * 0.05; // 5% processing fee
       const ewaRequest = await storage.createEwaRequest({
         employeeId,
-        amount: amount.toString(), // Convert to string for decimal type
-        processingFee: processingFee.toString(), // Convert to string for decimal type
+        requestDate: new Date(),
+        amount: requestAmount,
+        processingFee: processingFee,
         reason: reason || "Emergency funds needed",
-        status: "pending",
-        approvedBy: null
-        // requestDate is defaulted by the schema
+        status: "pending"
       });
       
-      // 5. Update system flags to indicate integration occurred
-      // (This would normally be done through a SystemContext update, 
-      // but we'll simulate it by adding this info to the response)
+      // 5. Transform to ensure schema compliance
+      const transformedRequest = transformEwaRequest(ewaRequest, employeeWithDetails);
       
       // 6. Return comprehensive response with all related data
       return res.status(201).json({
         success: true,
-        ewaRequest,
-        attendanceData: {
-          daysWorked,
-          totalWorkingDays,
-          earnedWage: calculatedEarnedWage,
-          maxAllowedAmount
-        },
-        systemUpdates: {
-          attendanceProcessed: true,
-          earnedWageCalculated: true,
-          ewaRequestCreated: true
-        }
+        ewaRequest: transformedRequest,
+        maxAllowedAmount,
+        calculatedEarnedWage,
+        daysWorked,
+        totalWorkingDays
       });
-      
     } catch (error) {
       console.error("Error in integrated EWA request:", error);
       return res.status(500).json({ message: "Failed to process integrated EWA request" });
     }
   });
   
-  app.patch("/api/ewa/requests/:id", async (req, res) => {
-    const id = parseInt(req.params.id);
-    
-    if (isNaN(id)) {
-      return res.status(400).json({ message: "Invalid EWA request ID" });
+  app.put("/api/ewa/:id", async (req, res) => {
+    try {
+      const id = ensureStringId(req.params.id);
+      
+      // Handle numeric fields conversion (string to number)
+      let ewaData = { ...req.body };
+      if (typeof ewaData.amount === 'string') {
+        ewaData.amount = parseFloat(ewaData.amount);
+      }
+      if (typeof ewaData.processingFee === 'string') {
+        ewaData.processingFee = parseFloat(ewaData.processingFee);
+      }
+      
+      // Special handling for status changes
+      if (ewaData.status === 'approved' && !ewaData.approvedAt) {
+        ewaData.approvedAt = new Date();
+      }
+      if (ewaData.status === 'disbursed' && !ewaData.disbursedAt) {
+        ewaData.disbursedAt = new Date();
+      }
+      
+      const ewaRequest = await storage.updateEwaRequest(id, ewaData);
+      
+      if (!ewaRequest) {
+        return res.status(404).json({ message: "EWA request not found" });
+      }
+      
+      // Transform to ensure schema compliance
+      const transformedRequest = transformEwaRequest(ewaRequest);
+      
+      return res.status(200).json(transformedRequest);
+    } catch (error) {
+      console.error('Error updating EWA request:', error);
+      return res.status(500).json({ message: "Failed to update EWA request", error: error instanceof Error ? error.message : "Unknown error" });
     }
-    
-    const ewaRequest = await storage.updateEwaRequest(id, req.body);
-    
-    if (!ewaRequest) {
-      return res.status(404).json({ message: "EWA request not found" });
-    }
-    
-    return res.status(200).json(ewaRequest);
   });
   
   // Wallet routes
@@ -1197,6 +1678,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       return res.status(400).json({ message: "Valid amount is required" });
     }
     
+    // Get the wallet
     const wallet = await storage.getWallet();
     
     if (!wallet) {
@@ -1206,25 +1688,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
     const parsedAmount = parseFloat(amount);
     
     // Always update employer balance
-    const currentEmployerBalance = parseFloat(wallet.employerBalance?.toString() || "0");
-    const updatedWallet = await storage.updateWallet(wallet.id, {
-      employerBalance: (currentEmployerBalance + parsedAmount).toString() // Convert to string for decimal type
+    const currentEmployerBalance = parseFloat(wallet.employerBalance.toString() || "0");
+    const updatedWallet = await storage.updateWallet(ensureStringId(wallet.id), {
+      employerBalance: (currentEmployerBalance + parsedAmount) // Removed .toString()
     });
     
     await storage.createWalletTransaction({
+      amount: parsedAmount,
       walletId: wallet.id,
-      amount: parsedAmount.toString(), // Convert to string for decimal type
       transactionType: 'employer_topup',
       description: 'Employer wallet top-up',
-      referenceId: `TOP-${getTime(new Date())}`,
+      referenceId: `TOP-${Date.now()}`,
       fundingSource,
       status: 'completed'
     });
     
     // Calculate total balance for response only (not stored in DB)
     const totalBalance = updatedWallet ? (
-      parseFloat(updatedWallet.employerBalance?.toString() || "0") + 
-      parseFloat(updatedWallet.jahaziiBalance?.toString() || "0")
+      parseFloat(updatedWallet.employerBalance.toString() || "0") + 
+      parseFloat(updatedWallet.jahaziiBalance.toString() || "0")
     ).toString() : "0";
     
     // Add totalBalance to the response
@@ -1232,6 +1714,38 @@ export async function registerRoutes(app: Express): Promise<Server> {
       ...updatedWallet,
       totalBalance
     });
+  });
+  
+  app.put("/api/wallet/:id", async (req, res) => {
+    try {
+      const id = ensureStringId(req.params.id);
+      const wallet = await storage.getWallet();
+      
+      if (!wallet) {
+        return res.status(404).json({ message: "Wallet not found" });
+      }
+      
+      const { amount } = req.body;
+      const parsedAmount = parseFloat(amount);
+      
+      if (isNaN(parsedAmount)) {
+        return res.status(400).json({ message: "Invalid amount" });
+      }
+      
+      // Always update employer balance
+      const currentEmployerBalance = parseFloat(wallet.employerBalance?.toString() || "0");
+      const updatedWallet = await storage.updateWallet(ensureStringId(wallet.id), {
+        employerBalance: (currentEmployerBalance + parsedAmount) // Removed .toString()
+      });
+      
+      return res.status(200).json(updatedWallet);
+    } catch (error) {
+      console.error('Error updating wallet:', error);
+      return res.status(500).json({ 
+        message: "Failed to update wallet", 
+        error: error instanceof Error ? error.message : "Unknown error"
+      });
+    }
   });
   
   // Statistics for dashboard
@@ -1385,11 +1899,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Payment details endpoint
   app.get("/api/employees/:id/payment-details", async (req, res) => {
     try {
-      const employeeId = parseInt(req.params.id);
-      
-      if (isNaN(employeeId)) {
-        return res.status(400).json({ error: "Invalid employee ID" });
-      }
+      const employeeId = ensureStringId(req.params.id);
       
       // Get the employee record
       const employee = await storage.getEmployee(employeeId);
@@ -1402,7 +1912,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // For this implementation, we'll generate some mock data based on the employee ID
       
       // Determine if this employee uses bank transfer or mobile money (M-Pesa)
-      const usesMpesa = employeeId % 2 === 0;
+      const usesMpesa = employeeId.charCodeAt(0) % 2 === 0;
       
       let paymentDetails;
       
@@ -1432,11 +1942,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Employee deductions endpoint
   app.get("/api/employees/:id/deductions", async (req, res) => {
     try {
-      const employeeId = parseInt(req.params.id);
-      
-      if (isNaN(employeeId)) {
-        return res.status(400).json({ error: "Invalid employee ID" });
-      }
+      const employeeId = ensureStringId(req.params.id);
       
       // Get the employee record
       const employee = await storage.getEmployee(employeeId);
@@ -1490,11 +1996,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Active employee loans endpoint
   app.get("/api/loans/employee/:id/active", async (req, res) => {
     try {
-      const employeeId = parseInt(req.params.id);
-      
-      if (isNaN(employeeId)) {
-        return res.status(400).json({ error: "Invalid employee ID" });
-      }
+      const employeeId = ensureStringId(req.params.id);
       
       // Get the employee record
       const employee = await storage.getEmployee(employeeId);
@@ -1591,7 +2093,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post('/api/chat/upload', async (req, res) => {
+  app.post('/api/chat/upload', upload.single('file'), async (req, res) => {
     try {
       if (!req.file) {
         return res.status(400).json({ error: 'No file uploaded' });
@@ -1619,7 +2121,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get('/api/chat/search-employee', async (req, res) => {
     try {
-      const { query, userId } = req.query;
+      const query = req.query.query;
+      const userId = req.query.userId || 'anonymous-user';
+      
       if (!query) {
         return res.status(400).json({ error: 'Search query is required' });
       }
@@ -1640,6 +2144,268 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error('Error calculating payroll:', error);
       res.status(500).json({ error: 'Failed to calculate payroll' });
+    }
+  });
+
+  app.post('/api/chat/command', async (req, res) => {
+    try {
+      const { command, userId } = req.body;
+      await saveCommand(userId, command);
+      res.json({ success: true });
+    } catch (error) {
+      console.error('Error saving command:', error);
+      res.status(500).json({ error: 'Failed to save command' });
+    }
+  });
+
+  app.post('/api/chat/search', async (req, res) => {
+    try {
+      const { search, userId } = req.body;
+      await saveSearch(userId, search);
+      res.json({ success: true });
+    } catch (error) {
+      console.error('Error saving search:', error);
+      res.status(500).json({ error: 'Failed to save search' });
+    }
+  });
+
+  // Add an endpoint to activate imported employees
+  app.post("/api/employees/activate-imported", async (_req, res) => {
+    try {
+      console.log("Activating all imported employees");
+      
+      // Get all employees
+      const allEmployees = await storage.getAllEmployees();
+      console.log(`Found ${allEmployees.length} total employees`);
+      
+      let activatedCount = 0;
+      
+      // Check each employee to see if they have imported data
+      for (const employee of allEmployees) {
+        // Parse address to check for imported fields
+        let isImported = false;
+        let addressObj: Record<string, any> = {};
+        
+        if (typeof employee.address === 'string' && 
+            (employee.address.startsWith('{') || employee.address.startsWith('['))) {
+          try {
+            addressObj = JSON.parse(employee.address);
+            // Check if this has imported fields
+            if (addressObj && 
+                (addressObj.idNumber || addressObj.kraPin || addressObj.nssfNo || addressObj.nhifNo)) {
+              isImported = true;
+            }
+          } catch (e) {
+            console.error(`Failed to parse address for employee ${employee.id}: ${e}`);
+          }
+        }
+        
+        // If employee has imported data and is not active, activate them
+        if (isImported && !employee.active) {
+          console.log(`Activating imported employee ${employee.id}`);
+          await storage.updateEmployee(employee.id, { active: true });
+          activatedCount++;
+        }
+      }
+      
+      return res.status(200).json({ 
+        message: `Activated ${activatedCount} imported employees`,
+        activatedCount 
+      });
+    } catch (error) {
+      console.error("Error activating imported employees:", error);
+      return res.status(500).json({ 
+        message: "Failed to activate imported employees",
+        error: error instanceof Error ? error.message : "Unknown error"
+      });
+    }
+  });
+
+  // Import employees from file upload
+  app.post('/api/import/employees', upload.single('file'), async (req, res) => {
+    try {
+      if (!req.file) {
+        return res.status(400).json({ message: 'No file uploaded' });
+      }
+      
+      console.log(`Processing uploaded file: ${req.file.originalname}`);
+      
+      // Extract data from Excel/CSV file
+      const workbook = XLSX.read(req.file.buffer, { type: 'buffer' });
+      const sheetName = workbook.SheetNames[0];
+      const worksheet = workbook.Sheets[sheetName];
+      const jsonData = XLSX.utils.sheet_to_json(worksheet, { defval: '' });
+      
+      console.log(`Extracted ${jsonData.length} rows from uploaded file`);
+      
+      // Transform data to match expected MongoDB format
+      const formattedData: Employee[] = jsonData.map((row: any) => {
+        // Extract name parts
+        const fullName = row['Name'] || `${row['First Name'] || ''} ${row['Last Name'] || ''}`.trim();
+        const nameParts = fullName.split(/\s+/);
+        const firstName = row['First Name'] || (nameParts.length > 0 ? nameParts[0] : '');
+        const lastName = row['Last Name'] || (nameParts.length > 1 ? nameParts.slice(1).join(' ') : '');
+        
+        // Extract salary/income values
+        const grossIncome = parseFloat(row['Gross Pay'] || row['Salary'] || row['Basic Salary'] || row['Gross Income'] || 0);
+        const paye = parseFloat(row['PAYE'] || row['Tax'] || 0);
+        const nssf = parseFloat(row['NSSF'] || row['NSSF Number'] || row['NSSF No'] || 0);
+        const nhif = parseFloat(row['NHIF'] || row['NHIF Number'] || row['NHIF No'] || 0);
+        const levies = parseFloat(row['Housing Levy'] || row['Levy'] || row['H-LEVY'] || 0);
+        const loanDeductions = parseFloat(row['Loan'] || row['Loans'] || row['Loan Deductions'] || 0);
+        const employerAdvances = parseFloat(row['Advance'] || row['Employer Advance'] || 0);
+        
+        // Calculate total deductions and net income
+        const totalDeductions = paye + nssf + nhif + levies + loanDeductions + employerAdvances;
+        const netIncome = grossIncome - totalDeductions;
+        
+        // Calculate EWA limits (50% of net pay by default)
+        const maxSalaryAdvanceLimit = Math.floor(netIncome * 0.5);
+        
+        // Return MongoDB document structure
+        return {
+          // Basic identification
+          id: row['Emp No'] || row['Employee Number'] || row['ID'] || '',
+          employeeNumber: row['Emp No'] || row['Employee Number'] || row['ID'] || '',
+          userId: '', // Required field from Employee interface
+          departmentId: row['Department ID'] || row['Department'] || '', // Required field
+          other_names: firstName,
+          surname: lastName,
+          id_no: row['ID Number'] || row['ID'] || '',
+          tax_pin: row['KRA Pin'] || row['KRA PIN'] || row['PIN'] || null,
+          sex: row['Gender'] || row['Sex'] || 'other',
+          
+          // Employment details
+          position: row['Position'] || row['Job Title'] || row['Designation'] || 'Employee',
+          status: 'active',
+          is_on_probation: false,
+          role: 'Employee',
+          
+          // Financial details
+          gross_income: grossIncome,
+          net_income: netIncome,
+          total_deductions: totalDeductions,
+          loan_deductions: loanDeductions,
+          employer_advances: employerAdvances,
+          total_loan_deductions: loanDeductions,
+          
+          // Statutory deductions
+          statutory_deductions: {
+            nhif: nhif,
+            nssf: nssf,
+            paye: paye,
+            levies: levies
+          },
+          
+          // EWA information
+          max_salary_advance_limit: maxSalaryAdvanceLimit,
+          available_salary_advance_limit: maxSalaryAdvanceLimit,
+          
+          // Contact information
+          contact: {
+            email: row['Email'] || `${firstName.toLowerCase()}.${lastName.toLowerCase()}@example.com`,
+            phoneNumber: row['Phone'] || row['Mobile'] || row['Contact'] || '',
+          },
+          
+          // Bank information
+          bank_info: {
+            acc_no: row['Account Number'] || row['Bank Account'] || null,
+            bank_name: row['Bank'] || row['Bank Name'] || null
+          },
+          
+          // Required User fields
+          username: row['Email'] || `${firstName.toLowerCase()}.${lastName.toLowerCase()}@example.com`,
+          password: 'password123', // Default password, should be changed on first login
+          
+          // Required boolean flags
+          id_confirmed: false,
+          mobile_confirmed: false,
+          tax_pin_verified: false,
+          active: true,
+          
+          // Country and additional required fields
+          country: 'KE',
+          documents: {},
+          crb_reports: {},
+          
+          // Dates
+          created_at: new Date(),
+          modified_at: new Date(),
+          emergencyContact: {}, // Add this line to include the 'emergencyContact' property
+        };
+      });
+      
+      // Import the employees
+      // @ts-ignore
+      const addedCount = await storage.addEmployees(formattedData);
+      
+      console.log(`Successfully imported ${addedCount} employees`);
+      
+      return res.status(200).json({ 
+        success: true, 
+        message: `Successfully imported ${addedCount} employees`,
+        count: addedCount
+      });
+    } catch (error) {
+      console.error('Error importing employees from file:', error);
+      return res.status(500).json({ 
+        success: false, 
+        message: 'Failed to import employees', 
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
+    }
+  });
+
+  // Debug route for listing employee IDs
+  app.get("/api/employees/debug/ids", async (req, res) => {
+    try {
+      const employees = await storage.getAllEmployees();
+      // Return just the IDs and some basic info for debugging
+      const employeeIds = employees.map(emp => ({
+        id: emp.id,
+        employeeNumber: emp.employeeNumber,
+        name: `${emp.other_names} ${emp.surname}`.trim(),
+        createdAt: emp.created_at
+      }));
+      return res.status(200).json(employeeIds);
+    } catch (error) {
+      console.error('Error fetching employee IDs:', error);
+      return res.status(500).json({ 
+        message: "Failed to fetch employee IDs", 
+        error: error instanceof Error ? error.message : "Unknown error"
+      });
+    }
+  });
+
+  // Add a route for searching employees by employee number
+  app.get("/api/employees/number/:employeeNumber", async (req, res) => {
+    try {
+      const employeeNumber = req.params.employeeNumber;
+      console.log(`GET /api/employees/number/${employeeNumber} - Looking up employee with number`);
+      
+      const employee = await storage.getEmployeeByNumber(employeeNumber);
+      
+      if (!employee) {
+        console.log(`Employee with number ${employeeNumber} not found`);
+        return res.status(404).json({ message: "Employee not found" });
+      }
+      
+      const employeeWithDetails = await storage.getEmployeeWithDetails(employee.id);
+      
+      if (!employeeWithDetails) {
+        console.log(`Found employee by number but couldn't get details for ID ${employee.id}`);
+        return res.status(500).json({ message: "Failed to fetch employee details" });
+      }
+      
+      const Employee = await transformEmployeeData(employeeWithDetails);
+      console.log(`Employee found by number and returned: ${Employee.id}`);
+      return res.status(200).json(Employee);
+    } catch (error) {
+      console.error('Error fetching employee by number:', error);
+      return res.status(500).json({ 
+        message: "Failed to fetch employee", 
+        error: error instanceof Error ? error.message : "Unknown error"
+      });
     }
   });
 

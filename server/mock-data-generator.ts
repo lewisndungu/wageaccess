@@ -213,68 +213,93 @@ export function generateUsers(departments: Department[]): InsertUser[] {
 
 export function generateEmployees(users: User[], departments: Department[]): InsertEmployee[] {
   const employees: InsertEmployee[] = [];
-  
-  // Create one employee per user
+
+  // Create one employee per user/supervisor initially for simplicity
+  // In a real scenario, you'd likely generate more employees under each supervisor
   users.forEach((user, index) => {
-    if (index >= EMPLOYEE_DATA.length) return;
-    
-    const employeeData = EMPLOYEE_DATA[index];
+    // Use default employee data or fallback if index is out of bounds
+    const defaultDataIndex = index % EMPLOYEE_DATA.length;
+    const employeeData = EMPLOYEE_DATA[defaultDataIndex];
     const department = departments.find(d => d.id === user.departmentId) || departments[0];
-    
+
+    // Generate username and email consistently
+    const firstName = employeeData.firstName;
+    const lastName = employeeData.lastName;
+    const username = `${firstName.toLowerCase()}.${lastName.toLowerCase()}${faker.string.numeric(2)}`; // Add digits for uniqueness
+    const email = `${username}@company.com`;
+    const generatedPhoneNumber = generateKenyanPhoneNumber();
+
+    // Calculate salary details
+    const baseHourlyRate = HOURLY_RATE + faker.number.int({ min: -50, max: 150 }); // Add variance to rate
+    const monthlyHours = WORK_HOURS_PER_DAY * 22; // Approx working days
+    const grossIncome = baseHourlyRate * monthlyHours;
+    const totalDeductions = grossIncome * faker.number.float({ min: 0.15, max: 0.25 }); // 15-25% deductions
+    const netIncome = grossIncome - totalDeductions;
+    const maxSalaryAdvance = grossIncome * EWA_PERCENTAGE_LIMIT; // Use constant
+    const availableSalaryAdvance = maxSalaryAdvance * faker.number.float({ min: 0.2, max: 0.8 });
+
     employees.push({
-      id: faker.string.uuid(),
-      employeeNumber: `EMP-${faker.string.numeric(5)}`,
-      userId: user.id,
-      departmentId: department.id,
-      surname: employeeData.lastName,
-      other_names: employeeData.firstName,
-      id_no: faker.string.numeric(8),
-      tax_pin: faker.string.alphanumeric(9),
-      sex: faker.helpers.arrayElement(['M', 'F']),
+      // User fields (inherited by Employee)
+      id: faker.string.uuid(), // Employee gets its own ID
+      username: username,
+      password: "password123", // Default password, should be hashed
+      role: "employee", // Default role for generated employees
+      profileImage: employeeData.avatar,
+      departmentId: department.id, // Link to department
+      created_at: new Date(),
+      modified_at: new Date(),
+      surname: lastName,
+      other_names: firstName,
+      id_no: faker.string.numeric(8), // Kenyan ID format
+      tax_pin: `A${faker.string.numeric(9)}X`, // KRA PIN format
+      sex: faker.helpers.arrayElement(['Male', 'Female']), // Use full words
+      nssf_no: faker.string.numeric(10),
+      nhif_no: faker.string.numeric(9),
+      contact: {
+        email: email,
+        phoneNumber: generatedPhoneNumber
+      },
+      address: generateKenyanAddress(), // Use helper for structured address string
+
+      // Employee specific fields
+      employeeNumber: `EMP-${faker.string.numeric(4)}`,
       position: employeeData.position,
       status: "active",
-      is_on_probation: faker.datatype.boolean(0.3),
-      role: "employee",
-      gross_income: HOURLY_RATE * WORK_HOURS_PER_DAY * 22, // 22 working days per month
-      net_income: HOURLY_RATE * WORK_HOURS_PER_DAY * 22 * 0.8, // 80% after taxes
-      total_deductions: HOURLY_RATE * WORK_HOURS_PER_DAY * 22 * 0.2, // 20% deductions
+      is_on_probation: faker.datatype.boolean(0.2), // 20% chance on probation
+      gross_income: grossIncome, // Use calculated number
+      net_income: netIncome, // Use calculated number
+      total_deductions: totalDeductions, // Use calculated number
       loan_deductions: faker.number.int({ min: 0, max: 5000 }),
-      employer_advances: faker.number.int({ min: 0, max: 5000 }),
-      total_loan_deductions: faker.number.int({ min: 0, max: 5000 }),
+      employer_advances: faker.number.int({ min: 0, max: 3000 }),
+      total_loan_deductions: faker.number.int({ min: 0, max: 8000 }), // Combined
       statutory_deductions: {
-        nhif: faker.number.int({ min: 500, max: 1000 }),
-        nssf: faker.number.int({ min: 200, max: 500 }),
-        paye: faker.number.int({ min: 1000, max: 3000 }),
-        levies: faker.number.int({ min: 100, max: 300 })
+        nhif: faker.number.int({ min: 500, max: 1700 }), // Realistic NHIF range
+        nssf: faker.number.int({ min: 200, max: 1080 }), // Realistic NSSF range (Tier I/II)
+        tax: Math.max(0, (grossIncome * 0.1) - 1000), // Simplified PAYE estimate
+        levy: faker.number.int({ min: 100, max: 300 }) // Housing levy etc.
       },
-      max_salary_advance_limit: HOURLY_RATE * WORK_HOURS_PER_DAY * 22 * 0.5, // 50% of gross salary
-      available_salary_advance_limit: HOURLY_RATE * WORK_HOURS_PER_DAY * 22 * 0.3, // 30% of gross salary
-      contact: {
-        email: `${employeeData.firstName.toLowerCase()}.${employeeData.lastName.toLowerCase()}@company.com`,
-        phoneNumber: generateKenyanPhoneNumber()
-      },
-      address: generateKenyanAddress(),
+      max_salary_advance_limit: maxSalaryAdvance, // Use calculated number
+      available_salary_advance_limit: availableSalaryAdvance, // Use calculated number
+      last_withdrawal_time: faker.helpers.maybe(() => subDays(new Date(), faker.number.int({ min: 1, max: 15 }))), // Optional date
       bank_info: {
-        acc_no: faker.string.numeric(10),
-        bank_name: faker.helpers.arrayElement(['KCB', 'Equity', 'Standard Chartered', 'Coop Bank', 'Absa'])
+        accountNumber: faker.finance.accountNumber(10),
+        bankName: faker.helpers.arrayElement(['KCB', 'Equity Bank', 'Standard Chartered', 'Cooperative Bank', 'Absa Bank Kenya', 'NCBA Bank']),
+        branchCode: faker.string.numeric(5)
       },
-      id_confirmed: true,
-      mobile_confirmed: true,
-      tax_pin_verified: true,
-      country: "KE",
-      documents: [],
-      crb_reports: [],
-      avatar_url: employeeData.avatar,
-      hourlyRate: HOURLY_RATE,
-      phoneNumber: generateKenyanPhoneNumber(),
-      startDate: subDays(new Date(), faker.number.int({ min: 30, max: 365 })),
-      emergencyContact: generateKenyanEmergencyContact(),
+      id_confirmed: faker.datatype.boolean(0.8), // 80% confirmed
+      mobile_confirmed: faker.datatype.boolean(0.9), // 90% confirmed
+      tax_pin_verified: faker.datatype.boolean(0.7), // 70% verified
+      country: "KE", // Default to Kenya
+      documents: { payslip: faker.system.filePath(), contract: faker.system.filePath() }, // Example documents
+      crb_reports: { status: faker.helpers.arrayElement(['Clear', 'Listed']), score: faker.number.int({ min: 200, max: 900 }) }, // Example CRB data
+      avatar_url: employeeData.avatar, // Can be same as profileImage or different
+      hourlyRate: baseHourlyRate, // Use calculated number
+      startDate: subDays(new Date(), faker.number.int({ min: 30, max: 730 })), // Hired between 1 month and 2 years ago
+      emergencyContact: generateKenyanEmergencyContact(), // Use helper
       active: true,
-      created_at: new Date(),
-      modified_at: new Date()
     });
   });
-  
+
   return employees;
 }
 

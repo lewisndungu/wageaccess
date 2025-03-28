@@ -1,6 +1,6 @@
 import type { Express, Request, Response } from "express";
 import { createServer, type Server } from "http";
-import { storage, saveCommand, saveSearch, addEmployees } from "./storage";
+import { storage, saveCommand, saveSearch } from "./storage";
 import { z } from "zod";
 import { 
   User, 
@@ -177,7 +177,6 @@ async function transformEmployeeData(employee: any): Promise<Employee> {
     
     // Employee specific properties
     employeeNumber: ensureString(employee.employeeNumber),
-    userId: ensureString(employee.userId),
     surname: employee.surname || '',
     other_names: employee.other_names || '',
     id_no: employee.id_no || '',
@@ -203,7 +202,7 @@ async function transformEmployeeData(employee: any): Promise<Employee> {
     last_withdrawal_time: employee.last_withdrawal_time,
     contact: {
       email: employee.contact?.email || '',
-      phoneNumber: employee.contact?.phoneNumber || employee.phoneNumber || ''
+      phoneNumber: employee.contact?.phoneNumber || ''
     },
     address: employee.address,
     bank_info: employee.bank_info || {},
@@ -215,7 +214,6 @@ async function transformEmployeeData(employee: any): Promise<Employee> {
     crb_reports: employee.crb_reports || [],
     avatar_url: employee.avatar_url,
     hourlyRate: toNumber(employee.hourlyRate),
-    phoneNumber: employee.phoneNumber,
     startDate: employee.startDate,
     emergencyContact: employee.emergencyContact || {},
     active: employee.active === true,
@@ -2267,7 +2265,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
           // Basic identification
           id: row['Emp No'] || row['Employee Number'] || row['ID'] || '',
           employeeNumber: row['Emp No'] || row['Employee Number'] || row['ID'] || '',
-          userId: '', // Required field from Employee interface
           departmentId: row['Department ID'] || row['Department'] || '', // Required field
           other_names: firstName,
           surname: lastName,
@@ -2293,8 +2290,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           statutory_deductions: {
             nhif: nhif,
             nssf: nssf,
-            paye: paye,
-            levies: levies
+            tax: paye,
+            levy: levies
           },
           
           // EWA information

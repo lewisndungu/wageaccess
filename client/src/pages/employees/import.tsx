@@ -22,6 +22,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { chatService } from '@/lib/chat-service';
 import { downloadTransformedData } from '@/lib/spreadsheet-processor';
 import FileUploadZone from './components/FileUploadZone';
+import get from 'lodash/get';
 
 // Session storage keys
 const SESSION_STORAGE_KEYS = {
@@ -63,6 +64,38 @@ type ImportStats = {
   timestamp: string;
 };
 
+// Mapping from TARGET_HEADERS to Employee schema fields (including dot notation)
+const HEADER_TO_FIELD_MAP: Record<string, string> = {
+  'Emp No': 'employeeNumber',
+  'First Name': 'other_names', // Assuming First Name maps to other_names
+  'Last Name': 'surname',     // Assuming Last Name maps to surname
+  'Full Name': 'fullName',   // Keep this for display if needed, though it might not be on the object directly
+  'ID Number': 'id_no',
+  'NSSF No': 'nssf_no',
+  'KRA Pin': 'tax_pin',
+  'NHIF': 'statutory_deductions.nhif',
+  'Position': 'position',
+  'Gross Pay': 'gross_income',
+  'Employer Advance': 'employer_advances',
+  'PAYE': 'statutory_deductions.tax',
+  'Levy': 'statutory_deductions.levy',
+  'Loan Deduction': 'loan_deductions',
+  // Add mappings for other fields if they are included in TARGET_HEADERS
+  // 'Bank Account Number': 'bank_info.acc_no',
+  // 'MPesa Number': 'contact.phoneNumber',
+  // 'Gender': 'sex',
+  // 'Department': 'departmentName', // Map to the temporary field
+};
+
+// Helper function to get potentially nested values safely
+const getNestedValue = (obj: any, path: string, defaultValue: any = '') => {
+  // Handle the temporary 'fullName' case specifically if needed for display
+  if (path === 'fullName') {
+    return `${obj?.other_names || ''} ${obj?.surname || ''}`.trim() || defaultValue;
+  }
+  return get(obj, path, defaultValue); // Use lodash get
+};
+
 const EmployeeImportPage: React.FC = () => {
   const [currentStep, setCurrentStep] = useState(1);
   const [steps, setSteps] = useState(IMPORT_STEPS);
@@ -82,8 +115,8 @@ const EmployeeImportPage: React.FC = () => {
 
   // Target headers for display (matching the existing system)
   const TARGET_HEADERS = [
-    'Emp No', 'First Name', 'Last Name', 'Full Name', 'ID Number', 
-    'NSSF No', 'KRA Pin', 'NHIF', 'Position', 'Gross Pay', 
+    'Emp No', 'First Name', 'Last Name', /*'Full Name',*/ 'ID Number', // Removed Full Name for now unless needed
+    'NSSF No', 'KRA Pin', 'NHIF', 'Position', 'Gross Pay',
     'Employer Advance', 'PAYE', 'Levy', 'Loan Deduction'
   ];
 
@@ -165,10 +198,24 @@ const EmployeeImportPage: React.FC = () => {
       };
       
       setProcessedData(dataWithIds);
-      toast.success(`Successfully processed ${dataWithIds.extractedData.length} records`);
+      // Adjust toast message based on counts
+      const successCount = dataWithIds.extractedData.length;
+      const failureCount = dataWithIds.failedRows?.length || 0;
+      if (successCount > 0) {
+          toast.success(`Successfully processed ${successCount} potential records.${failureCount > 0 ? ` ${failureCount} rows require attention.` : ''}`);
+      } else if (failureCount > 0) {
+          toast.warning(`Processed file, but ${failureCount} rows require attention. No records ready for import yet.`);
+      } else {
+          toast.info("Processed file, but no data was extracted.");
+      }
       
-      // Move to next step
-      goToNextStep();
+      // Move to next step only if there's data to review
+      if (successCount > 0 || failureCount > 0) {
+          goToNextStep();
+      } else {
+           // Optionally handle the case where nothing was extracted (e.g., show message, stay on step 1)
+           console.log("No data extracted, staying on upload step.");
+      }
     } catch (error) {
       console.error('Error processing file:', error);
       toast.error(`Failed to process file: ${error instanceof Error ? error.message : 'Unknown error'}`);
@@ -248,19 +295,21 @@ const EmployeeImportPage: React.FC = () => {
       // Filter out excluded rows
       const dataToImport = processedData.extractedData.filter(row => !row.excluded);
       
-      // Use the mutation to import employees
+      // Use the mutation to import employees - Backend expects Employee structure
+      // The dataToImport already largely matches Partial<Employee> + temp fields
       await chatService.importEmployees(dataToImport);
       
       // Set import stats
       const stats: ImportStats = {
-        totalRecords: processedData.extractedData.length,
+        totalRecords: processedData.extractedData.length + (processedData.failedRows?.length || 0), // Consider failed rows in total
         successfulImports: dataToImport.length,
-        failedImports: processedData.extractedData.length - dataToImport.length,
+        // Failed imports here might mean rows *excluded* by the user in the UI
+        failedImports: processedData.extractedData.length - dataToImport.length + (processedData.failedRows?.length || 0),
         timestamp: new Date().toISOString()
       };
       
       setImportStats(stats);
-      toast.success(`Successfully imported ${dataToImport.length} employees`);
+      toast.success(`Successfully initiated import for ${dataToImport.length} employees.`);
       
       // Move to success step
       goToNextStep();
@@ -288,9 +337,15 @@ const EmployeeImportPage: React.FC = () => {
   };
 
   // Handle cell edit
-  const handleCellEdit = (rowId: string, column: string, value: any) => {
-    const fieldName = getFieldName(column);
-    setEditingCell({ rowId, column, value, fieldName });
+  const handleCellEdit = (rowId: string, displayHeader: string, value: any) => {
+    const fieldPath = HEADER_TO_FIELD_MAP[displayHeader];
+    if (!fieldPath) {
+      console.warn(`No field mapping found for header: ${displayHeader}`);
+      return; // Or handle differently
+    }
+    // Get the current value using the correct path for the input field
+    const currentValue = getNestedValue(processedData?.extractedData.find(r => r.id === rowId), fieldPath, value);
+    setEditingCell({ rowId, column: displayHeader, value: currentValue, fieldName: fieldPath });
   };
   
   // Handle cell save
@@ -299,14 +354,39 @@ const EmployeeImportPage: React.FC = () => {
     
     const { rowId, column, value, fieldName } = editingCell;
     
-    setProcessedData({
-      ...processedData,
-      extractedData: processedData.extractedData.map(row => {
-        if (row.id === rowId) {
-          return { ...row, [fieldName || column]: value };
-        }
-        return row;
-      })
+    // Use a function to update nested state safely if lodash/fp is available,
+    // otherwise, simple update for non-nested or manual update for nested:
+    setProcessedData(prevData => {
+        if (!prevData) return null;
+        return {
+            ...prevData,
+            extractedData: prevData.extractedData.map(row => {
+                if (row.id === rowId && fieldName) {
+                    const updatedRow = { ...row };
+                    // Basic nested update (consider a library like immutability-helper for complex cases)
+                    const keys = fieldName.split('.');
+                    let current: any = updatedRow;
+                    for (let i = 0; i < keys.length - 1; i++) {
+                        const key = keys[i];
+                        // Ensure path exists and clone objects along the path
+                        current[key] = current[key] ? { ...current[key] } : {};
+                        current = current[key];
+                    }
+                    // Parse the value based on field type if necessary before setting
+                    const finalKey = keys[keys.length - 1];
+                    if (fieldName.startsWith('statutory_deductions.') || ['gross_income', 'net_income', 'loan_deductions', 'employer_advances', 'jahazii_advances', 'house_allowance'].includes(fieldName)) {
+                        current[finalKey] = parseFloat(value) || 0; // Example parsing
+                    } else if (['is_on_probation', 'terms_accepted'].includes(fieldName)) {
+                         current[finalKey] = ['true', 'yes', '1'].includes(String(value).toLowerCase());
+                    }
+                    else {
+                        current[finalKey] = value;
+                    }
+                    return updatedRow;
+                }
+                return row;
+            })
+        };
     });
     
     setEditingCell(null);
@@ -339,12 +419,6 @@ const EmployeeImportPage: React.FC = () => {
     navigate('/employees');
   };
 
-  // Get field name for data mapping
-  const getFieldName = (displayHeader: string) => {
-    if (displayHeader === 'Full Name') return 'fullName';
-    return displayHeader;
-  };
-  
   // Filter data based on search term and status filter
   const getFilteredData = () => {
     if (!processedData) return [];
@@ -363,25 +437,29 @@ const EmployeeImportPage: React.FC = () => {
       
       // Then apply status filter if active
       if (statusFilter) {
-        const hasMissingEmpNo = !row['Emp No'] && !row['employeeNumber'];
-        const hasMissingName = !row['fullName'] && !row['First Name'] && !row['Last Name']; 
+        // Critical error checks
+        const hasMissingEmpNo = !getNestedValue(row, 'employeeNumber');
+        const hasMissingName = !getNestedValue(row, 'other_names') && !getNestedValue(row, 'surname');
         const hasCriticalError = hasMissingEmpNo || hasMissingName;
-        
+        const hasWarnings = Array.isArray(row.extractionErrors) && row.extractionErrors.length > 0; // Check for warnings
+
         switch (statusFilter) {
           case 'excluded':
-            return row.excluded;
+            return !!row.excluded; // Use double-bang for explicit boolean
           case 'error':
             return hasCriticalError && !row.excluded;
           case 'warning':
-            return row.extractionErrors?.length && !hasCriticalError && !row.excluded;
+            // Use the extractionErrors array populated by the backend sanity checks
+            return hasWarnings && !hasCriticalError && !row.excluded;
           case 'valid':
-            return !row.extractionErrors?.length && !hasCriticalError && !row.excluded;
+            // Valid if no critical errors, no warnings, and not excluded
+            return !hasCriticalError && !hasWarnings && !row.excluded;
           default:
-            return true;
+            return true; // Should not be reached if filters are exclusive
         }
       }
       
-      return true;
+      return true; // If no status filter, return true (subject to search filter)
     });
   };
 
@@ -392,9 +470,9 @@ const EmployeeImportPage: React.FC = () => {
     return processedData.extractedData.filter(row => {
       if (row.excluded) return false; // Don't count excluded rows
       
-      // Check for missing critical fields
-      const hasMissingEmpNo = !row['Emp No'] && !row['employeeNumber'];
-      const hasMissingName = !row['fullName'] && !row['First Name'] && !row['Last Name'];
+      // Corrected critical error checks using getNestedValue
+      const hasMissingEmpNo = !getNestedValue(row, 'employeeNumber');
+      const hasMissingName = !getNestedValue(row, 'other_names') && !getNestedValue(row, 'surname');
       
       return hasMissingEmpNo || hasMissingName;
     }).length;
@@ -416,25 +494,33 @@ const EmployeeImportPage: React.FC = () => {
   const countRecordsWithStatus = (status: string): number => {
     if (!processedData) return 0;
     
+    // Use the same logic as getFilteredData for consistency
     return processedData.extractedData.filter(row => {
-      // Skip if excluded and we're not counting excluded
-      if (status !== 'excluded' && row.excluded) return false;
-      
-      const hasMissingEmpNo = !row['Emp No'] && !row['employeeNumber'];
-      const hasMissingName = !row['fullName'] && !row['First Name'] && !row['Last Name'];
+      // Check exclusion first
+      if (status === 'excluded') {
+          return !!row.excluded;
+      }
+      // Skip excluded rows if checking other statuses
+      if (row.excluded) return false;
+
+      // Corrected critical error checks
+      const hasMissingEmpNo = !getNestedValue(row, 'employeeNumber');
+      const hasMissingName = !getNestedValue(row, 'other_names') && !getNestedValue(row, 'surname');
       const hasCriticalError = hasMissingEmpNo || hasMissingName;
-      
+      const hasWarnings = Array.isArray(row.extractionErrors) && row.extractionErrors.length > 0; // Check for warnings
+
+      // Placeholder warning logic (same as in getFilteredData)
+      const hasMissingPosition = !getNestedValue(row, 'position');
+
       switch (status) {
-        case 'excluded':
-          return row.excluded;
         case 'error':
-          return hasCriticalError && !row.excluded;
+          return hasCriticalError;
         case 'warning':
-          return row.extractionErrors?.length && !hasCriticalError && !row.excluded;
+          return hasWarnings && !hasCriticalError;
         case 'valid':
-          return !row.extractionErrors?.length && !hasCriticalError && !row.excluded;
+          return !hasCriticalError && !hasWarnings;
         default:
-          return false;
+          return false; // Should not happen with defined statuses
       }
     }).length;
   };
@@ -605,10 +691,12 @@ const EmployeeImportPage: React.FC = () => {
                         </TableHeader>
                         <TableBody>
                           {getFilteredData().map((row) => {
-                            // Check for critical errors
-                            const hasMissingEmpNo = !row['Emp No'] && !row['employeeNumber'];
-                            const hasMissingName = !row['fullName'] && !row['First Name'] && !row['Last Name'];
+                            // Corrected critical error checks for rendering
+                            const hasMissingEmpNo = !getNestedValue(row, 'employeeNumber');
+                            const hasMissingName = !getNestedValue(row, 'other_names') && !getNestedValue(row, 'surname');
                             const hasCriticalError = hasMissingEmpNo || hasMissingName;
+                            // Check for warnings from backend
+                            const hasWarnings = Array.isArray(row.extractionErrors) && row.extractionErrors.length > 0; 
                             
                             return (
                               <TableRow 
@@ -622,73 +710,71 @@ const EmployeeImportPage: React.FC = () => {
                                   />
                                 </TableCell>
                                 
-                                {TARGET_HEADERS.map((header) => (
-                                  <TableCell key={`${row.id}-${header}`} className="py-2">
-                                    {editingCell && editingCell.rowId === row.id && editingCell.column === header ? (
-                                      <div className="flex gap-2">
-                                        <Input 
-                                          value={editingCell.value} 
-                                          onChange={(e) => setEditingCell({ ...editingCell, value: e.target.value })}
-                                          className="h-8 min-w-[100px]"
-                                        />
-                                        <Button size="sm" variant="ghost" onClick={handleCellSave} className="h-8 w-8 p-0">
-                                          <Check className="h-4 w-4" />
-                                        </Button>
-                                        <Button size="sm" variant="ghost" onClick={handleCellEditCancel} className="h-8 w-8 p-0">
-                                          <X className="h-4 w-4" />
-                                        </Button>
-                                      </div>
-                                    ) : (
-                                      <div className="flex items-center justify-between group">
-                                        <span
-                                          className={`truncate max-w-[200px] ${
-                                            (header === 'Emp No' && hasMissingEmpNo) ||
-                                            ((header === 'First Name' || header === 'Last Name' || header === 'Full Name') && hasMissingName)
-                                              ? 'text-destructive'
-                                              : ''
-                                          }`}
-                                        >
-                                          {row[getFieldName(header)] !== undefined && row[getFieldName(header)] !== null
-                                            ? typeof row[getFieldName(header)] === 'number'
-                                              ? Number.isInteger(row[getFieldName(header)])
-                                                ? row[getFieldName(header)].toString()
-                                                : row[getFieldName(header)].toFixed(2)
-                                              : typeof row[getFieldName(header)] === 'boolean'
-                                              ? row[getFieldName(header)]
-                                                ? 'Yes'
-                                                : 'No'
-                                              : typeof row[getFieldName(header)] === 'object'
-                                              ? JSON.stringify(row[getFieldName(header)]).substring(0, 50) +
-                                                (JSON.stringify(row[getFieldName(header)]).length > 50 ? '...' : '')
-                                              : row[getFieldName(header)].toString()
-                                            : ''}
-                                        </span>
-                                        <Button
-                                          size="sm"
-                                          variant="ghost"
-                                          onClick={() => handleCellEdit(row.id, header, row[getFieldName(header)] || '')}
-                                          className="opacity-0 group-hover:opacity-100 h-6 w-6 p-0"
-                                          disabled={row.excluded}
-                                        >
-                                          <svg
-                                            xmlns="http://www.w3.org/2000/svg"
-                                            width="15"
-                                            height="15"
-                                            viewBox="0 0 24 24"
-                                            fill="none"
-                                            stroke="currentColor"
-                                            strokeWidth="2"
-                                            strokeLinecap="round"
-                                            strokeLinejoin="round"
+                                {TARGET_HEADERS.map((header) => {
+                                  const fieldPath = HEADER_TO_FIELD_MAP[header];
+                                  const displayValue = getNestedValue(row, fieldPath);
+
+                                  // Determine if THIS SPECIFIC cell contributes to a critical error
+                                  const cellIsEmpNoError = (fieldPath === 'employeeNumber' && hasMissingEmpNo);
+                                  // Name error applies if either name field is missing *and* this is a name field
+                                  const cellIsNameError = ((fieldPath === 'other_names' || fieldPath === 'surname') && hasMissingName);
+                                  const cellHasError = cellIsEmpNoError || cellIsNameError;
+
+                                  return (
+                                    <TableCell key={`${row.id}-${header}`} className="py-2">
+                                      {editingCell && editingCell.rowId === row.id && editingCell.column === header ? (
+                                        <div className="flex gap-2">
+                                          <Input
+                                            value={editingCell.value}
+                                            onChange={(e) => setEditingCell({ ...editingCell, value: e.target.value })}
+                                            className="h-8 min-w-[100px]"
+                                            // Optionally set input type based on field
+                                            type={typeof getNestedValue(row, fieldPath) === 'number' ? 'number' : 'text'}
+                                          />
+                                          <Button size="sm" variant="ghost" onClick={handleCellSave} className="h-8 w-8 p-0">
+                                            <Check className="h-4 w-4" />
+                                          </Button>
+                                          <Button size="sm" variant="ghost" onClick={handleCellEditCancel} className="h-8 w-8 p-0">
+                                            <X className="h-4 w-4" />
+                                          </Button>
+                                        </div>
+                                      ) : (
+                                        <div className="flex items-center justify-between group">
+                                          <span
+                                            className={`truncate max-w-[200px] ${
+                                               cellHasError ? 'text-destructive font-semibold' : '' // Highlight specific error cell
+                                            }`}
+                                            title={String(displayValue)}
                                           >
-                                            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
-                                            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
-                                          </svg>
-                                        </Button>
-                                      </div>
-                                    )}
-                                  </TableCell>
-                                ))}
+                                            {/* Format the display value */}
+                                            {displayValue !== undefined && displayValue !== null
+                                              ? typeof displayValue === 'number'
+                                                ? Number.isInteger(displayValue)
+                                                  ? displayValue.toString()
+                                                  : displayValue.toFixed(2) // Keep number formatting
+                                                : typeof displayValue === 'boolean'
+                                                ? displayValue
+                                                  ? 'Yes'
+                                                  : 'No'
+                                                : String(displayValue) // Default to string
+                                              : '' /* Render empty string for null/undefined */}
+                                          </span>
+                                          <Button
+                                            size="sm"
+                                            variant="ghost"
+                                            // Pass the current display value to edit function
+                                            onClick={() => handleCellEdit(row.id, header, displayValue)}
+                                            className="opacity-0 group-hover:opacity-100 h-6 w-6 p-0"
+                                            disabled={row.excluded}
+                                          >
+                                            {/* Edit SVG Icon */}
+                                            <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                                          </Button>
+                                        </div>
+                                      )}
+                                    </TableCell>
+                                  );
+                                })}
                                 
                                 <TableCell>
                                   <div className="flex items-center gap-2">
@@ -698,16 +784,17 @@ const EmployeeImportPage: React.FC = () => {
                                           ? 'secondary'
                                           : hasCriticalError
                                           ? 'destructive'
-                                          : row.extractionErrors?.length
+                                          : hasWarnings // Check for warnings
                                           ? 'warning'
                                           : 'success'
                                       }
+                                      title={hasWarnings ? row.extractionErrors?.join('\n') : undefined}
                                     >
                                       {row.excluded
                                         ? 'Excluded'
                                         : hasCriticalError
                                         ? 'Error'
-                                        : row.extractionErrors?.length
+                                        : hasWarnings // Check for warnings
                                         ? 'Warning'
                                         : 'Valid'}
                                     </Badge>
@@ -762,6 +849,7 @@ const EmployeeImportPage: React.FC = () => {
                 </Button>
                 <Button 
                   onClick={handleConfirmImport} 
+                  // Update disabled check to use the corrected function
                   disabled={!processedData || countCriticalErrors() > 0 || processedData.extractedData.filter(r => !r.excluded).length === 0}
                 >
                   Import Data

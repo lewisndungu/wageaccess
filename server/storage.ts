@@ -211,7 +211,15 @@ export class MemStorage implements IStorage {
       profileImage: insertUser.profileImage,
       departmentId: insertUser.departmentId,
       created_at: insertUser.created_at || new Date(),
-      modified_at: insertUser.modified_at || new Date()
+      modified_at: insertUser.modified_at || new Date(),
+      surname: insertUser.surname || "",
+      other_names: insertUser.other_names || "",
+      id_no: insertUser.id_no || "",
+      sex: insertUser.sex || "",
+      contact: {
+        email: insertUser.contact?.email || "",
+        phoneNumber: insertUser.contact?.phoneNumber || ""
+      }
     };
     this.users.set(id, user);
     return user;
@@ -302,12 +310,14 @@ export class MemStorage implements IStorage {
       return undefined;
     }
     
+    // Get the full department object
+    const department = await this.getDepartment(employee.departmentId);
+
+    // Return employee with the department object attached
+    // The Employee schema already allows for an optional 'department' field.
     const result: Employee = {
       ...employee,
-      department: {
-        id: employee.departmentId || '',
-        name: employee.role || ''
-      }
+      department: department // Attach the full department object if found
     };
     
     console.log(`Successfully retrieved employee details for ID: ${id}`);
@@ -331,53 +341,66 @@ export class MemStorage implements IStorage {
   }
   
   async createEmployee(employeeData: InsertEmployee): Promise<Employee> {
-    const id = employeeData.id || faker.string.uuid();
+    const id = employeeData.id || faker.string.numeric(8).toString();
+
+    // Construct the full Employee object, ensuring type safety
     const employee: Employee = {
-      id,
-      username: (employeeData.username as string) || '',
-      password: (employeeData.password as string) || '',
-      role: (employeeData.role as string) || 'employee',
-      employeeNumber: (employeeData.employeeNumber as string) || '',
-      userId: (employeeData.userId as string) || '', 
-      departmentId: (employeeData.departmentId as string) || '',
-      surname: (employeeData.surname as string) || '',
-      other_names: (employeeData.other_names as string) || '',
-      id_no: (employeeData.id_no as string) || '',
-      tax_pin: employeeData.tax_pin,
-      sex: (employeeData.sex as string) || '',
-      position: (employeeData.position as string) || '',
-      status: (employeeData.status as string) || 'active',
-      is_on_probation: employeeData.is_on_probation || false,
-      gross_income: Number(employeeData.gross_income || 0),
-      net_income: Number(employeeData.net_income || 0),
-      total_deductions: Number(employeeData.total_deductions || 0),
-      loan_deductions: Number(employeeData.loan_deductions || 0),
-      employer_advances: Number(employeeData.employer_advances || 0),
-      total_loan_deductions: Number(employeeData.total_loan_deductions || 0),
-      statutory_deductions: employeeData.statutory_deductions || {},
-      max_salary_advance_limit: Number(employeeData.max_salary_advance_limit || 0),
-      available_salary_advance_limit: Number(employeeData.available_salary_advance_limit || 0),
-      last_withdrawal_time: employeeData.last_withdrawal_time,
-      contact: employeeData.contact || { email: '', phoneNumber: '' },
-      address: employeeData.address,
-      bank_info: employeeData.bank_info || {},
-      id_confirmed: employeeData.id_confirmed || false,
-      mobile_confirmed: employeeData.mobile_confirmed || false,
-      tax_pin_verified: employeeData.tax_pin_verified || false,
-      country: (employeeData.country as string) || 'KE',
-      documents: employeeData.documents || {},
-      crb_reports: employeeData.crb_reports || {},
-      avatar_url: employeeData.avatar_url,
-      hourlyRate: Number(employeeData.hourlyRate || 60),
-      phoneNumber: employeeData.phoneNumber,
-      startDate: employeeData.startDate,
-      emergencyContact: employeeData.emergencyContact || {},
-      active: employeeData.active ?? true,
+      // User fields (set defaults where necessary)
+      id: id,
+      username: employeeData.username || `user_${faker.string.alphanumeric(6)}`,
+      password: employeeData.password || 'default-password', // Should be hashed
+      role: employeeData.role || 'employee',
+      profileImage: employeeData.profileImage,
+      // departmentId is primarily an Employee field, but User has it optional. Prioritize Employee's.
       created_at: employeeData.created_at || new Date(),
       modified_at: employeeData.modified_at || new Date(),
-      profileImage: employeeData.profileImage
+      surname: employeeData.surname || '',
+      other_names: employeeData.other_names || '',
+      id_no: employeeData.id_no || '',
+      tax_pin: employeeData.tax_pin, // Optional
+      sex: employeeData.sex || 'unknown',
+      nssf_no: employeeData.nssf_no, // Optional
+      nhif_no: employeeData.nhif_no, // Optional
+      contact: { // Ensure contact is an object with email and phoneNumber
+        email: employeeData.contact?.email || '',
+        phoneNumber: employeeData.contact?.phoneNumber || ''
+      },
+      address: employeeData.address, // Optional string
+
+      // Employee specific fields (set defaults where necessary)
+      employeeNumber: employeeData.employeeNumber || `EMP-${faker.string.numeric(5)}`,
+      departmentId: employeeData.departmentId || '', // Required for Employee
+      position: employeeData.position || 'N/A',
+      status: employeeData.status || 'active',
+      is_on_probation: employeeData.is_on_probation ?? false,
+      gross_income: Number(employeeData.gross_income || 0), // Ensure number
+      net_income: Number(employeeData.net_income || 0), // Ensure number
+      total_deductions: Number(employeeData.total_deductions || 0), // Ensure number
+      loan_deductions: Number(employeeData.loan_deductions || 0), // Ensure number
+      employer_advances: Number(employeeData.employer_advances || 0), // Ensure number
+      total_loan_deductions: Number(employeeData.total_loan_deductions || 0), // Ensure number
+      statutory_deductions: employeeData.statutory_deductions || { nssf: 0, nhif: 0, tax: 0, levy: 0 }, // any type
+      max_salary_advance_limit: Number(employeeData.max_salary_advance_limit || 0), // Ensure number
+      available_salary_advance_limit: Number(employeeData.available_salary_advance_limit || 0), // Ensure number
+      last_withdrawal_time: employeeData.last_withdrawal_time, // Optional Date
+      bank_info: employeeData.bank_info || {}, // any type
+      id_confirmed: employeeData.id_confirmed ?? false,
+      mobile_confirmed: employeeData.mobile_confirmed ?? false,
+      tax_pin_verified: employeeData.tax_pin_verified ?? false,
+      country: employeeData.country || 'KE',
+      documents: employeeData.documents || {}, // any type
+      crb_reports: employeeData.crb_reports || {}, // any type
+      avatar_url: employeeData.avatar_url, // Optional string
+      hourlyRate: Number(employeeData.hourlyRate || 0), // Ensure number
+      startDate: employeeData.startDate, // Optional Date
+      emergencyContact: employeeData.emergencyContact || {}, // any type
+      active: employeeData.active ?? true,
+      // modified_at is already set from User fields
+      // department is an optional related object, not stored directly here
     };
+
     this.employees.set(id, employee);
+    console.log(`Created employee ${employee.id} with number ${employee.employeeNumber}`);
     return employee;
   }
   
@@ -385,9 +408,13 @@ export class MemStorage implements IStorage {
     const employee = await this.getEmployee(id);
     if (!employee) return undefined;
     
+    // Ensure nested objects like 'contact' are merged correctly if provided
+    const updatedContact = employeeData.contact ? { ...employee.contact, ...employeeData.contact } : employee.contact;
+    
     const updatedEmployee = {
       ...employee,
       ...employeeData,
+      contact: updatedContact, // Use the merged contact object
       modified_at: new Date()
     };
     this.employees.set(id, updatedEmployee);
@@ -780,86 +807,61 @@ export class MemStorage implements IStorage {
     const { query } = options;
     const lowerQuery = query.toLowerCase();
     
-    // Search in the memory storage employees
-    const allEmployees = await this.getAllEmployees();
+    const allEmployees = await this.getAllEmployees(); // Gets Employee[]
     const results = [];
     
     for (const emp of allEmployees) {
-      // Get user data to get name
-      const user = await this.getUser(emp.userId.toString());
-      if (!user) continue;
+      // Employee object now contains User fields directly
+      const department = await this.getDepartment(emp.departmentId); // Fetch department object
       
-      // Get department
-      const department = await this.getDepartment(emp.departmentId.toString());
-      
-      const name = user.username;
+      const name = `${emp.other_names} ${emp.surname}`.trim();
       const position = emp.position;
-      const departmentName = department?.name || 'Unknown';
-      
-      // Process address and emergency contact fields
-      let addressObj: Record<string, any> = {};
-      let emergencyContactObj: Record<string, any> = {};
-      
-      // Parse the address field if it's a JSON string
-      if (typeof emp.address === 'string' && 
-          (emp.address.startsWith('{') || emp.address.startsWith('['))) {
-        try {
-          addressObj = JSON.parse(emp.address);
-        } catch (e) {
-          console.error(`Failed to parse address for employee ${emp.id}: ${e}`);
-        }
-      } else if (emp.address && typeof emp.address === 'object') {
-        addressObj = emp.address as Record<string, any>;
-      }
-      
-      // Parse the emergencyContact field if it's a JSON string
-      if (typeof emp.emergencyContact === 'string' && 
-          (emp.emergencyContact.startsWith('{') || emp.emergencyContact.startsWith('['))) {
-        try {
-          emergencyContactObj = JSON.parse(emp.emergencyContact);
-        } catch (e) {
-          console.error(`Failed to parse emergencyContact for employee ${emp.id}: ${e}`);
-        }
-      } else if (emp.emergencyContact && typeof emp.emergencyContact === 'object') {
-        emergencyContactObj = emp.emergencyContact as Record<string, any>;
-      }
-      
-      // Extract additional details from address object if available
-      const idNumber = addressObj.idNumber || '';
-      const kraPin = addressObj.kraPin || '';
-      const nssfNo = addressObj.nssfNo || '';
-      const nhifNo = addressObj.nhifNo || '';
-      
-      // Check if the query matches any employee field
+      const departmentName = department?.name || emp.role || 'Unknown'; // Use department name, fallback role
+
+      // Access fields directly from Employee (which includes User fields)
+      const idNumber = emp.id_no;
+      const kraPin = emp.tax_pin;
+      const nssfNo = emp.nssf_no;
+      const nhifNo = emp.nhif_no;
+      const email = emp.contact?.email;
+      const phoneNumber = emp.contact?.phoneNumber;
+      // address and emergencyContact are now string/any as per schema, no JSON parsing needed by default
+      const address = emp.address;
+      const emergencyContact = emp.emergencyContact;
+      const profileImage = emp.profileImage || emp.avatar_url || faker.image.avatar(); // Use profileImage or avatar_url
+
+      // Check if the query matches any relevant employee field
       if (
         name.toLowerCase().includes(lowerQuery) ||
         position.toLowerCase().includes(lowerQuery) ||
-        emp.employeeNumber.includes(query) ||
+        emp.employeeNumber.includes(lowerQuery) || // Case-insensitive check might be better for numbers too
         departmentName.toLowerCase().includes(lowerQuery) ||
-        (idNumber && idNumber.toString().includes(query)) ||
-        (kraPin && kraPin.toString().toLowerCase().includes(lowerQuery)) ||
-        (nssfNo && nssfNo.toString().includes(query)) ||
-        (nhifNo && nhifNo.toString().includes(query))
+        (idNumber && idNumber.toLowerCase().includes(lowerQuery)) ||
+        (kraPin && kraPin.toLowerCase().includes(lowerQuery)) ||
+        (nssfNo && nssfNo.toLowerCase().includes(lowerQuery)) ||
+        (nhifNo && nhifNo.toLowerCase().includes(lowerQuery)) ||
+        (email && email.toLowerCase().includes(lowerQuery)) ||
+        (phoneNumber && phoneNumber.includes(query)) // Direct number match for phone
       ) {
-        // Format employee with needed data
+        // Format employee data for the result
         results.push({
-          id: emp.id.toString(),
+          id: emp.id, // Use employee's main ID
           name,
           position,
           department: departmentName,
           employeeNumber: emp.employeeNumber,
-          salary: emp.hourlyRate,
-          email: user.username + '@company.com',
+          salary: emp.hourlyRate, // Map salary from hourlyRate
+          email: email,
           hireDate: emp.startDate,
           idNumber,
           kraPin,
           nssfNo,
           nhifNo,
           status: emp.status,
-          phoneNumber: emp.phoneNumber,
-          address: addressObj,
-          emergencyContact: emergencyContactObj,
-          profileImage: user.profileImage || faker.image.avatar()
+          phoneNumber: phoneNumber, // Use extracted phone number
+          address, // Use address string directly
+          emergencyContact, // Use emergencyContact object directly
+          profileImage: profileImage
         });
       }
     }
@@ -867,51 +869,179 @@ export class MemStorage implements IStorage {
     return results;
   }
 
-  async addEmployees(employees: Employee[]): Promise<number> {
+  async addEmployees(employeesData: any[]): Promise<number> {
     let addedCount = 0;
-    console.log(`addEmployees: Processing ${employees.length} employees for import`);
-    
-    for (const emp of employees) {
+    console.log(`addEmployees: Processing ${employeesData.length} employees for import`);
+
+    for (const empData of employeesData) {
       try {
-        const newEmployee = await this.createEmployee(emp);
-        const fullName = `${emp.other_names} ${emp.surname}`.trim();
-        console.log(`addEmployees: Created new employee ${fullName}, employee number: ${newEmployee.employeeNumber}, employee ID: ${newEmployee.id}, active: ${newEmployee.active}`);
+        // Extract potential identifying fields from the input data (case-insensitive keys helpful)
+        const findKey = (obj: any, keys: string[]): any => {
+            for (const key of keys) {
+                const lowerKey = key.toLowerCase();
+                const realKey = Object.keys(obj).find(k => k.toLowerCase() === lowerKey);
+                if (realKey && obj[realKey]) {
+                    return obj[realKey];
+                }
+            }
+            return null;
+        };
+
+        const empNo = findKey(empData, ['Emp No', 'employeeNumber', 'Employee ID']);
+        const idNo = findKey(empData, ['ID Number', 'id_no', 'National ID']);
+        const kraPin = findKey(empData, ['KRA Pin', 'tax_pin']);
+
+        // --- Check for existing employee ---
+        let existingEmp: Employee | undefined = undefined;
+        if (empNo) {
+          existingEmp = await this.getEmployeeByNumber(String(empNo));
+        }
+        // Add more checks if needed (e.g., by id_no, tax_pin)
+        if (!existingEmp && idNo) {
+           const employees = await this.getAllEmployees();
+           existingEmp = employees.find(e => e.id_no === String(idNo));
+        }
+         if (!existingEmp && kraPin) {
+           const employees = await this.getAllEmployees();
+           existingEmp = employees.find(e => e.tax_pin === String(kraPin));
+        }
+
+        const firstName = findKey(empData, ['First Name', 'other_names']) || '';
+        const lastName = findKey(empData, ['Last Name', 'surname']) || '';
+        const fullName = `${firstName} ${lastName}`.trim();
+
+        if (!existingEmp) {
+          console.log(`Attempting to add new employee: ${fullName}`);
+          // --- Prepare data for InsertEmployee ---
+          const username = findKey(empData, ['username', 'User Name']) || `${firstName.toLowerCase()}.${lastName.toLowerCase()}${faker.string.numeric(2)}`.replace(/[^a-z0-9.]/g, '');
+          const email = findKey(empData, ['email', 'Email Address']);
+          const phoneNumber = findKey(empData, ['phoneNumber', 'Phone', 'Mobile']);
+          const departmentName = findKey(empData, ['Department', 'Department Name']);
+          // Find department ID by name (case-insensitive)
+          const allDepts = await this.getAllDepartments();
+          const department = allDepts.find(d => d.name.toLowerCase() === String(departmentName)?.toLowerCase());
+
+           const grossIncomeStr = findKey(empData, ['Gross Pay', 'Gross Income', 'gross_income']);
+           const hourlyRateStr = findKey(empData, ['Hourly Rate', 'hourlyRate']);
+
+          const insertData: InsertEmployee = {
+            // User fields
+            username: username,
+            password: findKey(empData, ['password']) || 'default-password',
+            role: findKey(empData, ['role', 'Role']) || 'employee',
+            profileImage: findKey(empData, ['profileImage', 'Avatar URL']),
+            surname: lastName,
+            other_names: firstName,
+            id_no: String(idNo || ''),
+            tax_pin: String(kraPin || ''),
+            sex: findKey(empData, ['sex', 'Gender']) || 'unknown',
+            nssf_no: String(findKey(empData, ['NSSF No', 'nssf_no']) || ''),
+            nhif_no: String(findKey(empData, ['NHIF No', 'nhif_no']) || ''),
+            contact: {
+              email: email || `${username}@generated.com`,
+              phoneNumber: String(phoneNumber || '')
+            },
+            address: String(findKey(empData, ['Address', 'address']) || ''),
+            // Employee specific
+            employeeNumber: String(empNo || `NEW-${faker.string.numeric(6)}`), // Generate if missing
+            departmentId: department?.id || 'UNKNOWN_DEPT_ID', // Assign found ID or a default/marker
+            position: findKey(empData, ['Position', 'Job Title', 'position']) || 'Employee',
+            status: findKey(empData, ['status', 'Employment Status']) || 'active',
+            is_on_probation: Boolean(findKey(empData, ['is_on_probation', 'On Probation']) ?? false),
+            gross_income: parseFloat(grossIncomeStr || '0') || undefined, // Convert to number
+            net_income: parseFloat(findKey(empData, ['Net Pay', 'Net Income', 'net_income']) || '0') || undefined, // Convert to number
+            total_deductions: parseFloat(findKey(empData, ['Total Deductions', 'total_deductions']) || '0') || undefined, // Convert
+            loan_deductions: parseFloat(findKey(empData, ['Loan Deductions', 'loan_deductions']) || '0') || undefined,
+            employer_advances: parseFloat(findKey(empData, ['Employer Advances', 'employer_advances']) || '0') || undefined,
+            total_loan_deductions: parseFloat(findKey(empData, ['Total Loan Deductions', 'total_loan_deductions']) || '0') || undefined,
+            // Construct statutory_deductions from individual fields if object not present
+            statutory_deductions: findKey(empData, ['statutory_deductions']) || {
+              tax: (() => {
+                const taxValue = parseFloat(findKey(empData, ['tax', 'PAYE']) || '0') || 0;
+                // Tax should not exceed 30% of gross income
+                const maxTax = (parseFloat(grossIncomeStr || '0') || 0) * 0.3;
+                return Math.min(taxValue, maxTax);
+              })(),
+              nssf: (() => {
+                const nssfValue = parseFloat(findKey(empData, ['nssf', 'NSSF']) || '0') || 0;
+                // NSSF should not exceed 1,080 (2024 rate)
+                return Math.min(nssfValue, 1080);
+              })(),
+              nhif: (() => {
+                const nhifValue = parseFloat(findKey(empData, ['nhif', 'NHIF']) || '0') || 0;
+                // NHIF should not exceed 1,700 (2024 rate)
+                return Math.min(nhifValue, 1700);
+              })(),
+              levy: (() => {
+                const levyValue = parseFloat(findKey(empData, ['levy', 'Levy', 'H-LEVY']) || '0') || 0;
+                // Housing levy should not exceed 1.5% of gross income
+                const maxLevy = (parseFloat(grossIncomeStr || '0') || 0) * 0.015;
+                return Math.min(levyValue, maxLevy);
+              })(),
+            },
+            max_salary_advance_limit: parseFloat(findKey(empData, ['max_salary_advance_limit']) || '0') || undefined,
+            available_salary_advance_limit: parseFloat(findKey(empData, ['available_salary_advance_limit']) || '0') || undefined,
+            bank_info: findKey(empData, ['bank_info', 'Bank Details']) || {},
+            country: findKey(empData, ['country', 'Country']) || 'KE',
+            documents: findKey(empData, ['documents']) || {},
+            crb_reports: findKey(empData, ['crb_reports']) || {},
+            avatar_url: findKey(empData, ['avatar_url', 'Avatar URL']), // Separate from profileImage
+            hourlyRate: parseFloat(hourlyRateStr || '0') || undefined, // Convert to number
+            startDate: findKey(empData, ['Start Date', 'Hire Date', 'startDate']) ? new Date(findKey(empData, ['Start Date', 'Hire Date', 'startDate'])) : new Date(),
+            emergencyContact: findKey(empData, ['emergencyContact', 'Emergency Contact']) || {},
+            active: !['inactive', 'terminated', 'resigned'].includes(String(findKey(empData, ['status']) || 'active').toLowerCase()),
+            // created_at, modified_at will be set by createEmployee if not provided
+            id_confirmed: Boolean(findKey(empData, ['id_confirmed']) ?? false),
+            mobile_confirmed: Boolean(findKey(empData, ['mobile_confirmed']) ?? false),
+            tax_pin_verified: Boolean(findKey(empData, ['tax_pin_verified']) ?? false),
+          };
+
+          // Remove undefined numeric fields so defaults in createEmployee apply if needed
+          if (insertData.gross_income === undefined) delete insertData.gross_income;
+          if (insertData.net_income === undefined) delete insertData.net_income;
+          if (insertData.hourlyRate === undefined) delete insertData.hourlyRate;
+          // ... do this for other optional numeric fields
+
+          const newEmployee = await this.createEmployee(insertData);
+          console.log(`addEmployees: Successfully created employee ${fullName}, ID: ${newEmployee.id}, Active: ${newEmployee.active}`);
         addedCount++;
-      } catch (error) {
-        console.error('Error adding employee:', error);
+
+        } else {
+          console.log(`Employee ${fullName} (EmpNo: ${empNo}, IDNo: ${idNo}) already exists. Skipping. Current active status: ${existingEmp.active}`);
+          // Optionally: Update existing employee here if needed
+          // await this.updateEmployee(existingEmp.id, { /* fields to update */ });
+        }
+      } catch (error: any) {
+        const empIdentifier = empData?.['Emp No'] || empData?.['ID Number'] || JSON.stringify(empData).substring(0, 50);
+        console.error(`Error processing employee data: ${empIdentifier} - ${error.message}`, error);
       }
     }
-    
-    console.log(`addEmployees: Completed adding ${addedCount} new employees`);
+
+    console.log(`addEmployees: Completed processing. Added ${addedCount} new employees.`);
     return addedCount;
   }
 
-  async getEmployees(employeeIds: string[]): Promise<any[]> {
-    const result = [];
+  async getEmployees(employeeIds: string[]): Promise<Employee[]> {
+    const result: Employee[] = []; // Store full Employee objects
     
     for (const id of employeeIds) {
       try {
-        const employee = await this.getEmployee(id);
-        if (!employee) continue;
-        
-        // Get user data - convert numeric ID to string
-        const user = await this.getUser(employee.userId.toString());
-        if (!user) continue;
-        
-        // Get department - convert numeric ID to string
-        const department = await this.getDepartment(employee.departmentId.toString());
-        
-        result.push({
-          id: employee.id,
-          name: user.username,
-          position: employee.position,
-          department: department?.name || 'Unknown',
-          salary: employee.hourlyRate,
-          email: user.username + '@company.com',
-          hireDate: employee.startDate
-        });
-      } catch (error) {
-        console.error('Error getting employee:', error);
+        const employee = await this.getEmployee(id); // Fetches the full Employee object
+        if (!employee) {
+            console.warn(`Employee with ID ${id} not found.`);
+            continue;
+        };
+
+        // Optionally attach the full department object if needed by the caller
+        // The schema allows Employee.department?: Department
+        const department = await this.getDepartment(employee.departmentId);
+        if (department) {
+            employee.department = department; // Attach department object
+        }
+
+        result.push(employee); // Add the full employee object (potentially with department)
+      } catch (error: any) {
+        console.error(`Error getting employee ${id}: ${error.message}`, error);
       }
     }
     
@@ -1053,240 +1183,4 @@ export async function saveSearch(userId: string, search: string): Promise<void> 
   const updatedSearches = [search, ...history.searches].slice(0, 10); // Keep last 10 searches
   
   await saveUserChatHistory(userId, { searches: updatedSearches });
-}
-
-// Employee search and management functions for chat service
-export async function findEmployees(options: { query: string }): Promise<any[]> {
-  const { query } = options;
-  const lowerQuery = query.toLowerCase();
-  
-  // Search in the memory storage employees
-  const allEmployees = await storage.getAllEmployees();
-  const results = [];
-  
-  for (const emp of allEmployees) {
-    // Get user data to get name
-    const user = await storage.getUser(emp.userId.toString());
-    if (!user) continue;
-    
-    // Get department
-    const department = await storage.getDepartment(emp.departmentId.toString());
-    
-    const name = user.username;
-    const position = emp.position;
-    const departmentName = department?.name || 'Unknown';
-    
-    // Process address and emergency contact fields
-    let addressObj: Record<string, any> = {};
-    let emergencyContactObj: Record<string, any> = {};
-    
-    // Parse the address field if it's a JSON string
-    if (typeof emp.address === 'string' && 
-        (emp.address.startsWith('{') || emp.address.startsWith('['))) {
-      try {
-        addressObj = JSON.parse(emp.address);
-      } catch (e) {
-        console.error(`Failed to parse address for employee ${emp.id}: ${e}`);
-      }
-    } else if (emp.address && typeof emp.address === 'object') {
-      addressObj = emp.address as Record<string, any>;
-    }
-    
-    // Parse the emergencyContact field if it's a JSON string
-    if (typeof emp.emergencyContact === 'string' && 
-        (emp.emergencyContact.startsWith('{') || emp.emergencyContact.startsWith('['))) {
-      try {
-        emergencyContactObj = JSON.parse(emp.emergencyContact);
-      } catch (e) {
-        console.error(`Failed to parse emergencyContact for employee ${emp.id}: ${e}`);
-      }
-    } else if (emp.emergencyContact && typeof emp.emergencyContact === 'object') {
-      emergencyContactObj = emp.emergencyContact as Record<string, any>;
-    }
-    
-    // Extract additional details from address object if available
-    const idNumber = addressObj.idNumber || '';
-    const kraPin = addressObj.kraPin || '';
-    const nssfNo = addressObj.nssfNo || '';
-    const nhifNo = addressObj.nhifNo || '';
-    
-    // Check if the query matches any employee field
-    if (
-      name.toLowerCase().includes(lowerQuery) ||
-      position.toLowerCase().includes(lowerQuery) ||
-      emp.employeeNumber.includes(query) ||
-      departmentName.toLowerCase().includes(lowerQuery) ||
-      (idNumber && idNumber.toString().includes(query)) ||
-      (kraPin && kraPin.toString().toLowerCase().includes(lowerQuery)) ||
-      (nssfNo && nssfNo.toString().includes(query)) ||
-      (nhifNo && nhifNo.toString().includes(query))
-    ) {
-      // Format employee with needed data
-      results.push({
-        id: emp.id.toString(),
-        name,
-        position,
-        department: departmentName,
-        employeeNumber: emp.employeeNumber,
-        salary: emp.hourlyRate,
-        email: user.username + '@company.com',
-        hireDate: emp.startDate,
-        idNumber,
-        kraPin,
-        nssfNo,
-        nhifNo,
-        status: emp.status,
-        phoneNumber: emp.phoneNumber,
-        address: addressObj,
-        emergencyContact: emergencyContactObj,
-        profileImage: user.profileImage || faker.image.avatar()
-      });
-    }
-  }
-  
-  return results;
-}
-
-export async function addEmployees(employees: any[]): Promise<number> {
-  let addedCount = 0;
-  console.log(`addEmployees: Processing ${employees.length} employees for import`);
-  
-  for (const emp of employees) {
-    try {
-      // Extract employee identification fields
-      const empNo = emp['Emp No'] || emp['employeeNumber'] || '';
-      const idNumber = emp['ID Number'] || emp['id_no'] || '';
-      
-      // Look for existing employee
-      let existingEmp = null;
-      if (empNo) {
-        existingEmp = await storage.getEmployeeByNumber(empNo);
-      }
-      
-      // Get name from MongoDB structure or legacy fields
-      const firstName = emp['First Name'] || emp['other_names'] || '';
-      const lastName = emp['Last Name'] || emp['surname'] || '';
-      const fullName = `${firstName} ${lastName}`.trim();
-      
-      if (!existingEmp) {
-        // Create user first
-        const username = fullName.toLowerCase().replace(/\s+/g, '.').replace(/[^a-z0-9.]/g, '');
-        const email = emp['email'] || `${username}@company.com`;
-        
-        const user = await storage.createUser({
-          username,
-          password: 'default-password',
-          role: emp['role'] || 'employee',
-          departmentId: emp['departmentId']?.toString(),
-          created_at: new Date(),
-          modified_at: new Date()
-        });
-        
-        // Extract fields using MongoDB structure with fallbacks to legacy fields
-        const position = emp['position'] || emp['Position'] || 'Employee';
-        const grossPay = emp['gross_income'] || emp['Gross Pay'] || 0;
-        const status = emp['status'] || 'active';
-        
-        // Handle statutory deductions
-        const statutoryDeductions = emp['statutory_deductions'] || {
-          nhif: emp['nhif'] || 0,
-          nssf: emp['nssf'] || emp['nssf_no'] || 0,
-          paye: emp['paye'] || 0,
-          levies: emp['levy'] || 0
-        };
-        
-        // Handle contact details
-        const mobile = emp['contact']?.['mobile'] || emp['phoneNumber'] || null;
-        const city = emp['contact']?.['city'] || null;
-        
-        // Generate a new UUID on the server
-        const employeeId = faker.string.uuid();
-        console.log(`Generated new employee ID: ${employeeId}`);
-        
-        // Create MongoDB-compatible employee record
-        const newEmployee = await storage.createEmployee({
-          id: employeeId,
-          employeeNumber: empNo || `EMP${Date.now().toString().substring(7)}`,
-          userId: user.id,
-          departmentId: emp['departmentId'] || '1',
-          surname: lastName,
-          other_names: firstName,
-          id_no: idNumber,
-          tax_pin: emp['tax_pin'] || emp['KRA Pin'] || '',
-          sex: emp['sex'] || 'unknown',
-          position: position,
-          gross_income: grossPay.toString(),
-          net_income: (emp['net_income'] || 0).toString(),
-          total_deductions: (emp['total_deductions'] || 0).toString(),
-          loan_deductions: (emp['loan_deductions'] || 0).toString(),
-          employer_advances: (emp['employer_advances'] || 0).toString(),
-          total_loan_deductions: (emp['total_loan_deductions'] || 0).toString(),
-          statutory_deductions: statutoryDeductions,
-          max_salary_advance_limit: (emp['max_salary_advance_limit'] || 0).toString(),
-          available_salary_advance_limit: (emp['available_salary_advance_limit'] || 0).toString(),
-          last_withdrawal_time: emp['last_withdrawal_time'] || null,
-          contact: mobile,
-          address: city,
-          country: emp['country'] || 'KE',
-            emergencyContact: "",
-          status: status,
-          is_on_probation: emp['is_on_probation'] || false,
-          role: emp['role'] || 'employee',
-          avatar_url: emp['avatar_url'] || '',
-          hourlyRate: 60,
-          phoneNumber: mobile,
-          startDate: new Date(),
-          active: true,
-          created_at: new Date(),
-          modified_at: new Date(),
-          bank_info: emp['bank_info'] || null,
-          documents: emp['documents'] || [],
-          crb_reports: emp['crb_reports'] || [],
-        });
-        
-        console.log(`addEmployees: Created new employee ${fullName}, employee number: ${newEmployee.employeeNumber}, employee ID: ${newEmployee.id}, active: ${newEmployee.active}`);
-        addedCount++;
-      } else {
-        // Update existing employee if needed
-        console.log(`Employee ${fullName} already exists, skipping import. Active status: ${existingEmp.active}`);
-      }
-    } catch (error) {
-      console.error('Error adding employee:', error);
-    }
-  }
-  
-  console.log(`addEmployees: Completed adding ${addedCount} new employees`);
-  return addedCount;
-}
-
-export async function getEmployees(employeeIds: string[]): Promise<any[]> {
-  const result = [];
-  
-  for (const id of employeeIds) {
-    try {
-      const employee = await storage.getEmployee(id);
-      if (!employee) continue;
-      
-      // Get user data - convert numeric ID to string
-      const user = await storage.getUser(employee.userId.toString());
-      if (!user) continue;
-      
-      // Get department - convert numeric ID to string
-      const department = await storage.getDepartment(employee.departmentId.toString());
-      
-      result.push({
-        id: employee.id,
-        name: user.username,
-        position: employee.position,
-        department: department?.name || 'Unknown',
-        salary: employee.hourlyRate,
-        email: user.username + '@company.com',
-        hireDate: employee.startDate
-      });
-    } catch (error) {
-      console.error('Error getting employee:', error);
-    }
-  }
-  
-  return result;
 }

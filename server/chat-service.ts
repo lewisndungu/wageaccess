@@ -1,33 +1,38 @@
-import * as storage from './storage';
+import * as storageModule from './storage';
+import { Employee } from '../shared/schema';
 import { formatKEDate, formatKESCurrency } from '../client/src/lib/format-utils';
 import { calculatePayrollBasedOnAttendance } from '../client/src/lib/kenyan-payroll';
 import * as XLSX from 'xlsx';
 
-// Column mapping configuration
+// Column mapping configuration - Based on User's Master Template
 const columnMappings: Record<string, string> = {
-  'EMPLO NO.': 'Emp No',
-  'EMPLOYEES\' FULL NAMES': 'fullName',
-  'ID NO': 'ID Number',
-  'KRA PIN NO.': 'KRA Pin',
-  'NSSF NO.': 'NSSF No',
-  'JOB TITTLE': 'Position',
-  'BASIC SALARY': 'Gross Pay',
-  'PAYE': 'PAYE',
-  'NSSF': 'NSSF',
-  'NHIF NO': 'NHIF',
-  'H-LEVY': 'Levy',
-  'LOANS': 'Loan Deduction',
-  'ADVANCE': 'Employer Advance',
-  'EMAIL': 'email',
-  'PHONE': 'mobile',
-  'CONTACT': 'mobile',
-  'CITY': 'city',
-  'SEX': 'sex',
-  'GENDER': 'sex',
-  'STATUS': 'status',
-  'DEPARTMENT': 'department',
-  'First Name': 'First Name',
-  'Last Name': 'Last Name'
+  'Emp No': 'employeeNumber', // Maps to Employee.employeeNumber
+  'Employee Name': 'fullName', // Will be split into surname & other_names later
+  'Probation Period': 'is_on_probation', // Maps to Employee.is_on_probation (boolean)
+  'ID Number': 'id_no', // Maps to Employee.id_no
+  'KRA Pin': 'tax_pin', // Maps to Employee.tax_pin
+  'NSSF No': 'nssf_no', // Maps to Employee.nssf_no (Membership No)
+  'NHIF No': 'nhif_no', // Maps to Employee.nhif_no (Membership No)
+  'Position': 'position', // Maps to Employee.position
+  'Gross Pay': 'gross_income', // Maps to Employee.gross_income
+  'PAYE': 'statutory_deductions.tax', // Maps to Employee.statutory_deductions.tax
+  'NSSF': 'statutory_deductions.nssf', // Maps to Employee.statutory_deductions.nssf (Deduction Amount)
+  'NHIF': 'statutory_deductions.nhif', // Maps to Employee.statutory_deductions.nhif (Deduction Amount)
+  'Levy': 'statutory_deductions.levy', // Maps to Employee.statutory_deductions.levy
+  'Loan Deduction': 'loan_deductions', // Maps to Employee.loan_deductions
+  'Employer Advance': 'employer_advances', // Maps to Employee.employer_advances
+  'Net Pay': 'net_income', // Maps to Employee.net_income
+  'MPesa Number': 'contact.phoneNumber', // Maps to Employee.contact.phoneNumber
+  'Bank Account Number': 'bank_info.acc_no', // Maps to Employee.bank_info.acc_no
+  'T & C Accepted': 'terms_accepted', // Maps to Employee.terms_accepted
+  'CONTACTS': 'contact.phoneNumber', // Alternative mapping for phone number
+  'GENDER': 'sex', // Maps to Employee.sex
+  'BANK CODE': 'bank_info.bank_code', // Maps to Employee.bank_info.bank_code
+  'BANK': 'bank_info.bank_name', // Maps to Employee.bank_info.bank_name
+  'HOUSE ALLOWANCE': 'house_allowance', // No direct mapping in Employee, consider if needed
+  'JAHAZII': 'jahazii_advances', // Maps to Employee.jahazii_advances
+  'STATUS': 'status', // Maps to Employee.status
+  'DEPARTMENT': 'departmentName', // Temporarily store department name
 };
 
 // Define a simplified file interface instead of using Express.Multer.File
@@ -70,7 +75,7 @@ export function createChatService() {
   return {
     async processMessage(message: string, userId: string): Promise<ChatMessage> {
       // Save the command to history
-      await storage.saveCommand(userId, message);
+      await storageModule.saveCommand(userId, message);
       
       const lowerMessage = message.toLowerCase();
       let response: ChatMessage = {
@@ -87,10 +92,10 @@ export function createChatService() {
         
         if (searchTerms && searchTerms[1]) {
           const query = searchTerms[1].trim();
-          await storage.saveSearch(userId, query);
+          await storageModule.saveSearch(userId, query);
           
           // Implement employee search logic here
-          const employees = await storage.findEmployees({ query });
+          const employees = await storageModule.storage.findEmployees({ query });
           
           if (employees.length > 0) {
             response = {
@@ -167,7 +172,7 @@ You can also use the quick action buttons below the chat to access common functi
       }
       
       // Save the message
-      await storage.saveMessage({
+      await storageModule.saveMessage({
         id: Date.now().toString(),
         userId,
         type: 'user',
@@ -176,13 +181,13 @@ You can also use the quick action buttons below the chat to access common functi
       });
       
       // Save the response
-      const savedResponse = await storage.saveMessage(response);
+      const savedResponse = await storageModule.saveMessage(response);
       
       return savedResponse;
     },
     
     async getHistory(userId: string): Promise<ChatHistory> {
-      const history = await storage.getUserChatHistory(userId);
+      const history = await storageModule.getUserChatHistory(userId);
       if (!history) {
         return {
           userId,
@@ -193,7 +198,7 @@ You can also use the quick action buttons below the chat to access common functi
       }
       
       // Get the most recent messages
-      const messages = await storage.getMessagesByUser(userId);
+      const messages = await storageModule.getMessagesByUser(userId);
       
       return {
         ...history,
@@ -220,31 +225,34 @@ You can also use the quick action buttons below the chat to access common functi
         let finalFailedRows = failedRows;
         
         // If no data was extracted using standard transformation, try direct extraction
-        if (transformedData.length === 0) {
+        if (transformedData.length === 0 && jsonData.length > 0) { // Check jsonData length
           const { directExtracted, directFailedRows } = directDataExtraction(jsonData as Record<string, any>[]);
-          extractedData = directExtracted;
-          finalFailedRows = [...failedRows, ...directFailedRows];
+          if (directExtracted.length > 0) { // Only use if direct extraction found something
+             extractedData = directExtracted;
+             finalFailedRows = [...failedRows, ...directFailedRows]; // Combine failed rows
+          } else {
+             // If both standard and direct fail, add all original rows (if any) as failed
+             if (dataRows.length > 0) {
+                finalFailedRows = dataRows.map((row, index) => ({
+                    row: row,
+                    reason: `Row ${index + 1}: Could not automatically map or extract data. Requires manual review.`
+                }));
+             } else if (jsonData.length > 0) {
+                 finalFailedRows = (jsonData as Record<string, any>[]).map((row, index) => ({
+                    row: row,
+                    reason: `Row ${index + 1}: Could not automatically map or extract data. Requires manual review.`
+                 }));
+             }
+          }
+        } else if (transformedData.length === 0 && jsonData.length === 0) {
+            // Handle case where the file was empty or contained no processable data
+            finalFailedRows = [{ row: {}, reason: "No data found in the uploaded file." }];
         }
         
-        // Filter the extracted data to only include required fields
-        const requiredFields = [
-          'Emp No', 'First Name', 'Last Name', 'fullName', 'ID Number', 
-          'NSSF No', 'KRA Pin', 'NHIF', 'Position', 'Gross Pay', 
-          'Employer Advance', 'PAYE', 'Levy', 'Loan Deduction'
-        ];
-        
-        const filteredData = extractedData.map(row => {
-          const filteredRow: Record<string, any> = { id: row.id };
-          requiredFields.forEach(field => {
-            filteredRow[field] = row[field] !== undefined ? row[field] : '';
-          });
-          return filteredRow;
-        });
-        
-        // Format the result
+        // Format the result - Return extractedData directly
         const result = {
-          headers: requiredFields,
-          extractedData: filteredData,
+          // No longer returning headers from backend
+          extractedData: extractedData, // Use the data from transformation/extraction
           failedRows: finalFailedRows,
           fileName: file.originalname
         };
@@ -254,36 +262,50 @@ You can also use the quick action buttons below the chat to access common functi
           id: Date.now().toString(),
           userId,
           type: 'file',
-          content: `Uploaded: ${file.originalname}`,
+          content: `Processed: ${file.originalname}. Found ${extractedData.length} potential records, ${finalFailedRows.length} rows need attention.`, // Updated content
           timestamp: new Date(),
-          fileData: result,
-          actions: [
+          fileData: { // Keep fileData for potential use, but structure might differ now
+             fileName: result.fileName,
+             recordCount: extractedData.length,
+             failedCount: finalFailedRows.length
+          },
+          // Add actions based on processing outcome
+          actions: extractedData.length > 0 ? [
             {
               id: 'view-data',
-              label: 'View & Edit'
-            },
-            {
-              id: 'import-data',
-              label: 'Import Employees'
+              label: 'Review & Import' // Changed label
             }
-          ]
+          ] : (finalFailedRows.length > 0 ? [{ id: 'view-failed-rows', label: 'View Failed Rows'}] : []), // Add action for failed rows if no success
+          metadata: { // Add counts to metadata
+             processedCount: extractedData.length,
+             failedCount: finalFailedRows.length
+          }
         };
         
-        await storage.saveMessage(fileMessage);
+        await storageModule.saveMessage(fileMessage);
         
-        return result;
+        return result; // Return the structured result
       } catch (error: any) { // Handle as a generic error with message property
         console.error('Error processing file:', error);
+        // Optionally save an error message to chat history
+         await storageModule.saveMessage({
+             id: Date.now().toString(),
+             userId,
+             type: 'system',
+             content: `Error processing file ${file.originalname}: ${error.message || 'Unknown error'}`,
+             timestamp: new Date(),
+             metadata: { error: true }
+         });
         throw new Error(`Failed to process file: ${error.message || 'Unknown error'}`);
       }
     },
     
     async searchEmployee(query: string, userId: string): Promise<any[]> {
       // Save the search query
-      await storage.saveSearch(userId, query);
+      await storageModule.saveSearch(userId, query);
       
       // Implement employee search logic
-      const employees = await storage.findEmployees({ query });
+      const employees = await storageModule.storage.findEmployees({ query });
       
       return employees;
     },
@@ -309,7 +331,7 @@ You can also use the quick action buttons below the chat to access common functi
       }
       
       // Implement employee import logic with server-generated IDs
-      const addedCount = await storage.addEmployees(cleanData);
+      const addedCount = await storageModule.storage.addEmployees(cleanData);
       
       // Save a message about the import
       const importMessage: ChatMessage = {
@@ -320,14 +342,14 @@ You can also use the quick action buttons below the chat to access common functi
         timestamp: new Date()
       };
       
-      await storage.saveMessage(importMessage);
+      await storageModule.saveMessage(importMessage);
       
       return { success: true, count: data.length };
     },
     
     async calculatePayroll(employeeIds: string[], userId: string): Promise<any> {
       // Implement payroll calculation logic
-      const employees = await storage.getEmployees(employeeIds);
+      const employees = await storageModule.storage.getEmployees(employeeIds);
       
       const payrollData = employees.map((employee: any) => {
         const grossPay = employee.salary || 0;
@@ -351,7 +373,7 @@ You can also use the quick action buttons below the chat to access common functi
           'Worked Hours': workedHours,
           'Gross Pay': grossPay,
           'Taxable Pay': payrollCalculation.taxablePay,
-          'PAYE': payrollCalculation.paye,
+          'Tax (PAYE)': payrollCalculation.paye,
           'NHIF': payrollCalculation.nhif,
           'NSSF': payrollCalculation.nssf,
           'Housing Levy': payrollCalculation.housingLevy,
@@ -369,7 +391,7 @@ You can also use the quick action buttons below the chat to access common functi
         timestamp: new Date()
       };
       
-      await storage.saveMessage(payrollMessage);
+      await storageModule.saveMessage(payrollMessage);
       
       return payrollData;
     },
@@ -394,22 +416,35 @@ Salary: ${formatKESCurrency(employee.salary)}
 
 // Improved function to find the closest matching column
 function findBestMatch(targetColumn: string, availableColumns: string[]): string | null {
+  // Maps master template names (and variations) to themselves for matching logic
   const specialCases: Record<string, string[]> = {
-    'EMPLO NO.': ['EMP NO', 'EMPLOYEE NO', 'EMPLOYEE NUMBER', 'EMP NUMBER', 'STAFF NO', 'PAYROLL NO', 'ID'],
-    'EMPLOYEES\' FULL NAMES': ['EMPLOYEE NAME', 'FULL NAME', 'NAME', 'EMPLOYEE NAMES', 'STAFF NAME', 'EMPLOYEE FULL NAME', 'SURNAME', 'OTHER NAMES'],
-    'ID NO': ['ID NUMBER', 'NATIONAL ID', 'IDENTITY NUMBER', 'ID', 'IDENTIFICATION'],
-    'KRA PIN NO.': ['KRA PIN', 'KRA', 'PIN NO', 'PIN NUMBER', 'TAX PIN'],
-    'NSSF NO.': ['NSSF NUMBER', 'NSSF', 'SOCIAL SECURITY NO'],
-    'JOB TITTLE': ['TITLE', 'POSITION', 'JOB TITLE', 'DESIGNATION', 'ROLE'],
-    'BASIC SALARY': ['SALARY', 'GROSS SALARY', 'GROSS', 'GROSS PAY', 'MONTHLY SALARY', 'GROSS INCOME', 'NET INCOME'],
-    'NHIF NO': ['NHIF', 'NHIF NUMBER', 'HEALTH INSURANCE', 'HEALTH INSURANCE NO'],
-    'H-LEVY': ['HOUSING LEVY', 'LEVY', 'HOUSE LEVY', 'HOUSING', 'LEVIES'],
-    'LOANS': ['LOAN', 'LOAN DEDUCTION', 'LOAN REPAYMENT', 'DEBT REPAYMENT', 'TOTAL LOAN DEDUCTIONS'],
-    'ADVANCE': ['SALARY ADVANCE', 'ADVANCE SALARY', 'EMPLOYER ADVANCE', 'ADVANCE PAYMENT', 'EMPLOYER ADVANCES'],
-    'EMAIL': ['EMAIL ADDRESS', 'MAIL', 'E-MAIL', 'EMAIL ID'],
-    'PHONE': ['MOBILE', 'TELEPHONE', 'PHONE NUMBER', 'CONTACT', 'MOBILE NUMBER'],
-    'CITY': ['TOWN', 'LOCALITY', 'LOCATION', 'AREA'],
-    'SEX': ['GENDER', 'MALE/FEMALE', 'M/F'],
+    // Master Template Keys & Variations
+    'Emp No': ['EMPLO NO.', 'EMPLOYEE NO', 'EMPLOYEE NUMBER', 'EMP NUMBER', 'STAFF NO', 'PAYROLL NO', 'ID'],
+    'Employee Name': ['EMPLOYEES\' FULL NAMES', 'FULL NAME', 'NAME', 'EMPLOYEE NAMES', 'STAFF NAME', 'EMPLOYEE FULL NAME', 'SURNAME', 'OTHER NAMES'],
+    'Probation Period': ['PROBATION', 'ON PROBATION'],
+    'ID Number': ['ID NO', 'NATIONAL ID', 'IDENTITY NUMBER', 'ID', 'IDENTIFICATION'],
+    'KRA Pin': ['KRA PIN NO.', 'KRA', 'PIN NO', 'PIN NUMBER', 'TAX PIN'],
+    'NSSF No': ['NSSF NUMBER', 'NSSF', 'SOCIAL SECURITY NO'], // Membership Number
+    'Position': ['JOB TITTLE', 'TITLE', 'JOB TITLE', 'DESIGNATION', 'ROLE'],
+    'Gross Pay': ['BASIC SALARY', 'SALARY', 'GROSS SALARY', 'GROSS', 'MONTHLY SALARY', 'GROSS INCOME', 'NET INCOME', 'BASIC PAY'],
+    'PAYE': ['TAX', 'INCOME TAX'],
+    'NSSF': ['NSSF DEDUCTION', 'NSSF CONTRIBUTION'], // Deduction Amount
+    'NHIF': ['NHIF NO', 'NHIF DEDUCTION', 'NHIF CONTRIBUTION', 'HEALTH INSURANCE', 'HEALTH INSURANCE NO', 'SHIF'], // Deduction Amount
+    'Levy': ['H-LEVY', 'HOUSING LEVY', 'HOUSE LEVY', 'HOUSING', 'LEVIES'],
+    'Loan Deduction': ['LOANS', 'LOAN', 'LOAN REPAYMENT', 'DEBT REPAYMENT', 'TOTAL LOAN DEDUCTIONS'],
+    'Employer Advance': ['ADVANCE', 'SALARY ADVANCE', 'ADVANCE SALARY', 'ADVANCE PAYMENT', 'EMPLOYER ADVANCES'],
+    'Net Pay': ['NET SALARY', 'TAKE HOME', 'FINAL PAY'],
+    'MPesa Number': ['MPESA', 'MOBILE MONEY', 'PHONE NO', 'MOBILE NO'],
+    'Bank Account Number': ['BANK ACC', 'BANK ACCOUNT', 'ACCOUNT NUMBER', 'ACC NO', 'ACCOUNT NO'],
+    'T & C Accepted': ['TERMS ACCEPTED', 'T&C', 'AGREED TERMS'],
+
+    // Include other potentially useful variations from previous config
+    'CONTACTS': ['CONTACT', 'PHONE', 'MOBILE', 'TELEPHONE', 'PHONE NUMBER', 'MOBILE NUMBER'],
+    'GENDER': ['SEX', 'MALE/FEMALE', 'M/F'],
+    'BANK CODE': ['BANK BRANCH CODE', 'BRANCH CODE'],
+    'BANK': ['BANK NAME'],
+    'HOUSE ALLOWANCE': ['HSE ALLOWANCE', 'H/ALLOWANCE', 'HOUSING'],
+    'JAHAZII': ['JAHAZII ADVANCE', 'JAHAZII LOAN'],
     'STATUS': ['EMPLOYEE STATUS', 'ACTIVE', 'INACTIVE', 'EMPLOYMENT STATUS'],
     'DEPARTMENT': ['DEPT', 'DIVISION', 'UNIT', 'SECTION']
   };
@@ -466,6 +501,37 @@ function findActualDataRows(data: Array<Record<string, any>>): Array<Record<stri
   return data;
 }
 
+// Helper function to set nested values in an object using dot notation
+function setNestedValue(obj: any, path: string, value: any) {
+  const keys = path.split('.');
+  let current = obj;
+  for (let i = 0; i < keys.length - 1; i++) {
+    const key = keys[i];
+    if (!current[key] || typeof current[key] !== 'object') {
+      current[key] = {};
+    }
+    current = current[key];
+  }
+  current[keys[keys.length - 1]] = value;
+}
+
+// Function to parse boolean values leniently
+function parseBoolean(value: any): boolean {
+  if (typeof value === 'boolean') return value;
+  if (typeof value === 'string') {
+    const lowerVal = value.trim().toLowerCase();
+    return lowerVal === 'true' || lowerVal === 'yes' || lowerVal === '1';
+  }
+  return !!value; // Fallback for numbers or other types
+}
+
+// Function to parse numeric values, defaulting to 0 if invalid
+function parseNumber(value: any, defaultValue = 0): number {
+  if (value === null || value === undefined || value === '') return defaultValue;
+  const num = Number(String(value).replace(/,/g, '')); // Remove commas before parsing
+  return isNaN(num) ? defaultValue : num;
+}
+
 // Transform data function
 function transformData(data: Array<Record<string, any>>): {
   transformedData: Array<Record<string, any>>;
@@ -500,157 +566,174 @@ function transformData(data: Array<Record<string, any>>): {
             const rowIndex = i;
             
             if (rowIndex < data.length - 1) {
+              // Call extractDataWithDetectedHeaders but return its result directly
               return extractDataWithDetectedHeaders(data.slice(rowIndex), data.slice(rowIndex + 1));
             }
           }
         }
       }
     }
+    // If no mapping found after checking initial rows, mark all as failed
+    return {
+      transformedData: [],
+      failedRows: data.map((row, index) => ({ row, reason: `Row ${index + 1}: Could not detect headers or map data.` }))
+    };
   }
   
-  const transformedData = data.map(row => {
+  const transformedData = data.map((row, rowIndex) => {
+    // Skip rows that look like headers or are empty
     const isEmpty = Object.values(row).every(val => 
       val === "" || val === null || val === undefined
     );
+    if (isEmpty) return null;
+
+    // Basic header row check (might need refinement)
+    const isPossiblyHeader = Object.values(row).some(val => 
+        typeof val === 'string' && 
+        Object.keys(columnMappings).some(colKey => val.toLowerCase().includes(colKey.toLowerCase()))
+    );
+    if (rowIndex === 0 && isPossiblyHeader && data.length > 1) return null; // Skip first row if it looks like a header
     
-    const valueCount = Object.values(row).filter(val => 
-      val !== "" && val !== null && val !== undefined
-    ).length;
-    const isLikelyHeader = valueCount === 1 || 
-                          (valueCount < 3 && Object.keys(row).length > 4);
-    
-    if (isEmpty || isLikelyHeader) {
-      return null;
-    }
-    
-    const transformedRow: Record<string, any> = {
-      status: 'active', // Default status
-      is_on_probation: false, // Default probation status
-      role: 'Employee', // Default role
-      country: 'KE', // Default country code for Kenya
-      statutory_deductions: {
-        nhif: 0,
-        nssf: 0,
-        paye: 0,
-        levies: 0
-      },
-      contact: {
-        mobile: '',
-        city: ''
-      },
-      bank_info: {
-        acc_no: null,
-        bank_name: null
-      }
+    // Initialize with Employee interface structure and defaults
+    const transformedRow: Partial<Employee> & { extractionErrors?: string[] } = {
+      id: `emp-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
+      status: 'active',
+      is_on_probation: false,
+      role: 'employee',
+      country: 'KE',
+      statutory_deductions: { nhif: 0, nssf: 0, tax: 0, levy: 0 },
+      contact: { email: '', phoneNumber: '' },
+      bank_info: { acc_no: null, bank_name: null, bank_code: null },
+      gross_income: 0,
+      net_income: 0,
+      total_deductions: 0,
+      loan_deductions: 0,
+      employer_advances: 0,
+      jahazii_advances: 0,
+      max_salary_advance_limit: 0,
+      available_salary_advance_limit: 0,
+      terms_accepted: false,
+      surname: '',
+      other_names: '',
+      id_no: '',
+      tax_pin: '',
+      sex: '',
+      nssf_no: '',
+      nhif_no: '', // Ensure nhif_no is initialized
+      employeeNumber: '',
+      position: '',
+      extractionErrors: [], // Initialize error array
     };
 
     let mappedFields = 0;
-    let fullName = '';
-    let firstName = '';
-    let lastName = '';
-    
+
     Object.entries(row).forEach(([key, value]) => {
-      if (headerMapping[key]) {
+      if (headerMapping[key] && value !== null && value !== undefined && String(value).trim() !== '') {
         const targetField = headerMapping[key];
-        
-        // Handle name fields
-        if (targetField === 'fullName') {
-          fullName = String(value || "").trim();
-          const nameParts = fullName.split(/\s+/);
-          
-          if (nameParts.length >= 2) {
-            firstName = nameParts[0];
-            lastName = nameParts.slice(1).join(' ');
-            transformedRow['First Name'] = firstName;
-            transformedRow['Last Name'] = lastName;
-            transformedRow['fullName'] = fullName;
+        const processedValue = String(value).trim();
+
+        try {
+          if (targetField === 'fullName') {
+            const nameParts = processedValue.split(/\s+/);
+            if (nameParts.length >= 2) {
+              transformedRow.surname = nameParts.slice(-1).join(' ');
+              transformedRow.other_names = nameParts.slice(0, -1).join(' ');
+            } else {
+              transformedRow.other_names = processedValue;
+              // Keep surname empty if only one part
+            }
+          } else if (targetField === 'departmentName') {
+            // Store temporarily; will be resolved later
+            (transformedRow as any).departmentName = processedValue;
+          } else if (targetField === 'is_on_probation' || targetField === 'terms_accepted') {
+            setNestedValue(transformedRow, targetField, parseBoolean(processedValue));
+          } else if (
+            targetField.startsWith('statutory_deductions.') ||
+            targetField === 'gross_income' ||
+            targetField === 'net_income' ||
+            targetField === 'loan_deductions' ||
+            targetField === 'employer_advances' ||
+            targetField === 'jahazii_advances' ||
+            targetField === 'house_allowance' // Include house_allowance for parsing
+          ) {
+            setNestedValue(transformedRow, targetField, parseNumber(processedValue));
           } else {
-            transformedRow['First Name'] = fullName;
-            transformedRow['Last Name'] = '';
-            transformedRow['fullName'] = fullName;
+            // Default case: set the value directly
+            setNestedValue(transformedRow, targetField, processedValue);
           }
           mappedFields++;
-        } 
-        // Handle statutory deductions
-        else if (['PAYE', 'NSSF', 'NHIF', 'Levy'].includes(targetField)) {
-          transformedRow[targetField] = parseFloat(value) || 0;
-          mappedFields++;
-        }
-        // Handle contact fields
-        else if (['mobile', 'city'].includes(targetField)) {
-          transformedRow.contact[targetField] = value;
-          mappedFields++;
-        }
-        // Handle bank info
-        else if (targetField === 'bank_name' || targetField === 'acc_no') {
-          transformedRow.bank_info[targetField] = value;
-          mappedFields++;
-        }
-        // Handle all other regular fields
-        else {
-          transformedRow[targetField] = value;
-          mappedFields++;
+        } catch (e) {
+          console.warn(`Error processing field '${targetField}' with value '${value}' for row index ${rowIndex}:`, e);
+          transformedRow.extractionErrors?.push(`Error processing ${targetField}: ${e instanceof Error ? e.message : 'Unknown error'}`);
         }
       }
     });
     
-    // Calculate net income if gross income is available but net is not
-    if (transformedRow.gross_income && !transformedRow.net_income) {
-      const grossIncome = parseFloat(transformedRow.gross_income) || 0;
-      const paye = transformedRow.statutory_deductions.paye || 0;
-      const nssf = transformedRow.statutory_deductions.nssf || 0;
-      const nhif = transformedRow.statutory_deductions.nhif || 0;
-      const levies = transformedRow.statutory_deductions.levies || 0;
-      const loans = transformedRow.loan_deductions || 0;
-      const advances = transformedRow.employer_advances || 0;
-      
-      const totalDeductions = paye + nssf + nhif + levies + loans + advances;
-      transformedRow.total_deductions = totalDeductions;
-      transformedRow.net_income = grossIncome - totalDeductions;
+    // Post-processing and calculations
+    // Calculate total deductions (including potential house_allowance if parsed)
+    const houseAllowance = (transformedRow as any).house_allowance ?? 0; // Get house allowance if it exists
+    transformedRow.total_deductions =
+      (transformedRow.statutory_deductions?.tax ?? 0) +
+      (transformedRow.statutory_deductions?.nssf ?? 0) +
+      (transformedRow.statutory_deductions?.nhif ?? 0) +
+      (transformedRow.statutory_deductions?.levy ?? 0) +
+      (transformedRow.loan_deductions ?? 0) +
+      (transformedRow.employer_advances ?? 0) +
+      houseAllowance; // Add house allowance to total deductions
+
+    // Calculate net income if not directly mapped and gross income is present
+    if (transformedRow.gross_income && !Object.values(headerMapping).includes('net_income')) {
+      transformedRow.net_income = (transformedRow.gross_income ?? 0) - (transformedRow.total_deductions ?? 0);
     }
     
-    // Set EWA limits based on net income
-    if (transformedRow.net_income && !transformedRow.max_salary_advance_limit) {
-      const netIncome = parseFloat(transformedRow.net_income) || 0;
-      // Default to 50% of net pay as max EWA limit
-      transformedRow.max_salary_advance_limit = Math.floor(netIncome * 0.5);
-      transformedRow.available_salary_advance_limit = transformedRow.max_salary_advance_limit;
+    // Calculate EWA limits based on net income
+    const netIncomeForLimit = transformedRow.net_income ?? 0;
+    if (netIncomeForLimit > 0 && !transformedRow.max_salary_advance_limit) { // Only calculate if not explicitly provided
+      transformedRow.max_salary_advance_limit = Math.floor(netIncomeForLimit * 0.5);
+      transformedRow.available_salary_advance_limit = transformedRow.max_salary_advance_limit; // Set available initially
     }
-    
-    // Ensure all required fields are present
-    const requiredFields = [
-      'Emp No', 'First Name', 'Last Name', 'fullName', 'ID Number', 
-      'NSSF No', 'KRA Pin', 'NHIF', 'Position', 'Gross Pay', 
-      'Employer Advance', 'PAYE', 'Levy', 'Loan Deduction'
-    ];
-    
-    // Add placeholders for any missing required fields
-    requiredFields.forEach(field => {
-      if (transformedRow[field] === undefined) {
-        if (['Gross Pay', 'PAYE', 'NHIF', 'Levy', 'Employer Advance', 'Loan Deduction'].includes(field)) {
-          transformedRow[field] = 0;
-        } else {
-          transformedRow[field] = '';
-        }
-      }
-    });
-    
-    // Ensure the row has an ID
-    if (!transformedRow.id) {
-      transformedRow.id = `emp-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+
+    // --- ADD SANITY CHECKS ---
+    const gross = transformedRow.gross_income ?? 0;
+    const nhif = transformedRow.statutory_deductions?.nhif ?? 0;
+    const nssf = transformedRow.statutory_deductions?.nssf ?? 0;
+    const levy = transformedRow.statutory_deductions?.levy ?? 0;
+    const totalDed = transformedRow.total_deductions ?? 0;
+
+    // Check statutory deductions against known caps/reasonableness
+    if (nhif > 1700) { // NHIF cap is 1700
+        transformedRow.extractionErrors?.push(`Warning: NHIF (${nhif}) exceeds the KES 1700 cap.`);
     }
+    if (nssf > 2160) { // NSSF Tier II cap is 1080, Tier I+II is 2160. Check against higher cap.
+        transformedRow.extractionErrors?.push(`Warning: NSSF (${nssf}) exceeds the KES 2160 cap.`);
+    }
+     if (levy > 2500) { // Housing Levy cap is 2500
+        transformedRow.extractionErrors?.push(`Warning: Housing Levy (${levy}) exceeds the KES 2500 cap.`);
+    }
+     // Check if total deductions exceed gross income (only if gross > 0)
+     if (gross > 0 && totalDed > gross) {
+         transformedRow.extractionErrors?.push(`Warning: Total Deductions (${totalDed}) exceed Gross Income (${gross}).`);
+     }
+    // --- END SANITY CHECKS ---
+
+    // Final validation (mapped fields, identifier)
+    const hasIdentifier = transformedRow.employeeNumber || transformedRow.other_names || transformedRow.surname;
     
-    if (mappedFields < 3 && !isEmpty && !isLikelyHeader) {
+    if (mappedFields < 3 || !hasIdentifier) {
       failedRows.push({
-        row, 
-        reason: `Only ${mappedFields} fields could be mapped to known columns`
+        row,
+        reason: `Row ${rowIndex + 1}: Only ${mappedFields} fields mapped or no clear identifier (Name/Emp No).`
       });
-      return null;
+      return null; // Mark row as failed
     }
     
-    return transformedRow;
+    // Clean up temporary fields if they exist before returning
+    delete (transformedRow as any).departmentName; 
+    // We keep house_allowance if parsed, as it might be used elsewhere or needed for context
+
+    return transformedRow; // Return the processed row
   })
-  .filter((row): row is Record<string, any> => row !== null && Object.keys(row).length > 0);
+  .filter((row): row is Record<string, any> => row !== null); // Filter out null rows (failed/skipped)
   
   return { transformedData, failedRows };
 }
@@ -667,167 +750,183 @@ function extractDataWithDetectedHeaders(
     return { transformedData: [], failedRows: [] };
   }
   
-  const headerRow = allRows[0];
-  const headerMapping: Record<string, string> = {};
+  const headerRow = allRows[0]; // The row identified as a potential header
+  const headerMapping: Record<string, string> = {}; // Maps internal key (e.g., '__EMPTY_1') to target field (e.g., 'fullName')
   const failedRows: Array<{row: Record<string, any>, reason: string}> = [];
   
-  for (const [key, headerValue] of Object.entries(headerRow)) {
-    const headerText = String(headerValue).trim();
-    if (!headerText) continue;
-    
-    for (const [original, target] of Object.entries(columnMappings)) {
-      if (headerText.toLowerCase().includes(original.toLowerCase()) ||
-          original.toLowerCase().includes(headerText.toLowerCase())) {
-        headerMapping[key] = target;
-        break;
+  // Extract detected header values and their original keys
+  const detectedHeaders = Object.entries(headerRow)
+                              .map(([key, value]) => ({ key, value: String(value || '').trim() }))
+                              .filter(h => h.value);
+  const detectedHeaderValues = detectedHeaders.map(h => h.value);
+
+  // Iterate through the MASTER template keys we expect (from columnMappings)
+  for (const masterKey of Object.keys(columnMappings)) {
+    const targetFieldName = columnMappings[masterKey]; // e.g., 'fullName'
+
+    // Use findBestMatch to find the best matching DETECTED header VALUE for this masterKey
+    const bestMatchValue = findBestMatch(masterKey, detectedHeaderValues);
+
+    if (bestMatchValue) {
+      // Find the original internal key corresponding to this best matching value
+      const matchingHeader = detectedHeaders.find(h => h.value === bestMatchValue);
+      if (matchingHeader) {
+        // Map the internal key (e.g., '__EMPTY_1') to the target field name (e.g., 'fullName')
+        // Avoid overwriting if multiple masterKeys somehow map to the same detected header
+        if (!headerMapping[matchingHeader.key]) {
+             headerMapping[matchingHeader.key] = targetFieldName;
+        }
       }
     }
   }
+
+  // If very few headers were mapped, consider it a failure
+  if (Object.keys(headerMapping).length < 3) {
+      return {
+          transformedData: [],
+          failedRows: dataRows.map((row, index) => ({ row, reason: `Row ${index + 1}: Could not reliably map detected headers.` }))
+      };
+  }
   
-  const transformedData = dataRows.map(row => {
+  const transformedData = dataRows.map((row, rowIndex) => {
     const isEmpty = Object.values(row).every(val => 
       val === "" || val === null || val === undefined
     );
+    if (isEmpty) return null;
+
+    // No need for header check here as we are processing rows after the detected header
     
-    const valueCount = Object.values(row).filter(val => 
-      val !== "" && val !== null && val !== undefined
-    ).length;
-    const isLikelyHeader = valueCount === 1 || 
-                          (valueCount < 3 && Object.keys(row).length > 4);
-    
-    if (isEmpty || isLikelyHeader) {
-      return null;
-    }
-    
-    // Create a new row with MongoDB document structure
-    const transformedRow: Record<string, any> = {
-      status: 'active', // Default status
-      is_on_probation: false, // Default probation status
-      role: 'Employee', // Default role
-      country: 'KE', // Default country code for Kenya
-      statutory_deductions: {
-        nhif: 0,
-        nssf: 0,
-        paye: 0,
-        levies: 0
-      },
-      contact: {
-        mobile: '',
-        city: ''
-      },
-      bank_info: {
-        acc_no: null,
-        bank_name: null
-      }
+    // Initialize with Employee interface structure and defaults
+    const transformedRow: Partial<Employee> & { extractionErrors?: string[] } = {
+      id: `emp-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
+      status: 'active',
+      is_on_probation: false,
+      role: 'employee',
+      country: 'KE',
+      statutory_deductions: { nhif: 0, nssf: 0, tax: 0, levy: 0 },
+      contact: { email: '', phoneNumber: '' },
+      bank_info: { acc_no: null, bank_name: null, bank_code: null },
+      gross_income: 0,
+      net_income: 0,
+      total_deductions: 0,
+      loan_deductions: 0,
+      employer_advances: 0,
+      jahazii_advances: 0,
+      max_salary_advance_limit: 0,
+      available_salary_advance_limit: 0,
+      terms_accepted: false,
+      surname: '',
+      other_names: '',
+      id_no: '',
+      tax_pin: '',
+      sex: '',
+      nssf_no: '',
+      nhif_no: '', // Ensure nhif_no is initialized
+      employeeNumber: '',
+      position: '',
+      extractionErrors: [], // Initialize error array
     };
     
     let mappedFields = 0;
-    let fullName = '';
-    let firstName = '';
-    let lastName = '';
     
     Object.entries(row).forEach(([key, value]) => {
-      if (headerMapping[key]) {
+      // Use the headerMapping derived from detected headers
+      if (headerMapping[key] && value !== null && value !== undefined && String(value).trim() !== '') {
         const targetField = headerMapping[key];
-        
-        // Handle name fields
-        if (targetField === 'fullName') {
-          fullName = String(value || "").trim();
-          const nameParts = fullName.split(/\s+/);
-          
-          if (nameParts.length >= 2) {
-            firstName = nameParts[0];
-            lastName = nameParts.slice(1).join(' ');
-            transformedRow['First Name'] = firstName;
-            transformedRow['Last Name'] = lastName;
-            transformedRow['fullName'] = fullName;
+        const processedValue = String(value).trim();
+
+        try {
+          if (targetField === 'fullName') {
+            const nameParts = processedValue.split(/\s+/);
+            if (nameParts.length >= 2) {
+              transformedRow.surname = nameParts.slice(-1).join(' ');
+              transformedRow.other_names = nameParts.slice(0, -1).join(' ');
+            } else {
+              transformedRow.other_names = processedValue;
+            }
+          } else if (targetField === 'departmentName') {
+            (transformedRow as any).departmentName = processedValue;
+          } else if (targetField === 'is_on_probation' || targetField === 'terms_accepted') {
+            setNestedValue(transformedRow, targetField, parseBoolean(processedValue));
+          } else if (
+            targetField.startsWith('statutory_deductions.') ||
+            targetField === 'gross_income' ||
+            targetField === 'net_income' ||
+            targetField === 'loan_deductions' ||
+            targetField === 'employer_advances' ||
+            targetField === 'jahazii_advances' ||
+            targetField === 'house_allowance' // Include house_allowance for parsing
+          ) {
+            setNestedValue(transformedRow, targetField, parseNumber(processedValue));
           } else {
-            transformedRow['First Name'] = fullName;
-            transformedRow['Last Name'] = '';
-            transformedRow['fullName'] = fullName;
+            setNestedValue(transformedRow, targetField, processedValue);
           }
           mappedFields++;
-        } 
-        // Handle statutory deductions
-        else if (['PAYE', 'NSSF', 'NHIF', 'Levy'].includes(targetField)) {
-          transformedRow[targetField] = parseFloat(value) || 0;
-          mappedFields++;
-        }
-        // Handle contact fields
-        else if (['mobile', 'city'].includes(targetField)) {
-          transformedRow.contact[targetField] = value;
-          mappedFields++;
-        }
-        // Handle bank info
-        else if (targetField === 'bank_name' || targetField === 'acc_no') {
-          transformedRow.bank_info[targetField] = value;
-          mappedFields++;
-        }
-        // Handle all other regular fields
-        else {
-          transformedRow[targetField] = value;
-          mappedFields++;
+        } catch (e) {
+          console.warn(`Error processing field '${targetField}' with value '${value}' for detected header row index ${rowIndex}:`, e);
+           transformedRow.extractionErrors?.push(`Error processing ${targetField}: ${e instanceof Error ? e.message : 'Unknown error'}`);
         }
       }
     });
     
-    // Calculate net income if gross income is available but net is not
-    if (transformedRow.gross_income && !transformedRow.net_income) {
-      const grossIncome = parseFloat(transformedRow.gross_income) || 0;
-      const paye = transformedRow.statutory_deductions.paye || 0;
-      const nssf = transformedRow.statutory_deductions.nssf || 0;
-      const nhif = transformedRow.statutory_deductions.nhif || 0;
-      const levies = transformedRow.statutory_deductions.levies || 0;
-      const loans = transformedRow.loan_deductions || 0;
-      const advances = transformedRow.employer_advances || 0;
-      
-      const totalDeductions = paye + nssf + nhif + levies + loans + advances;
-      transformedRow.total_deductions = totalDeductions;
-      transformedRow.net_income = grossIncome - totalDeductions;
+    // Post-processing and calculations
+    const houseAllowance = (transformedRow as any).house_allowance ?? 0;
+    transformedRow.total_deductions =
+      (transformedRow.statutory_deductions?.tax ?? 0) +
+      (transformedRow.statutory_deductions?.nssf ?? 0) +
+      (transformedRow.statutory_deductions?.nhif ?? 0) +
+      (transformedRow.statutory_deductions?.levy ?? 0) +
+      (transformedRow.loan_deductions ?? 0) +
+      (transformedRow.employer_advances ?? 0) +
+      houseAllowance;
+
+    if (transformedRow.gross_income && !Object.values(headerMapping).includes('net_income')) {
+      transformedRow.net_income = (transformedRow.gross_income ?? 0) - (transformedRow.total_deductions ?? 0);
     }
     
-    // Set EWA limits based on net income
-    if (transformedRow.net_income && !transformedRow.max_salary_advance_limit) {
-      const netIncome = parseFloat(transformedRow.net_income) || 0;
-      // Default to 50% of net pay as max EWA limit
-      transformedRow.max_salary_advance_limit = Math.floor(netIncome * 0.5);
+    const netIncomeForLimit = transformedRow.net_income ?? 0;
+    if (netIncomeForLimit > 0 && !transformedRow.max_salary_advance_limit) {
+      transformedRow.max_salary_advance_limit = Math.floor(netIncomeForLimit * 0.5);
       transformedRow.available_salary_advance_limit = transformedRow.max_salary_advance_limit;
     }
-    
-    // Ensure all required fields are present
-    const requiredFields = [
-      'Emp No', 'First Name', 'Last Name', 'fullName', 'ID Number', 
-      'NSSF No', 'KRA Pin', 'NHIF', 'Position', 'Gross Pay', 
-      'Employer Advance', 'PAYE', 'Levy', 'Loan Deduction'
-    ];
-    
-    // Add placeholders for any missing required fields
-    requiredFields.forEach(field => {
-      if (transformedRow[field] === undefined) {
-        if (['Gross Pay', 'PAYE', 'NHIF', 'Levy', 'Employer Advance', 'Loan Deduction'].includes(field)) {
-          transformedRow[field] = 0;
-        } else {
-          transformedRow[field] = '';
-        }
-      }
-    });
-    
-    // Ensure the row has an ID
-    if (!transformedRow.id) {
-      transformedRow.id = `emp-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+
+    // --- ADD SANITY CHECKS (Identical to transformData) ---
+    const gross = transformedRow.gross_income ?? 0;
+    const nhif = transformedRow.statutory_deductions?.nhif ?? 0;
+    const nssf = transformedRow.statutory_deductions?.nssf ?? 0;
+    const levy = transformedRow.statutory_deductions?.levy ?? 0;
+    const totalDed = transformedRow.total_deductions ?? 0;
+
+    if (nhif > 1700) {
+       transformedRow.extractionErrors?.push(`Warning: NHIF (${nhif}) exceeds the KES 1700 cap.`);
     }
+    if (nssf > 2160) {
+       transformedRow.extractionErrors?.push(`Warning: NSSF (${nssf}) exceeds the KES 2160 cap.`);
+    }
+     if (levy > 2500) {
+       transformedRow.extractionErrors?.push(`Warning: Housing Levy (${levy}) exceeds the KES 2500 cap.`);
+    }
+     if (gross > 0 && totalDed > gross) {
+         transformedRow.extractionErrors?.push(`Warning: Total Deductions (${totalDed}) exceed Gross Income (${gross}).`);
+     }
+    // --- END SANITY CHECKS ---
+
+    // Final validation
+    const hasIdentifier = transformedRow.employeeNumber || transformedRow.other_names || transformedRow.surname;
     
-    if (mappedFields < 3 && !isEmpty && !isLikelyHeader) {
+    if (mappedFields < 3 || !hasIdentifier) {
       failedRows.push({
-        row, 
-        reason: `Only ${mappedFields} fields could be mapped to known columns`
+        row,
+        reason: `Detected Header Row ${rowIndex + 1}: Only ${mappedFields} fields mapped or no clear identifier (Name/Emp No).`
       });
       return null;
     }
+
+    delete (transformedRow as any).departmentName;
     
     return transformedRow;
   })
-  .filter((row): row is Record<string, any> => row !== null && Object.keys(row).length > 0);
+  .filter((row): row is Record<string, any> => row !== null);
   
   return { transformedData, failedRows };
 }
@@ -855,13 +954,13 @@ function directDataExtraction(data: Array<Record<string, any>>): {
       const extractedRow: Record<string, any> = {
         status: 'active', // Default status
         is_on_probation: false, // Default probation status
-        role: 'Employee', // Default role
+        role: 'employee', // Default role
         country: 'KE', // Default country code for Kenya
         statutory_deductions: {
           nhif: 0,
           nssf: 0,
-          paye: 0,
-          levies: 0
+          tax: 0,
+          levy: 0
         },
         contact: {
           mobile: '',
@@ -912,20 +1011,20 @@ function directDataExtraction(data: Array<Record<string, any>>): {
           if (!extractedRow['Gross Pay']) {
             extractedRow['Gross Pay'] = value;
             
-            // Default to 30% of gross for PAYE
-            extractedRow['PAYE'] = Math.floor(value * 0.3);
+            // Default to 30% of gross for tax
+            extractedRow['tax'] = Math.floor(value * 0.3);
             // Default to 1.5% for NSSF
             extractedRow['NSSF'] = Math.min(Math.floor(value * 0.015), 2160);
             // Add default NHIF value
             extractedRow['NHIF'] = Math.min(Math.floor(value * 0.01), 1700);
-            // Default to 1.5% for Housing Levy
-            extractedRow['Levy'] = Math.floor(value * 0.015);
+            // Default to 1.5% for levy
+            extractedRow['levy'] = Math.floor(value * 0.015);
             
             // Calculate total deductions
-            const totalDeductions = extractedRow['PAYE'] +
+            const totalDeductions = extractedRow['tax'] +
                                    extractedRow['NSSF'] +
                                    extractedRow['NHIF'] +
-                                   extractedRow['Levy'];
+                                   extractedRow['levy'];
             
             extractedRow['Loan Deduction'] = 0;
             extractedRow['Employer Advance'] = 0;
@@ -940,13 +1039,13 @@ function directDataExtraction(data: Array<Record<string, any>>): {
         const requiredFields = [
           'Emp No', 'First Name', 'Last Name', 'fullName', 'ID Number', 
           'NSSF No', 'KRA Pin', 'NHIF', 'Position', 'Gross Pay', 
-          'Employer Advance', 'PAYE', 'Levy', 'Loan Deduction'
+          'Employer Advance', 'tax', 'levy', 'Loan Deduction'
         ];
         
         // Add placeholders for any missing required fields
         requiredFields.forEach(field => {
           if (extractedRow[field] === undefined) {
-            if (['Gross Pay', 'PAYE', 'NHIF', 'Levy', 'Employer Advance', 'Loan Deduction'].includes(field)) {
+            if (['Gross Pay', 'tax', 'NHIF', 'levy', 'Employer Advance', 'Loan Deduction'].includes(field)) {
               extractedRow[field] = 0;
             } else {
               extractedRow[field] = '';
@@ -978,4 +1077,7 @@ function directDataExtraction(data: Array<Record<string, any>>): {
   });
   
   return { directExtracted, directFailedRows };
-} 
+}
+
+// Create a singleton instance of the chat service
+export const chatService = createChatService(); 

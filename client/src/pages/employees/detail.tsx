@@ -545,8 +545,8 @@ export default function EmployeeDetailPage() {
                     <p>{formatCurrency(employee.net_income)}</p>
                   </div>
                   <div className="space-y-1">
-                    <p className="text-sm font-medium text-muted-foreground">PAYE</p>
-                    <p>{formatCurrency(employee.statutory_deductions.paye)}</p>
+                    <p className="text-sm font-medium text-muted-foreground">Tax (PAYE)</p>
+                    <p>{formatCurrency(employee.statutory_deductions.tax)}</p>
                   </div>
                   <div className="space-y-1">
                     <p className="text-sm font-medium text-muted-foreground">NSSF</p>
@@ -557,8 +557,8 @@ export default function EmployeeDetailPage() {
                     <p>{formatCurrency(employee.statutory_deductions.nhif)}</p>
                   </div>
                   <div className="space-y-1">
-                    <p className="text-sm font-medium text-muted-foreground">Housing Levy</p>
-                    <p>{formatCurrency(employee.statutory_deductions.levies)}</p>
+                    <p className="text-sm font-medium text-muted-foreground">Levy</p>
+                    <p>{formatCurrency(employee.statutory_deductions.levy)}</p>
                   </div>
                   <div className="space-y-1">
                     <p className="text-sm font-medium text-muted-foreground">Loan Deductions</p>

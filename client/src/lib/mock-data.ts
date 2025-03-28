@@ -6,11 +6,49 @@ import {
   WalletTransaction,
   Department,
   UserWithRole, 
-  User
+  User,
+  Employee,
+  Attendance
 } from '@shared/schema';
+import { subDays } from 'date-fns';
 
 // This file contains mock data for the application
 // In a real application, this would be fetched from the API
+
+// --- Constants (Mimic server-side if needed) ---
+const HOURLY_RATE_MOCK = faker.number.int({ min: 800, max: 1500 }); // Example hourly rate for client mocks
+const WORK_HOURS_PER_DAY_MOCK = 8;
+const WORK_START_HOUR_MOCK = 8;
+const WORK_END_HOUR_MOCK = 17;
+const LATE_THRESHOLD_MINUTES_MOCK = 15;
+
+// --- Helper Functions (Kenyan specific, similar to server-side) ---
+const KENYAN_CITIES_MOCK = ["Nairobi", "Mombasa", "Kisumu", "Nakuru", "Eldoret"];
+const KENYAN_POSTAL_CODES_MOCK = ["00100", "00200", "20100", "30100", "40100"];
+const KENYAN_STREETS_MOCK = ["Moi Avenue", "Kenyatta Avenue", "Ngong Road", "Waiyaki Way"];
+const KENYAN_NAMES_MOCK = ["Wafula", "Kamau", "Otieno", "Wanjiku", "Achieng", "Kipchoge"];
+const RELATIONSHIPS_MOCK = ["Spouse", "Parent", "Sibling", "Friend"];
+
+function generateKenyanPhoneNumberMock(): string {
+    const prefixes = ["070", "071", "072", "073", "074", "079", "011"];
+    const randomPrefix = prefixes[Math.floor(Math.random() * prefixes.length)];
+    const randomDigits = Math.floor(Math.random() * 10000000).toString().padStart(7, '0');
+    return `${randomPrefix}${randomDigits}`;
+}
+
+function generateKenyanAddressMock(): string {
+  return `${faker.number.int({ min: 1, max: 999 })} ${KENYAN_STREETS_MOCK[Math.floor(Math.random() * KENYAN_STREETS_MOCK.length)]}, ${KENYAN_CITIES_MOCK[Math.floor(Math.random() * KENYAN_CITIES_MOCK.length)]}, ${KENYAN_POSTAL_CODES_MOCK[Math.floor(Math.random() * KENYAN_POSTAL_CODES_MOCK.length)]}, Kenya`;
+}
+
+function generateKenyanEmergencyContactMock(): any {
+  const firstName = KENYAN_NAMES_MOCK[Math.floor(Math.random() * KENYAN_NAMES_MOCK.length)];
+  const lastName = KENYAN_NAMES_MOCK[Math.floor(Math.random() * KENYAN_NAMES_MOCK.length)];
+  return {
+    name: `${firstName} ${lastName}`,
+    relationship: RELATIONSHIPS_MOCK[Math.floor(Math.random() * RELATIONSHIPS_MOCK.length)],
+    phone: generateKenyanPhoneNumberMock()
+  };
+}
 
 // Dashboard Statistics
 export const dashboardStats = {
@@ -51,79 +89,142 @@ export const recentActivities = Array.from({ length: 5 }).map(() => ({
   ]),
 }));
 
-// Employees
-export const employees = Array.from({ length: 5 }).map(() => ({
-  id: faker.string.uuid(),
-  employeeNumber: `EMP-${faker.string.numeric(4)}`,
-  name: faker.person.fullName(),
-  email: faker.internet.email(),
-  department: faker.commerce.department(),
-  position: faker.person.jobTitle(),
-  contact: faker.phone.number(),
-  status: faker.helpers.arrayElement(["present", "late", "absent"]),
-  profileImage: faker.image.avatar(),
-  active: faker.datatype.boolean(),
-  hourlyRate: faker.number.int({ min: 800, max: 1500 }),
-  startDate: faker.date.past().toISOString().split('T')[0],
-  address: faker.location.streetAddress(),
-  emergencyContact: faker.phone.number(),
-}));
+// Departments
+export const departments: Department[] = [
+    { id: faker.string.uuid(), name: "Technology", description: "Handles all tech things" },
+    { id: faker.string.uuid(), name: "Sales & Marketing", description: "Brings in the customers" },
+    { id: faker.string.uuid(), name: "Finance & Admin", description: "Manages money and operations" },
+    { id: faker.string.uuid(), name: "Human Resources", description: "Manages people" },
+    { id: faker.string.uuid(), name: "Customer Support", description: "Helps the customers" },
+];
 
-// Helper functions
-function generateRandomTime(baseHour: number, variance: number = 30): string {
+// Updated Employees mock data generation
+export const employees: Employee[] = Array.from({ length: 15 }).map(() => {
+  const firstName = faker.person.firstName();
+  const lastName = faker.person.lastName();
+  const username = `${firstName.toLowerCase()}.${lastName.toLowerCase()}${faker.string.numeric(2)}`;
+  const email = faker.internet.email({ firstName, lastName });
+  const department = faker.helpers.arrayElement(departments);
+  const startDate = subDays(new Date(), faker.number.int({ min: 30, max: 1095 })); // Hired in last 3 years
+  const grossIncome = faker.number.int({ min: 40000, max: 150000 }); // Monthly gross
+
+  return {
+    // User fields
+    id: faker.string.uuid(),
+    username: username,
+    password: 'mockPassword', // Not typically needed on client
+    role: faker.helpers.arrayElement(['employee', 'employee', 'supervisor']), // Weighted towards employee
+    profileImage: faker.image.avatar(),
+    created_at: faker.date.past({ years: 3 }),
+    modified_at: faker.date.recent(),
+    surname: lastName,
+    other_names: firstName,
+    id_no: faker.string.numeric(8),
+    tax_pin: `A${faker.string.numeric(9)}X`,
+    sex: faker.person.sex(),
+    nssf_no: faker.string.numeric(10),
+    nhif_no: faker.string.numeric(9),
+    contact: {
+      email: email,
+      phoneNumber: generateKenyanPhoneNumberMock()
+    },
+    address: generateKenyanAddressMock(),
+
+    // Employee specific fields
+    employeeNumber: `EMP-${faker.string.numeric(4)}`,
+    departmentId: department.id,
+    position: faker.person.jobTitle(),
+    status: faker.helpers.arrayElement(["active", "active", "active", "on-leave", "terminated"]), // Weighted towards active
+    is_on_probation: faker.datatype.boolean(0.1),
+    gross_income: grossIncome,
+    net_income: grossIncome * faker.number.float({ min: 0.7, max: 0.85 }), // Approx net
+    total_deductions: grossIncome * faker.number.float({ min: 0.15, max: 0.3 }), // Approx deductions
+    loan_deductions: faker.number.int({ min: 0, max: grossIncome * 0.1 }),
+    employer_advances: faker.number.int({ min: 0, max: grossIncome * 0.05 }),
+    total_loan_deductions: faker.number.int({ min: 0, max: grossIncome * 0.15 }),
+    statutory_deductions: {
+      nhif: faker.number.int({ min: 500, max: 1700 }),
+      nssf: faker.number.int({ min: 200, max: 1080 }),
+      tax: faker.number.int({ min: 1000, max: grossIncome * 0.2 }),
+      levy: faker.number.int({ min: 100, max: 300 })
+    },
+    max_salary_advance_limit: grossIncome * 0.5, // 50% of gross
+    available_salary_advance_limit: grossIncome * 0.5 * faker.number.float({min: 0, max: 1}),
+    last_withdrawal_time: faker.helpers.maybe(() => faker.date.recent({ days: 30 })),
+    bank_info: {
+        accountNumber: faker.finance.accountNumber(10),
+        bankName: faker.helpers.arrayElement(['KCB', 'Equity Bank', 'Coop Bank', 'Absa Bank', 'NCBA Bank']),
+        branchCode: faker.string.numeric(5)
+    },
+    id_confirmed: faker.datatype.boolean(0.8),
+    mobile_confirmed: faker.datatype.boolean(0.9),
+    tax_pin_verified: faker.datatype.boolean(0.7),
+    country: "KE",
+    documents: {}, // Keep simple for client mock
+    crb_reports: {}, // Keep simple for client mock
+    avatar_url: faker.image.avatar(), // Can differ from profileImage
+    hourlyRate: Number((grossIncome / (WORK_HOURS_PER_DAY_MOCK * 22)).toFixed(2)) || HOURLY_RATE_MOCK, // Approx hourly
+    startDate: startDate,
+    emergencyContact: generateKenyanEmergencyContactMock(),
+    active: faker.datatype.boolean(0.9), // 90% active
+    department: department, // Attach the department object directly
+  };
+});
+
+// Helper functions for Attendance (slight adjustments if needed)
+function generateRandomTime(baseHour: number, variance: number = 30): Date { // Return Date object
   const date = new Date();
-  const minutes = Math.floor(Math.random() * variance);
-  date.setHours(baseHour, minutes, 0, 0);
-  return date.toISOString();
+  const minutes = baseHour === WORK_END_HOUR_MOCK
+                  ? faker.number.int({ min: -15, max: variance }) // Allow clocking out slightly early/late
+                  : faker.number.int({ min: -5, max: variance }); // Allow clocking in slightly early/late
+  date.setHours(baseHour, minutes, faker.number.int({min: 0, max: 59}), 0);
+  return date;
 }
 
-function generateAttendanceStatus(clockInTime: string | null): 'present' | 'late' | 'absent' {
+function generateAttendanceStatus(clockInTime: Date | null | undefined): 'present' | 'late' | 'absent' {
   if (!clockInTime) return 'absent';
   const clockIn = new Date(clockInTime);
   const expectedStart = new Date(clockIn);
-  expectedStart.setHours(8, 30, 0, 0);
-  
+  // Set expected start time (e.g., 8:15 AM allowing for threshold)
+  expectedStart.setHours(WORK_START_HOUR_MOCK, LATE_THRESHOLD_MINUTES_MOCK, 0, 0);
+
   return clockIn > expectedStart ? 'late' : 'present';
 }
 
-function calculateHoursWorked(clockIn: string | null, clockOut: string | null): number {
-  if (!clockIn || !clockOut) return 0;
-  const start = new Date(clockIn);
-  const end = new Date(clockOut);
-  return Number(((end.getTime() - start.getTime()) / (1000 * 60 * 60)).toFixed(2));
+function calculateHoursWorked(clockIn: Date | null | undefined, clockOut: Date | null | undefined): number {
+  if (!clockIn || !clockOut || clockOut <= clockIn) return 0;
+  return Number(((clockOut.getTime() - clockIn.getTime()) / (1000 * 60 * 60)).toFixed(2));
 }
 
 // Generate dynamic attendance records for the last 7 days
-export const attendanceRecords = (() => {
-  const records: any[] = [];
+export const attendanceRecords: Attendance[] = (() => {
+  const records: Attendance[] = [];
   const today = new Date();
-  
-  for (let i = 0; i < 7; i++) {
-    const date = new Date(today);
-    date.setDate(date.getDate() - i);
-    
-    // Skip weekends
-    if (date.getDay() === 0 || date.getDay() === 6) continue;
+
+  for (let i = 6; i >= 0; i--) {
+    const date = subDays(today, i);
     
     employees.forEach((emp) => {
       // 10% chance of being absent
       const isAbsent = Math.random() < 0.1;
       
-      const clockInTime = isAbsent ? null : generateRandomTime(8);
-      const clockOutTime = clockInTime ? generateRandomTime(17) : null;
+      const clockInTime = isAbsent ? undefined : generateRandomTime(8);
+      const clockOutTime = clockInTime ? generateRandomTime(17) : undefined;
       const status = generateAttendanceStatus(clockInTime);
       const hoursWorked = calculateHoursWorked(clockInTime, clockOutTime);
       
       records.push({
         id: faker.string.uuid(),
         employeeId: emp.id,
-        employeeName: emp.name,
-        department: emp.department,
-        date: date.toISOString().split('T')[0],
+        date: date,
         clockInTime,
         clockOutTime,
         status,
-        hoursWorked
+        hoursWorked,
+        geoLocation: {
+          latitude: faker.location.latitude(),
+          longitude: faker.location.longitude()
+        }
       });
     });
   }
@@ -196,13 +297,6 @@ export const walletData: Wallet & {
   })),
 };
 
-// Departments
-export const departments: Department[] = Array.from({ length: 5 }).map(() => ({
-  id: faker.string.uuid(),
-  name: faker.commerce.department(),
-  description: faker.lorem.sentence(),
-}));
-
 // User profile
 export const userProfile: User = {
   id: faker.string.uuid(),
@@ -213,6 +307,34 @@ export const userProfile: User = {
   departmentId: faker.string.uuid(),  
   created_at: faker.date.recent(),
   modified_at: faker.date.recent(),
+  surname: faker.person.lastName(),
+  other_names: faker.person.firstName(),
+  id_no: faker.string.numeric(8),
+  sex: faker.person.sex(),
+  contact: {
+    email: faker.internet.email(),
+    phoneNumber: generateKenyanPhoneNumberMock()
+  }
+};
+
+// Initial HR user for /current endpoint
+export const initialHrUser: User = {
+  id: 'hr-admin-001',
+  username: 'hr.admin',
+  password: 'hashedPassword123', // In real app, this would be properly hashed
+  role: 'hr',
+  profileImage: 'https://api.dicebear.com/7.x/avataaars/svg?seed=hr-admin',
+  departmentId: departments[3].id, // HR department ID
+  created_at: new Date('2024-01-01'),
+  modified_at: new Date('2024-01-01'),
+  surname: 'Admin',
+  other_names: 'HR',
+  id_no: 'A123456789',
+  sex: 'other',
+  contact: {
+    email: 'hr.admin@company.com',
+    phoneNumber: '0700000000'
+  }
 };
 
 // Format functions

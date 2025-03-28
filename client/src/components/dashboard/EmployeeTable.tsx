@@ -7,16 +7,22 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { Card } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { MoreHorizontal } from "lucide-react";
 import { Employee } from "@shared/schema";
 
 // Utility function to safely parse JSON strings
 const parseJsonField = (jsonString: string | null | undefined) => {
   if (!jsonString) return null;
-  
+
   try {
     return JSON.parse(jsonString);
   } catch (error) {
@@ -45,7 +51,7 @@ interface EmployeeTableProps {
 export function EmployeeTable({ data = [], isLoading }: EmployeeTableProps) {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState("active");
-  
+
   const handleViewProfile = (employee: Employee) => {
     navigate(`/employees/${employee.id}`);
   };
@@ -76,7 +82,7 @@ export function EmployeeTable({ data = [], isLoading }: EmployeeTableProps) {
       header: "Position",
     },
     {
-        accessorKey: "contact.phoneNumber",
+      accessorKey: "contact.phoneNumber",
       header: "Contact",
       cell: ({ row }: { row: any }) => {
         const employee = row.original as Employee;
@@ -99,7 +105,9 @@ export function EmployeeTable({ data = [], isLoading }: EmployeeTableProps) {
               <DropdownMenuItem onClick={() => handleViewProfile(employee)}>
                 View Profile
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => navigate(`/employees/${employee.id}/edit`)}>
+              <DropdownMenuItem
+                onClick={() => navigate(`/employees/${employee.id}/edit`)}
+              >
                 Edit Details
               </DropdownMenuItem>
             </DropdownMenuContent>
@@ -108,47 +116,56 @@ export function EmployeeTable({ data = [], isLoading }: EmployeeTableProps) {
       },
     },
   ];
-  
-  const filteredData = data.filter(employee => {
+
+  const filteredData = data.filter((employee) => {
     if (activeTab === "active") {
       return employee.status === "active";
     }
     return employee.status === "inactive";
   });
-  
-  const activeCount = data.filter(emp => emp.status === "active").length;
-  const inactiveCount = data.filter(emp => emp.status === "inactive").length;
-  
+
+  const activeCount = data.filter((emp) => emp.status === "active").length;
+  const inactiveCount = data.filter((emp) => emp.status === "inactive").length;
+
   if (isLoading) {
     return <div>Loading...</div>;
   }
-  
+
   return (
-    <Card>
-      <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="grid w-full grid-cols-2 mb-4">
-          <TabsTrigger value="active">Active ({activeCount})</TabsTrigger>
-          <TabsTrigger value="inactive">Inactive ({inactiveCount})</TabsTrigger>
-        </TabsList>
-        
-        <TabsContent value="active">
-          <DataTable 
-            columns={columns} 
-            data={filteredData} 
-            searchColumn="other_names"
-            onRowClick={handleViewProfile}
-          />
-        </TabsContent>
-        
-        <TabsContent value="inactive">
-          <DataTable 
-            columns={columns} 
-            data={filteredData} 
-            searchColumn="other_names"
-            onRowClick={handleViewProfile}
-          />
-        </TabsContent>
-      </Tabs>
+    <Card className="">
+        <Tabs value={activeTab} onValueChange={setActiveTab}>
+          <TabsList className="grid w-full grid-cols-2 mb-4">
+            <TabsTrigger value="active">Active ({activeCount})</TabsTrigger>
+            <TabsTrigger value="inactive">
+              Inactive ({inactiveCount})
+            </TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="active">
+            <DataTable
+              columns={columns}
+              data={filteredData}
+              searchColumn="other_names"
+              onRowClick={handleViewProfile}
+            />
+          </TabsContent>
+
+          <TabsContent value="inactive">
+            <DataTable
+              columns={columns}
+              data={filteredData}
+              searchColumn={[
+                "other_names",
+                "surname",
+                "employeeNumber",
+                "department.name",
+                "position",
+              ]}
+              onRowClick={handleViewProfile}
+            />
+          </TabsContent>
+        </Tabs>
+      
     </Card>
   );
 }

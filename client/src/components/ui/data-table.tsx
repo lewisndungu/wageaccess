@@ -26,7 +26,7 @@ import { ChevronLeft, ChevronRight, Search } from "lucide-react";
 interface DataTableProps<TData, TValue> {
   columns: ColumnDef<TData, TValue>[];
   data: TData[];
-  searchColumn?: string;
+  searchColumn?: string | string[];
   onRowClick?: (row: TData) => void;
 }
 
@@ -38,7 +38,7 @@ export function DataTable<TData, TValue>({
 }: DataTableProps<TData, TValue>) {
   const [pagination, setPagination] = React.useState<PaginationState>({
     pageIndex: 0,
-    pageSize: 5,
+    pageSize: 50,
   });
   
   const [globalFilter, setGlobalFilter] = React.useState("");
@@ -55,6 +55,22 @@ export function DataTable<TData, TValue>({
       pagination,
       globalFilter,
     },
+    globalFilterFn: (row, columnId, filterValue) => {
+      if (!searchColumn) return true;
+      
+      const searchColumns = Array.isArray(searchColumn) ? searchColumn : [searchColumn];
+      const searchValue = filterValue.toLowerCase();
+      return searchColumns.some(column => {
+        let value: any = row.original;
+        try {
+          value = column.split('.').reduce((obj: any, key: string) => (obj != null ? obj[key] : undefined), row.original);
+        } catch (e) {
+          return false;
+        }
+        if (value === undefined || value === null) return false;
+        return String(value).toLowerCase().includes(searchValue);
+      });
+    },
   });
 
   return (
@@ -63,7 +79,7 @@ export function DataTable<TData, TValue>({
         <div className="relative">
           <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
           <Input
-            placeholder="Search..."
+            placeholder="Search by name, ID, department, or position..."
             value={globalFilter ?? ""}
             onChange={(e) => setGlobalFilter(e.target.value)}
             className="pl-8"

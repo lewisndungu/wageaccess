@@ -315,7 +315,7 @@ export default function ProcessPayrollPage() {
         return employees; // Return all employees for now
       } else {
         // Filter employees by department
-        return employees.filter((emp) => emp.department === selectedDepartment);
+        return employees
       }
     },
     initialData: employees, // Use mock data as initial data

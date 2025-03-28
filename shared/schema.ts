@@ -40,8 +40,15 @@ export interface Employee extends User {
   total_deductions: number;
   loan_deductions: number;
   employer_advances: number;
+  jahazii_advances?: number;
+  terms_accepted?: boolean;
   total_loan_deductions: number;
-  statutory_deductions: any;
+  statutory_deductions: {
+    nssf: number;
+    nhif: number;
+    tax: number;
+    levy: number;
+  };
   max_salary_advance_limit: number;
   available_salary_advance_limit: number;
   last_withdrawal_time?: Date;
@@ -60,6 +67,8 @@ export interface Employee extends User {
   emergencyContact: any;
   active: boolean;
   department?: Department;
+  departmentName?: string;
+  house_allowance?: number;
 }
 
 // Attendance record model

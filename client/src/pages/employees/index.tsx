@@ -1,6 +1,6 @@
 import { useState, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 import { EmployeeTable } from "@/components/dashboard/EmployeeTable";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -120,14 +120,12 @@ export default function EmployeesPage() {
       <div className="flex justify-between items-center">
         <h1 className="text-2xl font-bold tracking-tight">Employees</h1>
         <div className="flex space-x-2">
-          <Button 
-            variant="outline" 
-            onClick={() => setActiveTab("import")}
-            className="flex items-center"
-          >
-            <Upload className="mr-2 h-4 w-4" />
-            Import
-          </Button>
+          <Link to="/employees/import">
+            <Button variant="outline" size="sm" className="ml-2">
+              <Upload className="mr-2 h-4 w-4" />
+              Import Payroll Data
+            </Button>
+          </Link>
           <Button 
             onClick={() => navigate("/employees/new")}
             className="flex items-center"

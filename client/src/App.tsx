@@ -24,6 +24,7 @@ import SelfServicePage from "@/pages/ewa/self-service";
 import ProfilePage from "@/pages/profile";
 import NotFound from "@/pages/not-found";
 import ChatInterface from "./components/chat/ChatInterface";
+import EmployeeImportPage from "./pages/employees/import";
 
 // This component uses context hooks and will only be rendered inside their providers
 function SystemComponents() {
@@ -116,6 +117,7 @@ function App() {
                   <Route path="/ewa/management-reporting" element={<MainLayout><ManagementReportingPage /></MainLayout>} />
                   <Route path="/ewa/self-service" element={<MainLayout><SelfServicePage /></MainLayout>} />
                   <Route path="/profile" element={<MainLayout><ProfilePage /></MainLayout>} />
+                  <Route path="/employees/import" element={ <MainLayout><EmployeeImportPage /></MainLayout> } />
                   <Route path="*" element={<MainLayout><NotFound /></MainLayout>} />
                 </Routes>
                 <SystemComponents />

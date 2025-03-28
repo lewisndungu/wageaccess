@@ -144,7 +144,7 @@ import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 import { DateRange } from "react-day-picker";
 // Import from the unified types directory
-import type { Employee, Department } from "@/types/schema";
+import type { Employee, Department } from "@shared/schema";
 
 // Workflow stages
 const STAGES = {
@@ -3546,7 +3546,7 @@ async function fetchEmployeeDeductions(employeeId: number) {
 function calculateEmployeeGrossPay(employee: Employee) {
   const { regularHours, overtimeHours } = calculateWorkHours([]);
   return (
-    regularHours * parseFloat(employee.hourlyRate || "0") +
-    overtimeHours * parseFloat(employee.hourlyRate || "0") * 1.5
+    regularHours * employee.hourlyRate  +
+    overtimeHours * employee.hourlyRate * 1.5
   );
 }

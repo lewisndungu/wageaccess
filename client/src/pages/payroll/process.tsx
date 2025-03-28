@@ -3546,7 +3546,7 @@ async function fetchEmployeeDeductions(employeeId: number) {
 function calculateEmployeeGrossPay(employee: Employee) {
   const { regularHours, overtimeHours } = calculateWorkHours([]);
   return (
-    regularHours * employee.hourlyRate  +
-    overtimeHours * employee.hourlyRate * 1.5
+    regularHours * (employee.hourlyRate || 60) +
+    overtimeHours * (employee.hourlyRate || 60) * 1.5
   );
 }

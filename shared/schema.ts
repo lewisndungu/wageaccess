@@ -7,6 +7,18 @@ export interface User {
   departmentId?: string;
   created_at: Date;
   modified_at: Date;
+  surname: string;
+  other_names: string;
+  id_no: string;
+  tax_pin?: string;
+  sex: string;
+  nssf_no?: string;
+  nhif_no?: string;
+  contact: {
+    email: string;
+    phoneNumber: string;
+  };
+  address?: string;
 }
 
 // Department model
@@ -18,19 +30,11 @@ export interface Department {
 
 // Employee model
 export interface Employee extends User {
-  id: string;
   employeeNumber: string;
-  userId: string;
   departmentId: string;
-  surname: string;
-  other_names: string;
-  id_no: string;
-  tax_pin?: string;
-  sex: string;
   position: string;
   status: string;
   is_on_probation: boolean;
-  role: string;
   gross_income: number;
   net_income: number;
   total_deductions: number;
@@ -41,11 +45,6 @@ export interface Employee extends User {
   max_salary_advance_limit: number;
   available_salary_advance_limit: number;
   last_withdrawal_time?: Date;
-  contact: {
-    email: string;
-    phoneNumber: string;
-  };
-  address?: string;
   bank_info: any;
   id_confirmed: boolean;
   mobile_confirmed: boolean;
@@ -57,7 +56,6 @@ export interface Employee extends User {
   created_at: Date;
   modified_at: Date;
   hourlyRate?: number;
-  phoneNumber?: string;
   startDate?: Date;
   emergencyContact: any;
   active: boolean;

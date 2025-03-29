@@ -6,6 +6,7 @@ import {
   CardTitle,
   CardDescription,
   CardContent,
+  CardFooter,
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -79,7 +80,7 @@ import {
   formatCurrency,
   formatDate,
 } from "@/lib/mock-data";
-import { apiRequest, queryClient } from "@/lib/queryClient";
+import { queryClient } from "@/lib/queryClient";
 import { Stepper } from "@/components/ui/stepper";
 import { formatTime } from "@/lib/date-utils";
 import {
@@ -171,6 +172,28 @@ type RequestInit = {
   method?: string;
   headers?: Record<string, string>;
   body?: string;
+};
+
+// Define a helper function to make API requests (with types for the response)
+const apiRequest = async <T = any>(
+  method: string,
+  url: string,
+  data?: any
+): Promise<T> => {
+  try {
+    const response = await axios({
+      method,
+      url,
+      data,
+      headers: {
+        "Content-Type": "application/json",
+      },
+    });
+    return response.data;
+  } catch (error) {
+    console.error("API Request Error:", error);
+    throw error;
+  }
 };
 
 export default function ProcessPayrollPage() {
@@ -873,14 +896,22 @@ export default function ProcessPayrollPage() {
     }
   };
 
+  // Add state for storing the payroll reference number
+  const [payrollReferenceNumber, setPayrollReferenceNumber] = useState<string | null>(null);
+
   // Update the process payroll button click handler
   const handleProcessPayroll = async () => {
     try {
-      await apiRequest("POST", "/api/payroll/process", {
+      const response = await axios.post("/api/payroll/process", {
         payPeriod,
         payrollData: payrollCalculations,
         notes: finalizationNote,
       });
+
+      // Store the reference number from the response
+      if (response.data && response.data.id) {
+        setPayrollReferenceNumber(response.data.id);
+      }
 
       toast({
         title: "Payroll processed successfully",
@@ -889,6 +920,7 @@ export default function ProcessPayrollPage() {
 
       setCurrentStage("complete");
     } catch (error) {
+      console.error("Error processing payroll:", error);
       toast({
         title: "Error processing payroll",
         description:
@@ -898,28 +930,58 @@ export default function ProcessPayrollPage() {
     }
   };
 
-  // Update the export button click handler
+  // Update the export button click handler to use axios
   const handleExport = async (exportType: string) => {
     setIsExporting(true);
     setExportType(exportType);
 
     try {
-      // Simulate export process
-      await new Promise((resolve) => setTimeout(resolve, 1500));
-
-      let fileName = "";
+      // Format date for the filename
       const periodStr = `${new Date(payPeriod.startDate)
         .toLocaleDateString()
         .replace(/\//g, "-")}_${new Date(payPeriod.endDate)
         .toLocaleDateString()
         .replace(/\//g, "-")}`;
 
+      let fileName = "";
+
       if (exportType === "xlsx") {
-        fileName = `Payroll_${periodStr}.xlsx`;
+        // Include the reference number in the filename if available
+        fileName = payrollReferenceNumber 
+          ? `Payroll_${payrollReferenceNumber}_${periodStr}.xlsx`
+          : `Payroll_${periodStr}.xlsx`;
+        
+        // Call the Excel export API endpoint with axios
+        const response = await axios.post("/api/payroll/export/xlsx", {
+          payPeriod,
+          payrollCalculations,
+          referenceNumber: payrollReferenceNumber,
+        }, {
+          responseType: 'blob' // Important for handling binary data
+        });
+        
+        // Create a download link and trigger the download
+        const blob = new Blob([response.data], { 
+          type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' 
+        });
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = fileName;
+        document.body.appendChild(a);
+        a.click();
+        
+        // Clean up
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
       } else if (exportType === "payslips") {
         fileName = `Payslips_${periodStr}.zip`;
+        // Simulate export process for other types
+        await new Promise((resolve) => setTimeout(resolve, 1500));
       } else if (exportType === "summary") {
         fileName = `PayrollSummary_${periodStr}.pdf`;
+        // Simulate export process for other types
+        await new Promise((resolve) => setTimeout(resolve, 1500));
       }
 
       toast({
@@ -1985,6 +2047,14 @@ export default function ProcessPayrollPage() {
                     </CardHeader>
                     <CardContent className="p-4 flex-grow">
                       <div className="space-y-3">
+                        {payrollReferenceNumber && (
+                          <div className="flex justify-between items-center py-2 border-b border-border/40">
+                            <span className="font-semibold text-muted-foreground">Reference Number</span>
+                            <span className="font-medium text-primary">
+                              {payrollReferenceNumber}
+                            </span>
+                          </div>
+                        )}
                         <div className="flex justify-between items-center py-2 border-b border-border/40">
                           <span className="font-semibold text-muted-foreground">Period</span>
                           <span className="font-medium">
@@ -2034,12 +2104,18 @@ export default function ProcessPayrollPage() {
                             >
                               <div className="flex items-center w-full">
                                 <div className="bg-green-100 dark:bg-green-900/30 p-2 rounded-full mr-4">
-                                  <FileSpreadsheet className="h-5 w-5 text-green-600" />
+                                  {isExporting && exportType === "xlsx" ? (
+                                    <RefreshCw className="h-5 w-5 text-green-600 animate-spin" />
+                                  ) : (
+                                    <FileSpreadsheet className="h-5 w-5 text-green-600" />
+                                  )}
                                 </div>
                                 <div className="flex flex-col flex-1">
                                   <span className="font-medium text-base">Excel Spreadsheet</span>
                                   <span className="text-xs text-muted-foreground mt-1">
-                                    Export detailed payroll data
+                                    {isExporting && exportType === "xlsx"
+                                      ? "Generating spreadsheet..."
+                                      : "Export detailed payroll data"}
                                   </span>
                                 </div>
                                 <ChevronRight className="h-5 w-5 text-muted-foreground/50" />
@@ -2054,12 +2130,18 @@ export default function ProcessPayrollPage() {
                             >
                               <div className="flex items-center w-full">
                                 <div className="bg-blue-100 dark:bg-blue-900/30 p-2 rounded-full mr-4">
-                                  <FileText className="h-5 w-5 text-blue-600" />
+                                  {isExporting && exportType === "payslips" ? (
+                                    <RefreshCw className="h-5 w-5 text-blue-600 animate-spin" />
+                                  ) : (
+                                    <FileText className="h-5 w-5 text-blue-600" />
+                                  )}
                                 </div>
                                 <div className="flex flex-col flex-1">
                                   <span className="font-medium text-base">Payslips</span>
                                   <span className="text-xs text-muted-foreground mt-1">
-                                    Generate PDF payslips
+                                    {isExporting && exportType === "payslips"
+                                      ? "Generating payslips..."
+                                      : "Generate PDF payslips"}
                                   </span>
                                 </div>
                                 <ChevronRight className="h-5 w-5 text-muted-foreground/50" />
@@ -2074,12 +2156,18 @@ export default function ProcessPayrollPage() {
                             >
                               <div className="flex items-center w-full">
                                 <div className="bg-purple-100 dark:bg-purple-900/30 p-2 rounded-full mr-4">
-                                  <BarChart className="h-5 w-5 text-purple-600" />
+                                  {isExporting && exportType === "summary" ? (
+                                    <RefreshCw className="h-5 w-5 text-purple-600 animate-spin" />
+                                  ) : (
+                                    <BarChart className="h-5 w-5 text-purple-600" />
+                                  )}
                                 </div>
                                 <div className="flex flex-col flex-1">
                                   <span className="font-medium text-base">Summary Report</span>
                                   <span className="text-xs text-muted-foreground mt-1">
-                                    Export summary statistics
+                                    {isExporting && exportType === "summary"
+                                      ? "Generating report..."
+                                      : "Export summary statistics"}
                                   </span>
                                 </div>
                                 <ChevronRight className="h-5 w-5 text-muted-foreground/50" />
@@ -2093,7 +2181,8 @@ export default function ProcessPayrollPage() {
                                 <RefreshCw className="h-5 w-5 animate-spin text-primary" />
                               </div>
                               <span className="text-sm font-medium">
-                                Generating {exportType === "xlsx" ? "spreadsheet" : exportType === "payslips" ? "payslips" : "report"}...
+                                Generating {exportType === "xlsx" ? "Excel spreadsheet" : exportType === "payslips" ? "PDF payslips" : "summary report"}...
+                                <span className="text-xs text-muted-foreground ml-2">This may take a moment</span>
                               </span>
                             </div>
                           )}

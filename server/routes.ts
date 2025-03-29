@@ -1,7 +1,10 @@
-import type { Express, Request, Response } from "express";
-import { createServer, type Server } from "http";
+import express, { Express, Request, Response } from 'express';
+import { z } from 'zod';
+import { createServer, Server } from 'http';
+import multer from 'multer';
+import {} from 'date-fns';
+import * as XLSX from 'xlsx';
 import { storage, saveCommand, saveSearch } from "./storage";
-import { z } from "zod";
 import { 
   User, 
   Employee, 
@@ -21,10 +24,16 @@ import {
 } from "@shared/schema";
 import { faker } from '@faker-js/faker';
 import { generateEmptyAttendance } from './mock-data-generator';
-import { subDays, addDays, formatISO, startOfMonth, endOfMonth, parseISO, startOfDay, getTime, addSeconds, isSameDay, differenceInHours, differenceInMinutes } from 'date-fns';
+import {  getTime, format, parseISO, addSeconds, subDays, addDays, formatISO, startOfMonth, endOfMonth, startOfDay, isSameDay, differenceInHours, differenceInMinutes } from 'date-fns';
 import { chatService } from './index';
-import multer from 'multer';
-import * as XLSX from 'xlsx';
+
+// Add this utility function for formatting currency values (Kenyan Shillings)
+function formatKESValue(value: number): string {
+  return value.toLocaleString('en-KE', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
+  });
+}
 
 // Create validation schemas using zod
 const insertUserSchema = z.object({
@@ -1468,6 +1477,154 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error processing payroll:", error);
       res.status(500).json({ error: "Failed to process payroll" });
+    }
+  });
+  
+  // NEW ENDPOINT: Export payroll to Excel
+  app.post("/api/payroll/export/xlsx", async (req, res) => {
+    try {
+      const { payPeriod, payrollCalculations, referenceNumber } = req.body;
+      
+      // If reference number is provided, try to get stored payroll data
+      let payrollData = payrollCalculations;
+      
+      if (referenceNumber) {
+        console.log(`Retrieving stored payroll data for reference: ${referenceNumber}`);
+        // Get payroll data from storage based on the reference number/period
+        const storedPayrolls = await storage.getPayrollForPeriod(
+          new Date(payPeriod.startDate),
+          new Date(payPeriod.endDate)
+        );
+        
+        if (storedPayrolls && storedPayrolls.length > 0) {
+          console.log(`Found ${storedPayrolls.length} stored payroll records for the period`);
+          
+          // Get full employee data for each payroll record
+          const employeeData = await Promise.all(
+            storedPayrolls.map(async (payroll) => {
+              const employee = await storage.getEmployee(payroll.employeeId);
+              if (!employee) return null;
+              
+              // Construct a payroll calculation object similar to what the client sends
+              return {
+                employeeId: payroll.employeeId,
+                name: `${employee.other_names || ''} ${employee.surname || ''}`.trim(),
+                employeeNumber: employee.employeeNumber || '',
+                department: employee.departmentId || '',
+                position: employee.position || '',
+                hoursWorked: payroll.hoursWorked || 0,
+                hourlyRate: employee.hourlyRate || 0,
+                grossPay: payroll.grossPay || 0,
+                paye: (payroll.taxDeductions || 0) * 0.6, // Estimate - no exact breakdown in storage
+                nhif: (payroll.taxDeductions || 0) * 0.15, // Estimate
+                nssf: (payroll.taxDeductions || 0) * 0.15, // Estimate
+                housingLevy: (payroll.taxDeductions || 0) * 0.1, // Estimate
+                loanDeductions: (payroll.otherDeductions || 0) * 0.7, // Estimate
+                ewaDeductions: payroll.ewaDeductions || 0,
+                otherDeductions: (payroll.otherDeductions || 0) * 0.3, // Estimate
+                totalDeductions: (payroll.taxDeductions || 0) + (payroll.otherDeductions || 0) + (payroll.ewaDeductions || 0),
+                netPay: payroll.netPay || 0
+              };
+            })
+          );
+          
+          // Filter out null values (employees not found)
+          payrollData = employeeData.filter(Boolean);
+          console.log(`Prepared ${payrollData.length} employee records for Excel export`);
+        } else {
+          console.log(`No stored payroll records found for reference: ${referenceNumber}, using provided calculations`);
+        }
+      }
+      
+      if (!payPeriod || !payrollData || !Array.isArray(payrollData) || payrollData.length === 0) {
+        return res.status(400).json({ error: "Invalid export data format or no payroll data available" });
+      }
+      
+      console.log(`Generating Excel export for payroll period: ${payPeriod.startDate} to ${payPeriod.endDate}`);
+      
+      // Create workbook and worksheet
+      const workbook = XLSX.utils.book_new();
+      
+      // Create the main payroll worksheet
+      const mainWorksheetData = payrollData.map((employee, index) => ({
+        "No.": index + 1,
+        "Employee Number": employee.employeeNumber,
+        "Employee Name": employee.name,
+        "Department": employee.department,
+        "Position": employee.position,
+        "Hours Worked": employee.hoursWorked.toFixed(2),
+        "Rate": formatKESValue(employee.hourlyRate),
+        "Gross Pay": formatKESValue(employee.grossPay),
+        "PAYE": formatKESValue(employee.paye),
+        "NHIF": formatKESValue(employee.nhif),
+        "NSSF": formatKESValue(employee.nssf),
+        "Housing Levy": formatKESValue(employee.housingLevy),
+        "Loan Deductions": formatKESValue(employee.loanDeductions),
+        "EWA Deductions": formatKESValue(employee.ewaDeductions),
+        "Other Deductions": formatKESValue(employee.otherDeductions),
+        "Total Deductions": formatKESValue(employee.totalDeductions),
+        "Net Pay": formatKESValue(employee.netPay)
+      }));
+      
+      // Add main worksheet to workbook
+      const mainWorksheet = XLSX.utils.json_to_sheet(mainWorksheetData);
+      XLSX.utils.book_append_sheet(workbook, mainWorksheet, "Payroll");
+      
+      // Create a summary worksheet
+      const totalGrossPay = payrollData.reduce((total, emp) => total + emp.grossPay, 0);
+      const totalPaye = payrollData.reduce((total, emp) => total + emp.paye, 0);
+      const totalNhif = payrollData.reduce((total, emp) => total + emp.nhif, 0);
+      const totalNssf = payrollData.reduce((total, emp) => total + emp.nssf, 0);
+      const totalHousingLevy = payrollData.reduce((total, emp) => total + emp.housingLevy, 0);
+      const totalLoanDeductions = payrollData.reduce((total, emp) => total + emp.loanDeductions, 0);
+      const totalEwaDeductions = payrollData.reduce((total, emp) => total + emp.ewaDeductions, 0);
+      const totalOtherDeductions = payrollData.reduce((total, emp) => total + emp.otherDeductions, 0);
+      const totalDeductions = payrollData.reduce((total, emp) => total + emp.totalDeductions, 0);
+      const totalNetPay = payrollData.reduce((total, emp) => total + emp.netPay, 0);
+      
+      const summaryData = [
+        { Category: "Reference Number", Value: referenceNumber || "N/A" },
+        { Category: "Period Start", Value: formatDate(new Date(payPeriod.startDate)) },
+        { Category: "Period End", Value: formatDate(new Date(payPeriod.endDate)) },
+        { Category: "Total Employees", Value: payrollData.length },
+        { Category: "Total Gross Pay", Value: formatKESValue(totalGrossPay) },
+        { Category: "Total PAYE", Value: formatKESValue(totalPaye) },
+        { Category: "Total NHIF", Value: formatKESValue(totalNhif) },
+        { Category: "Total NSSF", Value: formatKESValue(totalNssf) },
+        { Category: "Total Housing Levy", Value: formatKESValue(totalHousingLevy) },
+        { Category: "Total Loan Deductions", Value: formatKESValue(totalLoanDeductions) },
+        { Category: "Total EWA Deductions", Value: formatKESValue(totalEwaDeductions) },
+        { Category: "Total Other Deductions", Value: formatKESValue(totalOtherDeductions) },
+        { Category: "Total Deductions", Value: formatKESValue(totalDeductions) },
+        { Category: "Total Net Pay", Value: formatKESValue(totalNetPay) }
+      ];
+      
+      const summaryWorksheet = XLSX.utils.json_to_sheet(summaryData);
+      XLSX.utils.book_append_sheet(workbook, summaryWorksheet, "Summary");
+      
+      // Filename with reference number if available
+      const filename = referenceNumber 
+        ? `Payroll_${referenceNumber}_${payPeriod.startDate}_to_${payPeriod.endDate}.xlsx`
+        : `Payroll_${payPeriod.startDate}_to_${payPeriod.endDate}.xlsx`;
+        
+      // Generate a buffer from the workbook
+      const excelBuffer = XLSX.write(workbook, { type: "buffer", bookType: "xlsx" });
+      
+      // Set response headers for Excel file download
+      res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+      res.setHeader("Content-Disposition", `attachment; filename=${filename}`);
+      
+      // Send the buffer
+      res.send(excelBuffer);
+      
+      console.log("Excel export generated successfully");
+      
+    } catch (error) {
+      console.error("Error generating Excel export:", error);
+      res.status(500).json({
+        error: "Failed to generate Excel export",
+        message: error instanceof Error ? error.message : "Unknown error"
+      });
     }
   });
   

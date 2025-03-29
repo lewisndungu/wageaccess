@@ -6,7 +6,6 @@ import {
   User, 
   Employee, 
   Department, 
-  EmployeeWithDetails,
   Payroll,
   EwaRequest,
   Wallet,
@@ -204,7 +203,6 @@ async function transformEmployeeData(employee: any): Promise<Employee> {
       email: employee.contact?.email || '',
       phoneNumber: employee.contact?.phoneNumber || ''
     },
-    address: employee.address,
     bank_info: employee.bank_info || {},
     id_confirmed: employee.id_confirmed === true,
     mobile_confirmed: employee.mobile_confirmed === true,
@@ -215,7 +213,6 @@ async function transformEmployeeData(employee: any): Promise<Employee> {
     avatar_url: employee.avatar_url,
     hourlyRate: toNumber(employee.hourlyRate),
     startDate: employee.startDate,
-    emergencyContact: employee.emergencyContact || {},
     active: employee.active === true,
     department: departmentData
   };
@@ -2182,21 +2179,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       for (const employee of allEmployees) {
         // Parse address to check for imported fields
         let isImported = false;
-        let addressObj: Record<string, any> = {};
-        
-        if (typeof employee.address === 'string' && 
-            (employee.address.startsWith('{') || employee.address.startsWith('['))) {
-          try {
-            addressObj = JSON.parse(employee.address);
-            // Check if this has imported fields
-            if (addressObj && 
-                (addressObj.idNumber || addressObj.kraPin || addressObj.nssfNo || addressObj.nhifNo)) {
-              isImported = true;
-            }
-          } catch (e) {
-            console.error(`Failed to parse address for employee ${employee.id}: ${e}`);
-          }
-        }
         
         // If employee has imported data and is not active, activate them
         if (isImported && !employee.active) {
@@ -2276,7 +2258,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           position: row['Position'] || row['Job Title'] || row['Designation'] || 'Employee',
           status: 'active',
           is_on_probation: false,
-          role: 'Employee',
+          role: 'employee',
           
           // Financial details
           gross_income: grossIncome,
@@ -2328,7 +2310,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
           // Dates
           created_at: new Date(),
           modified_at: new Date(),
-          emergencyContact: {}, // Add this line to include the 'emergencyContact' property
         };
       });
       

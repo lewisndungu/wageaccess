@@ -126,23 +126,9 @@ const KENYAN_NAMES = [
   "Muthoni", "Omondi", "Mutuku", "Chepkoech", "Kiprop", "Nyambura", "Korir"
 ];
 
-// Kenyan relationships
-const RELATIONSHIPS = ["Spouse", "Parent", "Sibling", "Uncle", "Aunt", "Cousin", "Friend"];
-
 // Helper function to generate a Kenyan address
 function generateKenyanAddress(): string {
   return `${KENYAN_STREETS[Math.floor(Math.random() * KENYAN_STREETS.length)]}, ${KENYAN_CITIES[Math.floor(Math.random() * KENYAN_CITIES.length)]}, ${KENYAN_POSTAL_CODES[Math.floor(Math.random() * KENYAN_POSTAL_CODES.length)]}, Kenya`;
-}
-
-// Helper function to generate a Kenyan emergency contact
-function generateKenyanEmergencyContact(): any {
-  const firstName = KENYAN_NAMES[Math.floor(Math.random() * KENYAN_NAMES.length)];
-  const lastName = KENYAN_NAMES[Math.floor(Math.random() * KENYAN_NAMES.length)];
-  return {
-    name: `${firstName} ${lastName}`,
-    relationship: RELATIONSHIPS[Math.floor(Math.random() * RELATIONSHIPS.length)],
-    phone: generateKenyanPhoneNumber()
-  };
 }
 
 // Helper functions
@@ -259,7 +245,6 @@ export function generateEmployees(users: User[], departments: Department[]): Ins
         email: email,
         phoneNumber: generatedPhoneNumber
       },
-      address: generateKenyanAddress(), // Use helper for structured address string
 
       // Employee specific fields
       employeeNumber: `EMP-${faker.string.numeric(4)}`,
@@ -295,7 +280,6 @@ export function generateEmployees(users: User[], departments: Department[]): Ins
       avatar_url: employeeData.avatar, // Can be same as profileImage or different
       hourlyRate: baseHourlyRate, // Use calculated number
       startDate: subDays(new Date(), faker.number.int({ min: 30, max: 730 })), // Hired between 1 month and 2 years ago
-      emergencyContact: generateKenyanEmergencyContact(), // Use helper
       active: true,
     });
   });

@@ -1,5 +1,5 @@
 import * as storageModule from './storage';
-import { Employee } from '../shared/schema';
+import { Employee, InsertEmployee } from '../shared/schema';
 import { formatKEDate, formatKESCurrency } from '../client/src/lib/format-utils';
 import { calculatePayrollBasedOnAttendance } from '../client/src/lib/kenyan-payroll';
 import * as XLSX from 'xlsx';
@@ -32,7 +32,6 @@ const columnMappings: Record<string, string> = {
   'HOUSE ALLOWANCE': 'house_allowance', // No direct mapping in Employee, consider if needed
   'JAHAZII': 'jahazii_advances', // Maps to Employee.jahazii_advances
   'STATUS': 'status', // Maps to Employee.status
-  'DEPARTMENT': 'departmentName', // Temporarily store department name
 };
 
 // Define a simplified file interface instead of using Express.Multer.File
@@ -310,41 +309,32 @@ You can also use the quick action buttons below the chat to access common functi
       return employees;
     },
     
-    async importEmployees(data: any[], userId: string): Promise<any> {
+    async importEmployees(data: InsertEmployee[], userId: string): Promise<any> {
       // Log request details
-      console.log(`Chat service importEmployees called with ${data.length} employees`);
-      
-      // Clean data and ensure no client IDs are used
-      const cleanData = data.map(emp => {
-        // Remove any client-side ID
-        const { id, ...rest } = emp;
-        return rest;
-      });
-      
-      // Log info about the import
-      if (cleanData.length > 0) {
-        const sampleEmployees = cleanData.slice(0, 2).map(emp => ({
-          employeeNumber: emp.employeeNumber || emp['Emp No'],
-          name: `${emp.other_names || emp['First Name']} ${emp.surname || emp['Last Name']}`.trim()
-        }));
-        console.log(`Sample employee data received: ${JSON.stringify(sampleEmployees)}`);
-      }
-      
+      console.log(
+        `Chat service importEmployees called with ${data.length} employees`
+      );
+
+      // Flush all data before importing new ones
+      await storageModule.storage.flushAllData();
+
       // Implement employee import logic with server-generated IDs
-      const addedCount = await storageModule.storage.addEmployees(cleanData);
-      
+      const addedCount = await storageModule.storage.addEmployees(data);
+
       // Save a message about the import
       const importMessage: ChatMessage = {
         id: Date.now().toString(),
         userId,
-        type: 'system',
-        content: `✅ Successfully imported ${data.length} employees.`,
-        timestamp: new Date()
+        type: "system",
+        content: `✅ Successfully imported ${addedCount} employees.`,
+        timestamp: new Date(),
       };
-      
+
       await storageModule.saveMessage(importMessage);
-      
-      return { success: true, count: data.length };
+
+      // TODO: Generate mock data with the newly imported employees
+
+      return { success: true, count: addedCount };
     },
     
     async calculatePayroll(employeeIds: string[], userId: string): Promise<any> {
@@ -401,7 +391,6 @@ You can also use the quick action buttons below the chat to access common functi
       return `
 **${employee.name}**
 Position: ${employee.position}
-Department: ${employee.department}
 Hire Date: ${formatKEDate(employee.hireDate)}
 Salary: ${formatKESCurrency(employee.salary)}
       `.trim();
@@ -428,7 +417,7 @@ function findBestMatch(targetColumn: string, availableColumns: string[]): string
     'Position': ['JOB TITTLE', 'TITLE', 'JOB TITLE', 'DESIGNATION', 'ROLE'],
     'Gross Pay': ['BASIC SALARY', 'SALARY', 'GROSS SALARY', 'GROSS', 'MONTHLY SALARY', 'GROSS INCOME', 'NET INCOME', 'BASIC PAY'],
     'PAYE': ['TAX', 'INCOME TAX'],
-    'NSSF': ['NSSF DEDUCTION', 'NSSF CONTRIBUTION'], // Deduction Amount
+    'NSSF': ['NSSF', 'NSSF DEDUCTION', 'NSSF CONTRIBUTION'], // Deduction Amount
     'NHIF': ['NHIF NO', 'NHIF DEDUCTION', 'NHIF CONTRIBUTION', 'HEALTH INSURANCE', 'HEALTH INSURANCE NO', 'SHIF'], // Deduction Amount
     'Levy': ['H-LEVY', 'HOUSING LEVY', 'HOUSE LEVY', 'HOUSING', 'LEVIES'],
     'Loan Deduction': ['LOANS', 'LOAN', 'LOAN REPAYMENT', 'DEBT REPAYMENT', 'TOTAL LOAN DEDUCTIONS'],
@@ -437,16 +426,13 @@ function findBestMatch(targetColumn: string, availableColumns: string[]): string
     'MPesa Number': ['MPESA', 'MOBILE MONEY', 'PHONE NO', 'MOBILE NO'],
     'Bank Account Number': ['BANK ACC', 'BANK ACCOUNT', 'ACCOUNT NUMBER', 'ACC NO', 'ACCOUNT NO'],
     'T & C Accepted': ['TERMS ACCEPTED', 'T&C', 'AGREED TERMS'],
-
-    // Include other potentially useful variations from previous config
-    'CONTACTS': ['CONTACT', 'PHONE', 'MOBILE', 'TELEPHONE', 'PHONE NUMBER', 'MOBILE NUMBER'],
+    'CONTACTS': ['CONTACT', 'CONTACTS', 'PHONE', 'MOBILE', 'TELEPHONE', 'PHONE NUMBER', 'MOBILE NUMBER'],
     'GENDER': ['SEX', 'MALE/FEMALE', 'M/F'],
     'BANK CODE': ['BANK BRANCH CODE', 'BRANCH CODE'],
     'BANK': ['BANK NAME'],
     'HOUSE ALLOWANCE': ['HSE ALLOWANCE', 'H/ALLOWANCE', 'HOUSING'],
     'JAHAZII': ['JAHAZII ADVANCE', 'JAHAZII LOAN'],
     'STATUS': ['EMPLOYEE STATUS', 'ACTIVE', 'INACTIVE', 'EMPLOYMENT STATUS'],
-    'DEPARTMENT': ['DEPT', 'DIVISION', 'UNIT', 'SECTION']
   };
 
   const cleanedAvailableColumns = availableColumns.map(col => {
@@ -595,7 +581,7 @@ function transformData(data: Array<Record<string, any>>): {
     if (rowIndex === 0 && isPossiblyHeader && data.length > 1) return null; // Skip first row if it looks like a header
     
     // Initialize with Employee interface structure and defaults
-    const transformedRow: Partial<Employee> & { extractionErrors?: string[] } = {
+    const transformedRow: Employee & { extractionErrors?: string[] } = {
       id: `emp-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
       status: 'active',
       is_on_probation: false,
@@ -623,6 +609,21 @@ function transformData(data: Array<Record<string, any>>): {
       employeeNumber: '',
       position: '',
       extractionErrors: [], // Initialize error array
+      total_loan_deductions: 0,
+      id_confirmed: false,
+      mobile_confirmed: false,
+      tax_pin_verified: false,
+      hourlyRate: 0,
+      hoursWorked: 0,
+      startDate: new Date(),
+      created_at: new Date(),
+      modified_at: new Date(),
+      active: true,
+      house_allowance: 0,
+      documents: {},
+      crb_reports: {},
+      username: '',
+      password: '',
     };
 
     let mappedFields = 0;
@@ -642,9 +643,6 @@ function transformData(data: Array<Record<string, any>>): {
               transformedRow.other_names = processedValue;
               // Keep surname empty if only one part
             }
-          } else if (targetField === 'departmentName') {
-            // Store temporarily; will be resolved later
-            (transformedRow as any).departmentName = processedValue;
           } else if (targetField === 'is_on_probation' || targetField === 'terms_accepted') {
             setNestedValue(transformedRow, targetField, parseBoolean(processedValue));
           } else if (
@@ -727,13 +725,12 @@ function transformData(data: Array<Record<string, any>>): {
       return null; // Mark row as failed
     }
     
-    // Clean up temporary fields if they exist before returning
-    delete (transformedRow as any).departmentName; 
-    // We keep house_allowance if parsed, as it might be used elsewhere or needed for context
 
     return transformedRow; // Return the processed row
   })
-  .filter((row): row is Record<string, any> => row !== null); // Filter out null rows (failed/skipped)
+  .filter((row): row is Employee & { extractionErrors?: string[] } => {
+    return row !== null && typeof row === 'object';
+  }); // Filter out null rows and ensure type safety
   
   return { transformedData, failedRows };
 }
@@ -841,8 +838,6 @@ function extractDataWithDetectedHeaders( allRows: Array<Record<string, any>>, da
             } else {
               transformedRow.other_names = processedValue;
             }
-          } else if (targetField === 'departmentName') {
-            (transformedRow as any).departmentName = processedValue;
           } else if (targetField === 'is_on_probation' || targetField === 'terms_accepted') {
             setNestedValue(transformedRow, targetField, parseBoolean(processedValue));
           } else if (
@@ -918,12 +913,12 @@ function extractDataWithDetectedHeaders( allRows: Array<Record<string, any>>, da
       });
       return null;
     }
-
-    delete (transformedRow as any).departmentName;
     
     return transformedRow;
   })
-  .filter((row): row is Record<string, any> => row !== null);
+  .filter((row): row is InsertEmployee => {
+    return row !== null && typeof row === 'object';
+  });
   
   return { transformedData, failedRows };
 }

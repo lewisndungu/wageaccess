@@ -5,7 +5,6 @@ import {
   Wallet, 
   WalletTransaction,
   Department,
-  UserWithRole, 
   User,
   Employee,
   Attendance
@@ -34,20 +33,6 @@ function generateKenyanPhoneNumberMock(): string {
     const randomPrefix = prefixes[Math.floor(Math.random() * prefixes.length)];
     const randomDigits = Math.floor(Math.random() * 10000000).toString().padStart(7, '0');
     return `${randomPrefix}${randomDigits}`;
-}
-
-function generateKenyanAddressMock(): string {
-  return `${faker.number.int({ min: 1, max: 999 })} ${KENYAN_STREETS_MOCK[Math.floor(Math.random() * KENYAN_STREETS_MOCK.length)]}, ${KENYAN_CITIES_MOCK[Math.floor(Math.random() * KENYAN_CITIES_MOCK.length)]}, ${KENYAN_POSTAL_CODES_MOCK[Math.floor(Math.random() * KENYAN_POSTAL_CODES_MOCK.length)]}, Kenya`;
-}
-
-function generateKenyanEmergencyContactMock(): any {
-  const firstName = KENYAN_NAMES_MOCK[Math.floor(Math.random() * KENYAN_NAMES_MOCK.length)];
-  const lastName = KENYAN_NAMES_MOCK[Math.floor(Math.random() * KENYAN_NAMES_MOCK.length)];
-  return {
-    name: `${firstName} ${lastName}`,
-    relationship: RELATIONSHIPS_MOCK[Math.floor(Math.random() * RELATIONSHIPS_MOCK.length)],
-    phone: generateKenyanPhoneNumberMock()
-  };
 }
 
 // Dashboard Statistics
@@ -128,7 +113,6 @@ export const employees: Employee[] = Array.from({ length: 15 }).map(() => {
       email: email,
       phoneNumber: generateKenyanPhoneNumberMock()
     },
-    address: generateKenyanAddressMock(),
 
     // Employee specific fields
     employeeNumber: `EMP-${faker.string.numeric(4)}`,
@@ -165,7 +149,6 @@ export const employees: Employee[] = Array.from({ length: 15 }).map(() => {
     avatar_url: faker.image.avatar(), // Can differ from profileImage
     hourlyRate: Number((grossIncome / (WORK_HOURS_PER_DAY_MOCK * 22)).toFixed(2)) || HOURLY_RATE_MOCK, // Approx hourly
     startDate: startDate,
-    emergencyContact: generateKenyanEmergencyContactMock(),
     active: faker.datatype.boolean(0.9), // 90% active
     department: department, // Attach the department object directly
   };

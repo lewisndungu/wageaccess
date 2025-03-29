@@ -464,10 +464,6 @@ export default function EmployeeDetailPage() {
                     <p>{employee.contact?.phoneNumber || 'N/A'}</p>
                   </div>
                   <div className="space-y-1">
-                    <p className="text-sm font-medium text-muted-foreground">Address</p>
-                    <p>{employee.address || 'N/A'}</p>
-                  </div>
-                  <div className="space-y-1">
                     <p className="text-sm font-medium text-muted-foreground">Gender</p>
                     <p>{employee.sex ? employee.sex.charAt(0).toUpperCase() + employee.sex.slice(1) : 'N/A'}</p>
                   </div>
@@ -489,7 +485,7 @@ export default function EmployeeDetailPage() {
                   </div>
                   <div className="space-y-1">
                     <p className="text-sm font-medium text-muted-foreground">Role</p>
-                    <p>{employee.role || 'N/A'}</p>
+                    <p className="capitalize">{employee.role || 'N/A'}</p>
                   </div>
                   <div className="space-y-1">
                     <p className="text-sm font-medium text-muted-foreground">Status</p>
@@ -498,10 +494,6 @@ export default function EmployeeDetailPage() {
                   <div className="space-y-1">
                     <p className="text-sm font-medium text-muted-foreground">Probation</p>
                     <p>{employee.is_on_probation ? 'Yes' : 'No'}</p>
-                  </div>
-                  <div className="space-y-1">
-                    <p className="text-sm font-medium text-muted-foreground">Start Date</p>
-                    <p>{employee.startDate ? formatDate(employee.startDate) : 'N/A'}</p>
                   </div>
                 </CardContent>
               </Card>

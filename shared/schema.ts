@@ -2,9 +2,8 @@ export interface User {
   id: string;
   username: string;
   password: string;
-  role: string;
+  role: "employee" | "supervisor" | "hr" | "admin";
   profileImage?: string;
-  departmentId?: string;
   created_at: Date;
   modified_at: Date;
   surname: string;
@@ -19,6 +18,8 @@ export interface User {
     phoneNumber: string;
   };
   address?: string;
+  department?: Department;
+  departmentId?: string;
 }
 
 // Department model
@@ -31,7 +32,6 @@ export interface Department {
 // Employee model
 export interface Employee extends User {
   employeeNumber: string;
-  departmentId: string;
   position: string;
   status: string;
   is_on_probation: boolean;
@@ -63,11 +63,9 @@ export interface Employee extends User {
   created_at: Date;
   modified_at: Date;
   hourlyRate?: number;
+  hoursWorked?: number;
   startDate?: Date;
-  emergencyContact: any;
   active: boolean;
-  department?: Department;
-  departmentName?: string;
   house_allowance?: number;
 }
 
@@ -151,17 +149,6 @@ export interface OtpCode {
   createdAt: Date;
   used: boolean;
 }
-
-// User with extra info for frontend
-export type UserWithRole = User & {
-  role: "employee" | "supervisor" | "hr" | "admin";
-};
-
-// Employee with department and user info
-export type EmployeeWithDetails = Employee & {
-  user: User;
-  department: Department;
-};
 
 // Export types
 export type InsertUser = Partial<User>;

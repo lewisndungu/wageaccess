@@ -290,7 +290,6 @@ export const chatService = {
     return `
 **${employee.other_names} ${employee.surname}**
 Position: ${employee.position}
-Department: ${employee.department}
 Hire Date: ${formatKEDate(employee.created_at)}
 Salary: ${formatKESCurrency(employee.gross_income)}
     `.trim();

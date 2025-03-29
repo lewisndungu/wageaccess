@@ -1539,133 +1539,33 @@ export class MemStorage implements IStorage {
           0
         );
         
-        // Use employee's hourly rate, calculated rate, or fallback to a default
-        const hourlyRate = employee.hourlyRate || 
-                          hourlyRateCalculator(employee) || 
-                          500; // Default to 500 KES/hour
-        
-        // ---> DEBUGGING: Log hours worked and hourly rate
-        console.log(`DEBUG Payroll for ${employee.id}: totalHoursWorked = ${totalHoursWorked}, hourlyRate = ${hourlyRate}`);
-        
-        // Calculate gross pay based on hours worked and hourly rate
-        const grossPay = totalHoursWorked * hourlyRate;
-        
-        // Initialize deduction variables
+        // Use employee's gross_income and net_income directly for initial generation
+        const grossPay = employee.gross_income ?? 0;
+        const netPay = employee.net_income ?? 0;
+        const totalCalculatedDeductions = Math.max(0, grossPay - netPay); // Calculate difference
+
+        // ---> DEBUGGING: Log hours worked and fetched income
+        console.log(`DEBUG Payroll for ${employee.id}: Using existing income - gross = ${grossPay}, net = ${netPay}, totalHoursWorked = ${totalHoursWorked}`);
+
+        // Clear specific deduction variables as we use the total difference
         let taxDeductions = 0;
         let nhifDeduction = 0;
         let nssfDeduction = 0;
         let housingLevy = 0;
-        let otherStatutoryDeductions = 0;
+        let otherStatutoryDeductions = totalCalculatedDeductions;
         let ewaDeductions = 0;
-        let totalDeductions = 0;
-        let netPay = 0;
-
-        // Only calculate deductions if there is positive gross pay
-        if (grossPay > 0) {
-          // Calculate tax deductions (simplified)
-          // Progressive tax rates for Kenya
-          const calculateTax = (grossAmount: number): number => {
-            // Monthly PAYE rates (2023 KRA rates)
-            if (grossAmount <= 24000) {
-              return 0; // No tax for amounts <= 24,000
-            } else if (grossAmount <= 32333) {
-              return (grossAmount - 24000) * 0.25; // 25% for amounts between 24,001 and 32,333
-            } else if (grossAmount <= 500000) {
-              return 2083.25 + (grossAmount - 32333) * 0.3; // 30% for amounts between 32,334 and 500,000
-            } else if (grossAmount <= 800000) {
-              return 142083.25 + (grossAmount - 500000) * 0.325; // 32.5% for amounts between 500,001 and 800,000
-            } else {
-              return 239583.25 + (grossAmount - 800000) * 0.35; // 35% for amounts over 800,000
-            }
-          };
-          
-          // Calculate NHIF based on gross pay
-          const calculateNHIF = (grossAmount: number): number => {
-            // 2023 NHIF rates
-            if (grossAmount <= 5999) return 150;
-            if (grossAmount <= 7999) return 300;
-            if (grossAmount <= 11999) return 400;
-            if (grossAmount <= 14999) return 500;
-            if (grossAmount <= 19999) return 600;
-            if (grossAmount <= 24999) return 750;
-            if (grossAmount <= 29999) return 850;
-            if (grossAmount <= 34999) return 900;
-            if (grossAmount <= 39999) return 950;
-            if (grossAmount <= 44999) return 1000;
-            if (grossAmount <= 49999) return 1100;
-            if (grossAmount <= 59999) return 1200;
-            if (grossAmount <= 69999) return 1300;
-            if (grossAmount <= 79999) return 1400;
-            if (grossAmount <= 89999) return 1500;
-            if (grossAmount <= 99999) return 1600;
-            return 1700; // Maximum NHIF contribution
-          };
-          
-          // Calculate NSSF (1.5% of gross pay, up to 2,160 KES maximum for Tier I + II)
-          const calculateNSSF = (grossAmount: number): number => {
-            return Math.min(Math.round(grossAmount * 0.015), 2160);
-          };
-          
-          // Calculate housing levy (1.5% of gross pay)
-          const calculateHousingLevy = (grossAmount: number): number => {
-            return Math.round(grossAmount * 0.015);
-          };
-          
-          // Calculate statutory deductions
-          taxDeductions = calculateTax(grossPay);
-          nhifDeduction = calculateNHIF(grossPay);
-          nssfDeduction = calculateNSSF(grossPay);
-          housingLevy = calculateHousingLevy(grossPay);
-          otherStatutoryDeductions = nhifDeduction + nssfDeduction + housingLevy;
-          
-          // Update employee's statutory deductions
-          await this.updateEmployee(employee.id, {
-            statutory_deductions: {
-              nhif: nhifDeduction,
-              nssf: nssfDeduction,
-              tax: taxDeductions,
-              levy: housingLevy
-            }
-          });
-          
-          // Calculate EWA deductions if any
-          const ewaRequests = await this.getEwaRequestsForEmployee(employee.id);
-          ewaDeductions = ewaRequests
-            .filter(req => 
-              req.status === 'disbursed' && 
-              req.disbursedAt && 
-              req.disbursedAt >= periodStart && 
-              req.disbursedAt <= periodEnd
-            )
-            .reduce((total, req) => total + (req.amount || 0), 0);
-          
-          // Calculate net pay
-          totalDeductions = taxDeductions + otherStatutoryDeductions + ewaDeductions;
-          netPay = grossPay - totalDeductions;
-        } else {
-           // If grossPay is 0 or less, ensure all deductions and net pay are 0
-           // Also update employee statutory deductions to 0 for this period
-            await this.updateEmployee(employee.id, {
-              statutory_deductions: {
-                nhif: 0,
-                nssf: 0,
-                tax: 0,
-                levy: 0
-              }
-            });
-        }
         
-        // Create payroll record
+        // Create payroll record using fetched income
         const payroll: InsertPayroll = {
           employeeId: employee.id,
           periodStart,
           periodEnd,
-          hoursWorked: totalHoursWorked,
-          grossPay,
-          ewaDeductions,
-          taxDeductions,
-          otherDeductions: otherStatutoryDeductions,
-          netPay, // Use the calculated netPay (which will be 0 if grossPay <= 0)
+          hoursWorked: totalHoursWorked, // Still use calculated hours
+          grossPay: grossPay, // Use fetched gross income
+          ewaDeductions: 0, // Set to 0 for initial seed
+          taxDeductions: 0, // Set to 0 for initial seed
+          otherDeductions: otherStatutoryDeductions, // Use the calculated difference
+          netPay: netPay, // Use fetched net income
           status: 'processed',
           processedAt: new Date(),
           processedBy: faker.string.uuid(), // Mock processor ID
@@ -1675,18 +1575,23 @@ export class MemStorage implements IStorage {
         await this.createPayroll(payroll);
         recordsCreated++;
         
-        // Update employee's income values based on latest payroll
+        // Update employee's derived values based on fetched income
         await this.updateEmployee(employee.id, {
-          gross_income: grossPay,
-          net_income: netPay, // Use the calculated netPay
-          total_deductions: totalDeductions, // Use the calculated totalDeductions
-          hourlyRate: hourlyRate, // Ensure hourly rate is saved
-          // Set EWA limits based on net pay, ensuring it's not negative
+          // Do NOT update gross_income or net_income as we just read them
+          // Do NOT update hourlyRate in this mode
+          total_deductions: totalCalculatedDeductions, // Update total deductions based on difference
+          statutory_deductions: { // Set statutory breakdown to 0 as we didn't calculate it
+            nhif: 0,
+            nssf: 0,
+            tax: 0,
+            levy: 0
+          },
+          // Set EWA limits based on fetched net pay, ensuring it's not negative
           max_salary_advance_limit: Math.max(0, Math.floor(netPay * 0.5)),
-          available_salary_advance_limit: Math.max(0, Math.floor(netPay * 0.5) - ewaDeductions)
+          available_salary_advance_limit: Math.max(0, Math.floor(netPay * 0.5)) // Assume no prior EWA for initial seed
         });
         
-        console.log(`Created payroll record for employee ${employee.id}: ${grossPay.toFixed(2)} KES gross, ${netPay.toFixed(2)} KES net`);
+        console.log(`Created payroll record for employee ${employee.id}: ${grossPay.toFixed(2)} KES gross, ${netPay.toFixed(2)} KES net (using existing employee data)`);
       } catch (error: any) {
         console.error(`Error creating payroll for employee ${employee.id}: ${error.message}`);
       }

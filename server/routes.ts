@@ -1307,6 +1307,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         endDate = endOfMonth(now);
       }
       
+      console.log("PAYROLL DEBUG: Request query params:", req.query);
+      console.log(`PAYROLL DEBUG: Parsed dates - startDate: ${startDate.toISOString()}, endDate: ${endDate.toISOString()}`);
+      
       // Create a cache key based on the query parameters
       const cacheKey = `payroll:${formatISO(startDate)}:${formatISO(endDate)}`;
       
@@ -1324,6 +1327,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.log(`Fetching payroll from ${formatISO(startDate)} to ${formatISO(endDate)}`);
       
       const payrollRecords = await storage.getPayrollForPeriod(startDate, endDate);
+      console.log(`PAYROLL DEBUG: Found ${payrollRecords.length} payroll records for period`);
+      
+      // Output some payroll records for debugging
+      if (payrollRecords.length > 0) {
+        console.log("PAYROLL DEBUG: First payroll record:", JSON.stringify(payrollRecords[0], null, 2));
+      } else {
+        console.log("PAYROLL DEBUG: No payroll records found");
+      }
       
       // Transform the payroll data to include employee names and departments
       const transformedRecords = await Promise.all(payrollRecords.map(async record => {
@@ -1349,6 +1360,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           employee: employee || undefined
         };
       }));
+      
+      console.log(`PAYROLL DEBUG: Transformed ${transformedRecords.length} records`);
       
       // Cache the result
       cache[cacheKey] = {
@@ -2723,6 +2736,99 @@ export async function registerRoutes(app: Express): Promise<Server> {
       return res.status(500).json({ 
         message: "Failed to fetch EWA deductions", 
         error: error.message || "Unknown error"
+      });
+    }
+  });
+
+  // Temporary endpoint to generate mock payroll data
+  app.get("/api/debug/generate-payroll", async (req, res) => {
+    try {
+      console.log("Generating mock payroll data...");
+      
+      const employees = await storage.getAllActiveEmployees();
+      const startDate = new Date();
+      startDate.setMonth(startDate.getMonth() - 1);  // Previous month
+      const endDate = new Date(); // Current date
+      
+      // Generate mock payroll data
+      const recordsCreated = await (storage as any).generateMockPayrollForEmployees(startDate, endDate);
+      
+      return res.status(200).json({ 
+        message: `Successfully generated ${recordsCreated} payroll records`, 
+        recordsCreated 
+      });
+    } catch (error) {
+      console.error("Error generating mock payroll data:", error);
+      return res.status(500).json({ 
+        message: "Failed to generate mock payroll data", 
+        error: error instanceof Error ? error.message : "Unknown error" 
+      });
+    }
+  });
+
+  // Debugging endpoint to generate payroll records
+  app.get("/api/debug/generate-payroll", async (req, res) => {
+    try {
+      console.log("Generating mock payroll data");
+      
+      // Get all active employees
+      const employees = await storage.getAllActiveEmployees();
+      console.log(`Found ${employees.length} active employees`);
+      
+      if (employees.length === 0) {
+        return res.status(400).json({ message: "No active employees found" });
+      }
+      
+      // Generate reference number
+      const referenceNumber = `PR-MOCK-${Date.now()}`;
+      
+      // Generate payroll for each employee
+      const payrolls = [];
+      for (const employee of employees.slice(0, 5)) { // Limit to first 5 employees for testing
+        const startDate = new Date();
+        startDate.setDate(1); // First day of current month
+        
+        const endDate = new Date();
+        endDate.setMonth(endDate.getMonth() + 1, 0); // Last day of current month
+        
+        const hoursWorked = 160; // Standard 160 hours per month
+        const hourlyRate = employee.hourlyRate || 500; // Default to 500 if not set
+        const grossPay = hoursWorked * hourlyRate;
+        const taxRate = 0.2; // 20% tax rate
+        const taxDeductions = grossPay * taxRate;
+        const netPay = grossPay - taxDeductions;
+        
+        const payroll = await storage.createPayroll({
+          employeeId: employee.id,
+          periodStart: startDate,
+          periodEnd: endDate,
+          hoursWorked,
+          grossPay,
+          netPay,
+          taxDeductions,
+          ewaDeductions: 0,
+          otherDeductions: 0,
+          status: "processed",
+          processedBy: "system",
+          processedAt: new Date(),
+          referenceNumber
+        });
+        
+        payrolls.push(payroll);
+      }
+      
+      // Clear cache
+      (global as any).payrollCache = {};
+      
+      return res.status(200).json({ 
+        message: `Successfully generated ${payrolls.length} payroll records`,
+        payrolls 
+      });
+    } catch (error) {
+      console.error("Error generating mock payroll data:", error);
+      return res.status(500).json({
+        message: "Failed to generate mock payroll data",
+        error: error instanceof Error ? error.message : "Unknown error"
       });
     }
   });

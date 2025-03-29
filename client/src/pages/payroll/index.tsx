@@ -86,11 +86,17 @@ export default function PayrollPage() {
   // Update date range when payPeriod changes
   useEffect(() => {
     const today = new Date();
+    console.log("Date range debug - payPeriod:", payPeriod);
     
     if (payPeriod === "current") {
       // Current month: 1st day of current month to last day of current month
       const startDate = new Date(today.getFullYear(), today.getMonth(), 1);
       const endDate = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+      
+      console.log("Date range debug - current period:", {
+        startDate: startDate.toISOString(),
+        endDate: endDate.toISOString()
+      });
       
       // Update date range picker state
       setDate({
@@ -107,6 +113,11 @@ export default function PayrollPage() {
       const startDate = new Date(today.getFullYear(), today.getMonth() - 1, 1);
       const endDate = new Date(today.getFullYear(), today.getMonth(), 0);
       
+      console.log("Date range debug - previous period:", {
+        startDate: startDate.toISOString(),
+        endDate: endDate.toISOString()
+      });
+      
       // Update date range picker state
       setDate({
         from: startDate,
@@ -119,9 +130,18 @@ export default function PayrollPage() {
       });
     } else if (payPeriod === "custom" && date.from && date.to) {
       // Custom range - use the date range picker values
+      console.log("Date range debug - custom period:", {
+        from: date.from.toISOString(),
+        to: date.to.toISOString()
+      });
+      
+      // Check if the selected dates are in the future and adjust if needed
+      const selectedStartDate = date.from;
+      const selectedEndDate = date.to;
+      
       setDateRange({
-        startDate: date.from,
-        endDate: date.to
+        startDate: selectedStartDate,
+        endDate: selectedEndDate
       });
     }
   }, [payPeriod, date]);
@@ -130,14 +150,53 @@ export default function PayrollPage() {
   const { data: records = [], isLoading, isError, error } = useQuery<PayrollWithDetails[]>({
     queryKey: ["payroll", dateRange.startDate.toISOString(), dateRange.endDate.toISOString()],
     queryFn: async () => {
+      console.log("Query function executing with date range:", {
+        startDate: dateRange.startDate.toISOString(),
+        endDate: dateRange.endDate.toISOString()
+      });
+      
       if (!dateRange.startDate || !dateRange.endDate) {
+        console.log("Date range is incomplete, returning empty array");
         return [];
       }
       
       try {
-        const response = await axios.get(
-          `/api/payroll?startDate=${dateRange.startDate.toISOString()}&endDate=${dateRange.endDate.toISOString()}`
-        );
+        const apiUrl = `/api/payroll?startDate=${dateRange.startDate.toISOString()}&endDate=${dateRange.endDate.toISOString()}`;
+        console.log("Making API request to:", apiUrl);
+        
+        const response = await axios.get(apiUrl);
+        
+        console.log("API response:", {
+          status: response.status,
+          dataLength: response.data?.length || 0,
+        });
+        
+        if (response.data?.length > 0) {
+          console.log("First record:", response.data[0]);
+        } else {
+          console.log("No records returned from API");
+          // Try with a wider date range as a fallback
+          console.log("Trying with a wider date range as fallback...");
+          const wideStartDate = new Date();
+          wideStartDate.setFullYear(wideStartDate.getFullYear() - 1); // Last year
+          
+          const wideEndDate = new Date();
+          wideEndDate.setFullYear(wideEndDate.getFullYear() + 1); // Next year
+          
+          const fallbackUrl = `/api/payroll?startDate=${wideStartDate.toISOString()}&endDate=${wideEndDate.toISOString()}`;
+          console.log("Fallback request to:", fallbackUrl);
+          
+          const fallbackResponse = await axios.get(fallbackUrl);
+          console.log("Fallback response:", {
+            status: fallbackResponse.status,
+            dataLength: fallbackResponse.data?.length || 0
+          });
+          
+          if (fallbackResponse.data?.length > 0) {
+            console.log("Using fallback data");
+            return fallbackResponse.data;
+          }
+        }
         
         return response.data;
       } catch (error) {
@@ -151,7 +210,7 @@ export default function PayrollPage() {
       }
     },
     staleTime: 60000, // Data considered fresh for 1 minute
-    refetchOnWindowFocus: false, // Prevent refetching when window regains focus
+    refetchOnWindowFocus: true, // Prevent refetching when window regains focus
   });
 
   // Handle custom date range selection

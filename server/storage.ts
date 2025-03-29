@@ -603,14 +603,68 @@ export class MemStorage implements IStorage {
     startDate: Date,
     endDate: Date
   ): Promise<Payroll[]> {
+    console.log("DEBUG: getPayrollForPeriod called with:", {
+      startDate: startDate.toISOString(),
+      endDate: endDate.toISOString()
+    });
+    
+    // Format the dates as YYYY-MM-DD for consistent string comparison
     const startDateString = startDate.toISOString().split('T')[0];
     const endDateString = endDate.toISOString().split('T')[0];
-
-    return Array.from(this.payroll.values()).filter((payroll) => {
-      const periodStart = payroll.periodStart.toString().split("T")[0];
-      const periodEnd = payroll.periodEnd.toString().split("T")[0];
-      return periodStart >= startDateString && periodEnd <= endDateString;
+    
+    console.log(`DEBUG: Formatted date strings for comparison:`, {
+      startDateString,
+      endDateString
     });
+    
+    // Get all payroll records
+    const allPayrolls = Array.from(this.payroll.values());
+    console.log(`DEBUG: Found ${allPayrolls.length} total payroll records`);
+    
+    // If no records, return empty array
+    if (allPayrolls.length === 0) {
+      console.log("DEBUG: No payroll records in database");
+      return [];
+    }
+    
+    // Now properly filter based on date ranges
+    const filteredPayrolls = allPayrolls.filter(payroll => {
+      // Handle possible toString() vs direct Date objects
+      const recordStartDate = payroll.periodStart instanceof Date 
+        ? payroll.periodStart 
+        : new Date(String(payroll.periodStart));
+        
+      const recordEndDate = payroll.periodEnd instanceof Date 
+        ? payroll.periodEnd 
+        : new Date(String(payroll.periodEnd));
+      
+      // Format the record dates as YYYY-MM-DD strings
+      const recordStartString = recordStartDate.toISOString().split('T')[0];
+      const recordEndString = recordEndDate.toISOString().split('T')[0];
+      
+      // For debugging
+      if (allPayrolls.length < 10) {
+        console.log(`DEBUG: Record ${payroll.id} dates:`, {
+          recordStartString,
+          recordEndString
+        });
+      }
+      
+      // Include records that overlap with the requested date range:
+      // - Record starts within the range (recordStart >= startDate && recordStart <= endDate)
+      // - Record ends within the range (recordEnd >= startDate && recordEnd <= endDate)
+      // - Record spans the entire range (recordStart <= startDate && recordEnd >= endDate)
+      
+      const startsInRange = recordStartString >= startDateString && recordStartString <= endDateString;
+      const endsInRange = recordEndString >= startDateString && recordEndString <= endDateString;
+      const spansRange = recordStartString <= startDateString && recordEndString >= endDateString;
+      
+      return startsInRange || endsInRange || spansRange;
+    });
+    
+    console.log(`DEBUG: Filtered down to ${filteredPayrolls.length} payroll records within date range`);
+    
+    return filteredPayrolls;
   }
 
   async getPayrollByReferenceNumber(referenceNumber: string): Promise<Payroll[]> {

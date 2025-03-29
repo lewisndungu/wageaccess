@@ -739,10 +739,7 @@ function transformData(data: Array<Record<string, any>>): {
 }
 
 // Extract data with detected headers
-function extractDataWithDetectedHeaders(
-  allRows: Array<Record<string, any>>, 
-  dataRows: Array<Record<string, any>>
-): {
+function extractDataWithDetectedHeaders( allRows: Array<Record<string, any>>, dataRows: Array<Record<string, any>>): {
   transformedData: Array<Record<string, any>>;
   failedRows: Array<{row: Record<string, any>, reason: string}>;
 } {
@@ -855,7 +852,7 @@ function extractDataWithDetectedHeaders(
             targetField === 'loan_deductions' ||
             targetField === 'employer_advances' ||
             targetField === 'jahazii_advances' ||
-            targetField === 'house_allowance' // Include house_allowance for parsing
+            targetField === 'house_allowance'
           ) {
             setNestedValue(transformedRow, targetField, parseNumber(processedValue));
           } else {

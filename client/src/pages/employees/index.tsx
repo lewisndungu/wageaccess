@@ -1,7 +1,7 @@
 import { useState, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, Link } from "react-router-dom";
-import { EmployeeTable } from "@/components/dashboard/EmployeeTable";
+import { EmployeeTable } from "@/components/employees/EmployeeTable";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
@@ -102,7 +102,7 @@ export default function EmployeesPage() {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-[200px]">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>ctive
       </div>
     );
   }
@@ -125,18 +125,11 @@ export default function EmployeesPage() {
         <h1 className="text-2xl font-bold tracking-tight">Employees</h1>
         <div className="flex space-x-2">
           <Link to="/employees/import">
-            <Button variant="outline" size="sm" className="ml-2">
+            <Button className="ml-2">
               <Upload className="mr-2 h-4 w-4" />
               Import Payroll Data
             </Button>
           </Link>
-          <Button
-            onClick={() => navigate("/employees/new")}
-            className="flex items-center"
-          >
-            <UserPlus className="mr-2 h-4 w-4" />
-            New Employee
-          </Button>
         </div>
       </div>
 

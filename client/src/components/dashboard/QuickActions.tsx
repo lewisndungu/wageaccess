@@ -16,14 +16,14 @@ interface QuickActionsProps {
 
 export function QuickActions({ actions }: QuickActionsProps) {
   return (
-    <Card className="bg-white dark:bg-gray-800 rounded-xl shadow-glass dark:shadow-glass-dark">
+    <Card className="bg-white dark:bg-gray-800 rounded-xl">
       <CardContent className="p-4">
-        <div className="space-y-3">
+        <div className="space-y-3 flex gap-x-2 items-center">
           {actions.map((action, index) => (
             <button
               key={index}
               onClick={action.handler}
-              className={`w-full flex items-center justify-between p-3 rounded-lg 
+              className={`!mt-0 w-full flex items-center justify-between p-3 rounded-lg 
                 ${action.isPrimary 
                   ? "bg-primary/10 text-primary hover:bg-primary hover:text-white" 
                   : "bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-secondary hover:text-white"

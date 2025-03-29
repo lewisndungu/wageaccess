@@ -65,7 +65,7 @@ export default function AttendancePage() {
   });
 
   return (
-    <div className="container mx-auto py-6 space-y-6">
+    <>
       <div className="flex justify-between items-center">
         <h1 className="text-3xl font-bold">Attendance Management</h1>
         <div className="flex items-center gap-2">
@@ -118,7 +118,7 @@ export default function AttendancePage() {
       )}
 
       <Tabs value={activeView} onValueChange={setActiveView}>
-        <TabsList>
+        <TabsList className="mt-4">
           <TabsTrigger value="dashboard">
             <BarChart className="h-4 w-4 mr-2" />
             Dashboard
@@ -137,6 +137,6 @@ export default function AttendancePage() {
           <ManagerControls />
         </TabsContent>
       </Tabs>
-    </div>
+    </>
   );
 }

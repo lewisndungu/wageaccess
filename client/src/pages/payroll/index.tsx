@@ -167,14 +167,14 @@ export default function PayrollPage() {
 
   const columns: ColumnDef<Payroll>[] = [
     {
-      accessorKey: "employeeName",
+      accessorKey: "employeeId",
       header: "Employee",
       cell: ({ row }) => {
         const record = row.original;
         return (
           <div className="flex items-center">
             <Avatar className="h-8 w-8 mr-2">
-              <AvatarImage src={record.employee?.profileImage} alt={record.employee?.other_names} />
+              <AvatarImage src={record.employee?.avatar_url} alt={record.employee?.other_names} />
               <AvatarFallback>
                 <User className="h-4 w-4" />
               </AvatarFallback>
@@ -192,7 +192,7 @@ export default function PayrollPage() {
     {
       accessorKey: "hourlyRate",
       header: "Rate",
-      cell: ({ row }) => formatCurrency(row.original.employee?.hourlyRate),
+      cell: ({ row }) => formatCurrency(row.original.employee?.hourlyRate || 0),
     },
     {
       accessorKey: "hoursWorked",
@@ -207,12 +207,12 @@ export default function PayrollPage() {
     {
       accessorKey: "ewaDeductions",
       header: "EWA",
-      cell: ({ row }) => formatCurrency(row.original.ewaDeductions),
+      cell: ({ row }) => formatCurrency(row.original.ewaDeductions || 0),
     },
     {
       accessorKey: "taxDeductions",
       header: "Tax",
-      cell: ({ row }) => formatCurrency(row.original.taxDeductions),
+      cell: ({ row }) => formatCurrency(row.original.taxDeductions || 0),
     },
     {
       accessorKey: "netPay",

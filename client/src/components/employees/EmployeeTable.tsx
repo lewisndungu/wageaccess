@@ -2,7 +2,7 @@ import { useState } from "react";
 import { DataTable } from "@/components/ui/data-table";
 import { useNavigate } from "react-router-dom";
 import { ColumnDef } from "@tanstack/react-table";
-import { User, Phone } from "lucide-react";
+import { User, Phone, Pencil, Eye } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -70,48 +70,28 @@ export function EmployeeTable({ data = [], isLoading }: EmployeeTableProps) {
       },
     },
     {
-      accessorKey: "department",
-      header: "Department",
-      cell: ({ row }: { row: any }) => {
-        const employee = row.original as Employee;
-        return employee.department?.name || "N/A";
-      },
-    },
-    {
       accessorKey: "position",
       header: "Position",
-    },
-    {
-      accessorKey: "contact.phoneNumber",
-      header: "Contact",
-      cell: ({ row }: { row: any }) => {
-        const employee = row.original as Employee;
-        return employee.contact?.phoneNumber || "N/A";
-      },
     },
     {
       id: "actions",
       cell: ({ row }: { row: any }) => {
         const employee = row.original as Employee;
         return (
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" className="h-8 w-8 p-0">
-                <span className="sr-only">Open menu</span>
-                <MoreHorizontal className="h-4 w-4" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={() => handleViewProfile(employee)}>
-                View Profile
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                onClick={() => navigate(`/employees/${employee.id}/edit`)}
-              >
-                Edit Details
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+          <div className="flex gap-x-4">
+            <Button size="sm" onClick={() => handleViewProfile(employee)}>
+              <Eye className="mr-1 h-4 w-4" />
+              View
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => navigate(`/employees/${employee.id}/edit`)}
+            >
+              <Pencil className="mr-1 h-4 w-4" />
+              Edit
+            </Button>
+          </div>
         );
       },
     },
@@ -132,40 +112,37 @@ export function EmployeeTable({ data = [], isLoading }: EmployeeTableProps) {
   }
 
   return (
-    <Card className="">
-        <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList className="grid w-full grid-cols-2 mb-4">
-            <TabsTrigger value="active">Active ({activeCount})</TabsTrigger>
-            <TabsTrigger value="inactive">
-              Inactive ({inactiveCount})
-            </TabsTrigger>
-          </TabsList>
+    <Tabs value={activeTab} onValueChange={setActiveTab}>
+      <TabsList className="grid w-full grid-cols-2 mb-4">
+        <TabsTrigger value="active">Active ({activeCount})</TabsTrigger>
+        <TabsTrigger value="inactive">Inactive ({inactiveCount})</TabsTrigger>
+      </TabsList>
 
-          <TabsContent value="active">
-            <DataTable
-              columns={columns}
-              data={filteredData}
-              searchColumn="other_names"
-              onRowClick={handleViewProfile}
-            />
-          </TabsContent>
+      <Card className="">
+        <TabsContent value="active">
+          <DataTable
+            columns={columns}
+            data={filteredData}
+            searchColumn="other_names"
+            onRowClick={handleViewProfile}
+          />
+        </TabsContent>
 
-          <TabsContent value="inactive">
-            <DataTable
-              columns={columns}
-              data={filteredData}
-              searchColumn={[
-                "other_names",
-                "surname",
-                "employeeNumber",
-                "department.name",
-                "position",
-              ]}
-              onRowClick={handleViewProfile}
-            />
-          </TabsContent>
-        </Tabs>
-      
-    </Card>
+        <TabsContent value="inactive">
+          <DataTable
+            columns={columns}
+            data={filteredData}
+            searchColumn={[
+              "other_names",
+              "surname",
+              "employeeNumber",
+              "department.name",
+              "position",
+            ]}
+            onRowClick={handleViewProfile}
+          />
+        </TabsContent>
+      </Card>
+    </Tabs>
   );
 }

@@ -50,7 +50,7 @@ export function RecentActivity({ filter, limit = 5, activities }: RecentActivity
   const loading = isLoading && !activities;
 
   return (
-    <Card className="bg-white dark:bg-gray-800 rounded-xl shadow-glass dark:shadow-glass-dark h-full relative z-0">
+    <Card className="bg-white dark:bg-gray-800 rounded-xl h-full relative z-0">
       <CardHeader className="p-4 pb-0">
         <div className="flex items-center justify-between">
           <div className="flex space-x-2">
@@ -82,7 +82,7 @@ export function RecentActivity({ filter, limit = 5, activities }: RecentActivity
                   key={activity.id} 
                   className="flex items-start space-x-3 pb-4 mb-4 border-b border-gray-200 dark:border-gray-700 last:border-0 last:mb-0 last:pb-0"
                 >
-                  <div className={`p-2 rounded-full ${getIconColorClass(activity.type)}`}>
+                  <div className={`p-2 flex-shrink-0 rounded-full ${getIconColorClass(activity.type)}`}>
                     <i className={`ri-${activity.icon}`}></i>
                   </div>
                   <div className="flex-1">

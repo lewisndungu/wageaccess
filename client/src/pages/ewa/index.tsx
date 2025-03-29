@@ -13,30 +13,18 @@ import { EWARequestCard } from "@/components/ewa/EWARequestCard";
 import { EWARequestForm } from "@/components/ewa/EWARequestForm";
 import { ewaRequests, formatCurrency, formatDateTime } from "@/lib/mock-data";
 import { BarChart2, CreditCard, Download, FileText, Plus, User, Wallet } from "lucide-react";
-
-interface EWARequest {
-  id: number;
-  employeeId: number;
-  employeeName: string;
-  employeeImage?: string;
-  department: string;
-  requestDate: string;
-  amount: number;
-  status: "pending" | "approved" | "rejected" | "disbursed";
-  reason?: string;
-  processingFee: number;
-}
+import { EwaRequest } from "@shared/schema";
 
 export default function EWAPage() {
   const [activeTab, setActiveTab] = useState("pending");
   
-  const { data, refetch } = useQuery<EWARequest[]>({
+  const { data, refetch } = useQuery<EwaRequest[]>({
     queryKey: ['/api/ewa/requests', { status: activeTab }],
-    initialData: ewaRequests as unknown as EWARequest[],
+    initialData: ewaRequests as unknown as EwaRequest[],
   });
   
   // Create a typed reference to EWA data
-  const requests = data as EWARequest[];
+  const requests = data as EwaRequest[];
   
   const { data: walletData } = useQuery({
     queryKey: ['/api/wallet'],
@@ -44,7 +32,7 @@ export default function EWAPage() {
   });
   
   // Use type guards for filtering
-  const filteredRequests = requests.filter((req): req is EWARequest => {
+  const filteredRequests = requests.filter((req): req is EwaRequest => {
     if (activeTab === "all") return true;
     return req.status === activeTab;
   });
@@ -53,23 +41,23 @@ export default function EWAPage() {
     refetch();
   };
   
-  const columns: ColumnDef<EWARequest>[] = [
+  const columns: ColumnDef<EwaRequest>[] = [
     {
-      accessorKey: "employeeName",
+      accessorKey: "employeeId",
       header: "Employee",
       cell: ({ row }) => {
         const request = row.original;
         return (
           <div className="flex items-center">
             <Avatar className="h-8 w-8 mr-2">
-              <AvatarImage src={request.employeeImage} alt={request.employeeName} />
+              <AvatarImage src={request.employee?.avatar_url} alt={request.employee?.other_names} />
               <AvatarFallback>
                 <User className="h-4 w-4" />
               </AvatarFallback>
             </Avatar>
             <div>
-              <p className="font-medium text-sm">{request.employeeName}</p>
-              <p className="text-xs text-muted-foreground">{request.department}</p>
+              <p className="font-medium text-sm">{request.employee?.other_names}</p>
+              <p className="text-xs text-muted-foreground">{request.employee?.departmentName}</p>
             </div>
           </div>
         );
@@ -78,7 +66,7 @@ export default function EWAPage() {
     {
       accessorKey: "requestDate",
       header: "Request Date",
-      cell: ({ row }) => formatDateTime(row.original.requestDate),
+      cell: ({ row }) => formatDateTime(row.original.requestDate.toString()),
     },
     {
       accessorKey: "amount",
@@ -182,12 +170,12 @@ export default function EWAPage() {
           <CardContent>
             {/* Use the filter with explicit type guard */}
             <div className="text-2xl font-bold">
-              {requests.filter((r): r is EWARequest => r.status === "pending").length}
+              {requests.filter((r): r is EwaRequest => r.status === "pending").length}
             </div>
             <div className="text-sm text-muted-foreground mt-1">
               {formatCurrency(
                 requests
-                  .filter((r): r is EWARequest => r.status === "pending")
+                  .filter((r): r is EwaRequest => r.status === "pending")
                   .reduce((sum, r) => sum + r.amount, 0)
               )} pending approval
             </div>
@@ -202,12 +190,12 @@ export default function EWAPage() {
             <div className="text-2xl font-bold">
               {formatCurrency(
                 requests
-                  .filter((r): r is EWARequest => r.status === "disbursed")
+                  .filter((r): r is EwaRequest => r.status === "disbursed")
                   .reduce((sum, r) => sum + r.amount, 0)
               )}
             </div>
             <div className="text-sm text-muted-foreground mt-1">
-              {requests.filter((r): r is EWARequest => r.status === "disbursed").length} transactions
+              {requests.filter((r): r is EwaRequest => r.status === "disbursed").length} transactions
             </div>
           </CardContent>
         </Card>
@@ -250,13 +238,13 @@ export default function EWAPage() {
             </TabsList>
             
             <TabsContent value="all" className="mt-0">
-              <DataTable columns={columns} data={filteredRequests} searchColumn="employeeName" />
+              <DataTable columns={columns} data={filteredRequests} searchColumn="employeeId" />
             </TabsContent>
             
             <TabsContent value="pending" className="mt-0">
               {filteredRequests.length > 0 ? (
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-                  {filteredRequests.map((request: EWARequest) => (
+                  {filteredRequests.map((request: EwaRequest) => (
                     <EWARequestCard 
                       key={request.id} 
                       request={request} 
@@ -278,7 +266,7 @@ export default function EWAPage() {
             <TabsContent value="approved" className="mt-0">
               {filteredRequests.length > 0 ? (
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-                  {filteredRequests.map((request: EWARequest) => (
+                  {filteredRequests.map((request: EwaRequest) => (
                     <EWARequestCard 
                       key={request.id} 
                       request={request}
@@ -298,7 +286,7 @@ export default function EWAPage() {
             </TabsContent>
             
             <TabsContent value="disbursed" className="mt-0">
-              <DataTable columns={columns} data={filteredRequests} searchColumn="employeeName" />
+              <DataTable columns={columns} data={filteredRequests} searchColumn="employeeId" />
             </TabsContent>
           </Tabs>
         </CardContent>

@@ -407,16 +407,8 @@ export default function EmployeeDetailPage() {
                 <span className="text-sm">{employee.position || 'N/A'}</span>
               </div>
               <div className="flex items-center">
-                <BadgeCheck className="h-4 w-4 mr-2 text-gray-500" />
-                <span className="text-sm">{employee.department?.name || 'N/A'}</span>
-              </div>
-              <div className="flex items-center">
                 <Phone className="h-4 w-4 mr-2 text-gray-500" />
                 <span className="text-sm">{employee.contact?.phoneNumber || 'N/A'}</span>
-              </div>
-              <div className="flex items-center">
-                <Mail className="h-4 w-4 mr-2 text-gray-500" />
-                <span className="text-sm">{employee.contact?.email || 'N/A'}</span>
               </div>
               <div className="flex items-center">
                 <Calendar className="h-4 w-4 mr-2 text-gray-500" />
@@ -425,12 +417,6 @@ export default function EmployeeDetailPage() {
               <div className="flex items-center">
                 <DollarSign className="h-4 w-4 mr-2 text-gray-500" />
                 <span className="text-sm">Salary: {formatCurrency(employee.gross_income || 0)}</span>
-              </div>
-              <div className="flex items-center">
-                <MapPin className="h-4 w-4 mr-2 text-gray-500" />
-                <span className="text-sm">
-                  {employee.address || 'N/A'}
-                </span>
               </div>
             </div>
             
@@ -484,17 +470,6 @@ export default function EmployeeDetailPage() {
                   <div className="space-y-1">
                     <p className="text-sm font-medium text-muted-foreground">Gender</p>
                     <p>{employee.sex ? employee.sex.charAt(0).toUpperCase() + employee.sex.slice(1) : 'N/A'}</p>
-                  </div>
-                  <div className="space-y-1">
-                    <p className="text-sm font-medium text-muted-foreground">Emergency Contact</p>
-                    <p>{employee.emergencyContact ? 
-                        (typeof employee.emergencyContact === 'object' ? 
-                          `${employee.emergencyContact.name}${employee.emergencyContact.relationship ? ` (${employee.emergencyContact.relationship})` : ''}${employee.emergencyContact.phone ? ` - ${employee.emergencyContact.phone}` : ''}` : 
-                          employee.emergencyContact
-                        ) : 
-                        'N/A'
-                      }
-                    </p>
                   </div>
                 </CardContent>
               </Card>

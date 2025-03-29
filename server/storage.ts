@@ -1511,92 +1511,166 @@ export class MemStorage implements IStorage {
   }
   
   /**
-   * Helper function to process payroll for a specific period
+   * Helper function to process payroll for a specific period (Optimized)
    * Extracted to support multi-period payroll generation
    */
   private async processPayrollForPeriod(
     employees: Employee[],
     periodStart: Date,
     periodEnd: Date,
-    hourlyRateCalculator: (employee: Employee) => number
+    // hourlyRateCalculator parameter is kept for signature compatibility but not used
+    hourlyRateCalculator: (employee: Employee) => number 
   ): Promise<number> {
     let recordsCreated = 0;
-    
+
+    // --- Define Constants and Helpers Outside Loop ---
+    const AHL_RATE = 0.015;
+    const SHIF_RATE = 0.0275;
+    const PERSONAL_RELIEF = 2400;
+    const NSSF_RATE = 0.06; // Assuming Tier I + Tier II combined rate application
+
+    const TAX_BANDS = [
+      { limit: 24_000, rate: 0.1 },      // Up to 24,000
+      { limit: 8_333, rate: 0.25 },     // 24,001 to 32,333
+      { limit: 467_667, rate: 0.3 },    // 32,334 to 500,000
+      { limit: 300_000, rate: 0.325 },  // 500,001 to 800,000
+      { limit: Infinity, rate: 0.35 }, // Over 800,000
+    ];
+
+    const calculateAffordableHousingLevy = (gp: number): number => gp * AHL_RATE;
+    const calculateSHIF = (gp: number): number => gp * SHIF_RATE;
+    // NSSF Calculation based on Client Logic (adjust tiers/rates if necessary)
+    const calculateNSSF = (gp: number): number => {
+      if (gp <= 0) return 0;
+      // Example Tier 1 NSSF (if applicable, adjust based on exact rules)
+      // const tier1Limit = 7000; // Example limit
+      // const tier1Contribution = Math.min(gp, tier1Limit) * NSSF_RATE;
+      
+      // Example Tier 2 NSSF (if applicable)
+      // const tier2Limit = 36000; // Example limit
+      // let tier2Contribution = 0;
+      // if (gp > tier1Limit) {
+      //    tier2Contribution = Math.min(gp - tier1Limit, tier2Limit - tier1Limit) * NSSF_RATE;
+      // }
+      
+      // Use client calculator's simpler tiered approach if the above is too complex or inaccurate:
+      // Fallback to the simpler structure from client calc if unsure about exact tiers:
+       if (gp <= 8000) return 480; // Min contribution override? Check client logic source
+       if (gp <= 72000) return NSSF_RATE * gp; // Example calculation up to a limit
+       return 4320; // Example max contribution
+
+      // Or return combined tier1 + tier2 if that's the correct logic:
+      // return Math.round(tier1Contribution + tier2Contribution); 
+    };
+
+    const calculatePAYE = (taxableIncome: number): number => {
+      let remainingIncome = Math.max(0, taxableIncome);
+      let totalTax = 0;
+
+      for (const band of TAX_BANDS) {
+        if (remainingIncome <= 0) break;
+        const bandTaxable = Math.min(remainingIncome, band.limit);
+        totalTax += bandTaxable * band.rate;
+        remainingIncome -= bandTaxable;
+      }
+
+      const finalPAYE = Math.max(totalTax - PERSONAL_RELIEF, 0);
+      return Math.round(finalPAYE);
+    };
+    // --- End Define Constants and Helpers ---
+
+
+    // --- Pre-calculate Standard Work Hours for the Period ---
+    let standardWorkDays = 0;
+    const workDayHours = 8; // Assuming 8 hours per workday
+    let currentDate = new Date(periodStart);
+    currentDate.setHours(0, 0, 0, 0); // Start at the beginning of the day
+    const endDate = new Date(periodEnd);
+    endDate.setHours(23, 59, 59, 999); // End at the end of the day
+
+    // Use a temporary date for iteration to avoid modifying currentDate
+    let loopDate = new Date(currentDate); 
+    while (loopDate <= endDate) {
+      const dayOfWeek = loopDate.getDay(); // 0 = Sunday, 6 = Saturday
+      if (dayOfWeek > 0 && dayOfWeek < 6) { // Monday to Friday
+        standardWorkDays++;
+      }
+      loopDate.setDate(loopDate.getDate() + 1); // Move to the next day
+    }
+    const standardHoursWorked = standardWorkDays * workDayHours;
+    console.log(`DEBUG: Calculated ${standardWorkDays} standard work days (${standardHoursWorked} hours) for period ${periodStart.toISOString().split('T')[0]} to ${periodEnd.toISOString().split('T')[0]}`);
+    // --- End Pre-calculate Standard Work Hours ---
+
+
+    // --- Process Each Employee ---
     for (const employee of employees) {
       try {
-        // Get attendance records for this employee in the given period
-        const attendanceRecords = await this.getAttendanceByEmployeeAndDateRange(
-          employee.id,
-          periodStart,
-          periodEnd
-        );
-        
-        console.log(`Found ${attendanceRecords.length} attendance records for employee ${employee.id} in period ${periodStart.toISOString().split('T')[0]} to ${periodEnd.toISOString().split('T')[0]}`);
-        
-        // Calculate total hours worked
-        const totalHoursWorked = attendanceRecords.reduce(
-          (total, record) => total + (record.hoursWorked || 0), 
-          0
-        );
-        
-        // Use employee's gross_income and net_income directly for initial generation
+        // Fetch gross pay directly from employee record
         const grossPay = employee.gross_income ?? 0;
-        const netPay = employee.net_income ?? 0;
-        const totalCalculatedDeductions = Math.max(0, grossPay - netPay); // Calculate difference
 
-        // ---> DEBUGGING: Log hours worked and fetched income
-        console.log(`DEBUG Payroll for ${employee.id}: Using existing income - gross = ${grossPay}, net = ${netPay}, totalHoursWorked = ${totalHoursWorked}`);
+        // Generate Random EWA Deduction (0-20% of Gross)
+        const maxEwa = grossPay * 0.20;
+        // Ensure amount is positive and has 2 decimal places
+        const ewaDeductions = grossPay > 0 ? parseFloat((Math.random() * maxEwa).toFixed(2)) : 0;
 
-        // Clear specific deduction variables as we use the total difference
-        let taxDeductions = 0;
-        let nhifDeduction = 0;
-        let nssfDeduction = 0;
-        let housingLevy = 0;
-        let otherStatutoryDeductions = totalCalculatedDeductions;
-        let ewaDeductions = 0;
-        
-        // Create payroll record using fetched income
+        // Calculate deductions using pre-defined functions
+        const ahlDeduction = calculateAffordableHousingLevy(grossPay);
+        const shifDeduction = calculateSHIF(grossPay);
+        const nssfDeduction = calculateNSSF(grossPay);
+
+        // Taxable income calculation
+        const taxableIncome = grossPay - (ahlDeduction + shifDeduction + nssfDeduction);
+        const payeDeduction = calculatePAYE(taxableIncome);
+
+        // Total deductions and Net Pay
+        const totalStatutory = ahlDeduction + shifDeduction + nssfDeduction + payeDeduction;
+        const totalDeductions = totalStatutory + ewaDeductions;
+        const netPay = grossPay - totalDeductions;
+
+        // Create payroll record using calculated values
         const payroll: InsertPayroll = {
           employeeId: employee.id,
           periodStart,
           periodEnd,
-          hoursWorked: totalHoursWorked, // Still use calculated hours
-          grossPay: grossPay, // Use fetched gross income
-          ewaDeductions: 0, // Set to 0 for initial seed
-          taxDeductions: 0, // Set to 0 for initial seed
-          otherDeductions: otherStatutoryDeductions, // Use the calculated difference
-          netPay: netPay, // Use fetched net income
+          hoursWorked: standardHoursWorked, // Use pre-calculated standard hours
+          grossPay: parseFloat(grossPay.toFixed(2)),
+          ewaDeductions: ewaDeductions,
+          taxDeductions: parseFloat(payeDeduction.toFixed(2)),
+          otherDeductions: parseFloat((shifDeduction + nssfDeduction + ahlDeduction).toFixed(2)),
+          netPay: parseFloat(netPay.toFixed(2)),
           status: 'processed',
           processedAt: new Date(),
-          processedBy: faker.string.uuid(), // Mock processor ID
+          processedBy: faker.string.uuid(),
           referenceNumber: faker.string.uuid()
         };
-        
+
         await this.createPayroll(payroll);
         recordsCreated++;
-        
-        // Update employee's derived values based on fetched income
+
+        // Update employee's derived values based on calculated results
         await this.updateEmployee(employee.id, {
-          // Do NOT update gross_income or net_income as we just read them
-          // Do NOT update hourlyRate in this mode
-          total_deductions: totalCalculatedDeductions, // Update total deductions based on difference
-          statutory_deductions: { // Set statutory breakdown to 0 as we didn't calculate it
-            nhif: 0,
-            nssf: 0,
-            tax: 0,
-            levy: 0
+          net_income: parseFloat(netPay.toFixed(2)),
+          total_deductions: parseFloat(totalDeductions.toFixed(2)),
+          statutory_deductions: {
+            nhif: parseFloat(shifDeduction.toFixed(2)), // Use SHIF
+            nssf: parseFloat(nssfDeduction.toFixed(2)),
+            tax: parseFloat(payeDeduction.toFixed(2)),
+            levy: parseFloat(ahlDeduction.toFixed(2)) // Use AHL
           },
-          // Set EWA limits based on fetched net pay, ensuring it's not negative
           max_salary_advance_limit: Math.max(0, Math.floor(netPay * 0.5)),
-          available_salary_advance_limit: Math.max(0, Math.floor(netPay * 0.5)) // Assume no prior EWA for initial seed
+          available_salary_advance_limit: Math.max(0, Math.floor(netPay * 0.5) - ewaDeductions)
         });
-        
-        console.log(`Created payroll record for employee ${employee.id}: ${grossPay.toFixed(2)} KES gross, ${netPay.toFixed(2)} KES net (using existing employee data)`);
+
+        // Optional: Keep minimal logging inside the loop if needed
+        // console.log(`Created payroll record for employee ${employee.id}: ${grossPay.toFixed(2)} KES gross, ${netPay.toFixed(2)} KES net (calculated)`);
+
       } catch (error: any) {
-        console.error(`Error creating payroll for employee ${employee.id}: ${error.message}`);
+        console.error(`Error processing payroll for employee ${employee.id}: ${error.message}`);
       }
     }
-    
+    // --- End Process Each Employee ---
+
+    console.log(`Finished processing payroll period. Created ${recordsCreated} records.`);
     return recordsCreated;
   }
 

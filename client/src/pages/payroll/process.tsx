@@ -124,6 +124,8 @@ import {
   CalendarIcon,
   ScrollText,
   Loader2,
+  ClipboardList,
+  Download,
 } from "lucide-react";
 import {
   ChartConfig,
@@ -1951,6 +1953,173 @@ export default function ProcessPayrollPage() {
                         <ChevronRight className="ml-2 h-4 w-4" />
                       </>
                     )}
+                  </Button>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {currentStage === STAGES.EXPORT && (
+          <Card className="overflow-hidden border-0 shadow-lg">
+            <CardHeader className="pb-2 bg-gradient-to-r from-blue-50 to-white dark:from-blue-950/30 dark:to-background">
+              <CardTitle className="text-xl font-bold flex items-center">
+                <FileText className="h-6 w-6 mr-2 text-primary" />
+                Export Payroll
+              </CardTitle>
+              <CardDescription>
+                Export payroll data and generate reports
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="p-6">
+              <div className="space-y-6">
+                {/* Main Content with New Layout */}
+                <div className="grid gap-6 md:grid-cols-12">
+                  {/* Large Payroll Summary Card */}
+                  <Card className="border md:col-span-5 shadow-sm bg-white dark:bg-background flex flex-col">
+                    <CardHeader className="pb-2 border-b bg-gradient-to-r from-slate-50 to-white dark:from-slate-900/50 dark:to-background">
+                      <CardTitle className="text-base font-semibold flex items-center">
+                        <ClipboardList className="h-4 w-4 mr-2 text-primary" />
+                        Payroll Summary
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="p-4 flex-grow">
+                      <div className="space-y-3">
+                        <div className="flex justify-between items-center py-2 border-b border-border/40">
+                          <span className="font-semibold text-muted-foreground">Period</span>
+                          <span className="font-medium">
+                            {formatDate(payPeriod.startDate)} - {formatDate(payPeriod.endDate)}
+                          </span>
+                        </div>
+                        <div className="flex justify-between items-center py-2 border-b border-border/40">
+                          <span className="font-semibold text-muted-foreground">Employees Processed</span>
+                          <span className="font-medium text-lg">{payrollSummary.employeeCount}</span>
+                        </div>
+                        <div className="flex justify-between items-center py-2 border-b border-border/40">
+                          <span className="font-semibold text-muted-foreground">Total Gross</span>
+                          <span className="font-medium text-lg">{formatKES(payrollSummary.totalGrossPay)}</span>
+                        </div>
+                        <div className="flex justify-between items-center py-2 border-b border-border/40">
+                          <span className="font-semibold text-muted-foreground">Total Deductions</span>
+                          <span className="font-medium text-lg">{formatKES(payrollSummary.totalDeductions)}</span>
+                        </div>
+                      </div>
+                    </CardContent>
+                    <div className="mt-auto border-t">
+                      <div className="flex justify-between items-center p-4 bg-green-50 dark:bg-green-900/20 rounded-md m-3">
+                        <span className="font-bold text-green-800 dark:text-green-300">Total Net Pay</span>
+                        <span className="font-bold text-2xl text-green-700 dark:text-green-400">{formatKES(payrollSummary.totalNetPay)}</span>
+                      </div>
+                    </div>
+                  </Card>
+
+                  {/* Export Options Column */}
+                  <div className="md:col-span-7 space-y-4">
+                    <Card className="border shadow-sm bg-gradient-to-b from-white to-blue-50/50 dark:from-background dark:to-blue-950/10">
+                      <CardHeader className="pb-2 border-b">
+                        <CardTitle className="text-base font-semibold flex items-center">
+                          <Download className="h-4 w-4 mr-2 text-primary" />
+                          Export Options
+                        </CardTitle>
+                        <CardDescription>Select your preferred export format</CardDescription>
+                      </CardHeader>
+                      <CardContent className="p-4">
+                        <div className="space-y-3">
+                          <div className="grid grid-cols-1 gap-3">
+                            <Button
+                              onClick={() => handleExport("xlsx")}
+                              className="h-auto py-4 px-4 justify-start rounded-md border-2 hover:border-green-500 hover:bg-green-50 dark:hover:bg-green-950/30 transition-all"
+                              variant="outline"
+                              disabled={isExporting}
+                            >
+                              <div className="flex items-center w-full">
+                                <div className="bg-green-100 dark:bg-green-900/30 p-2 rounded-full mr-4">
+                                  <FileSpreadsheet className="h-5 w-5 text-green-600" />
+                                </div>
+                                <div className="flex flex-col flex-1">
+                                  <span className="font-medium text-base">Excel Spreadsheet</span>
+                                  <span className="text-xs text-muted-foreground mt-1">
+                                    Export detailed payroll data
+                                  </span>
+                                </div>
+                                <ChevronRight className="h-5 w-5 text-muted-foreground/50" />
+                              </div>
+                            </Button>
+
+                            <Button
+                              onClick={() => handleExport("payslips")}
+                              className="h-auto py-4 px-4 justify-start rounded-md border-2 hover:border-blue-500 hover:bg-blue-50 dark:hover:bg-blue-950/30 transition-all"
+                              variant="outline"
+                              disabled={isExporting}
+                            >
+                              <div className="flex items-center w-full">
+                                <div className="bg-blue-100 dark:bg-blue-900/30 p-2 rounded-full mr-4">
+                                  <FileText className="h-5 w-5 text-blue-600" />
+                                </div>
+                                <div className="flex flex-col flex-1">
+                                  <span className="font-medium text-base">Payslips</span>
+                                  <span className="text-xs text-muted-foreground mt-1">
+                                    Generate PDF payslips
+                                  </span>
+                                </div>
+                                <ChevronRight className="h-5 w-5 text-muted-foreground/50" />
+                              </div>
+                            </Button>
+
+                            <Button
+                              onClick={() => handleExport("summary")}
+                              className="h-auto py-4 px-4 justify-start rounded-md border-2 hover:border-purple-500 hover:bg-purple-50 dark:hover:bg-purple-950/30 transition-all"
+                              variant="outline"
+                              disabled={isExporting}
+                            >
+                              <div className="flex items-center w-full">
+                                <div className="bg-purple-100 dark:bg-purple-900/30 p-2 rounded-full mr-4">
+                                  <BarChart className="h-5 w-5 text-purple-600" />
+                                </div>
+                                <div className="flex flex-col flex-1">
+                                  <span className="font-medium text-base">Summary Report</span>
+                                  <span className="text-xs text-muted-foreground mt-1">
+                                    Export summary statistics
+                                  </span>
+                                </div>
+                                <ChevronRight className="h-5 w-5 text-muted-foreground/50" />
+                              </div>
+                            </Button>
+                          </div>
+
+                          {isExporting && (
+                            <div className="flex items-center space-x-2 mt-3 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-md">
+                              <div className="bg-white dark:bg-background p-1 rounded-full">
+                                <RefreshCw className="h-5 w-5 animate-spin text-primary" />
+                              </div>
+                              <span className="text-sm font-medium">
+                                Generating {exportType === "xlsx" ? "spreadsheet" : exportType === "payslips" ? "payslips" : "report"}...
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </div>
+                </div>
+
+                {/* Navigation Buttons */}
+                <div className="flex justify-between items-center py-3 px-4 mt-4">
+                  <Button 
+                    variant="outline" 
+                    onClick={handleBack}
+                    className="font-medium px-5"
+                  >
+                    <ChevronLeft className="mr-2 h-4 w-4" />
+                    Back
+                  </Button>
+
+                  <Button 
+                    className="bg-primary hover:bg-primary/90 text-white font-medium px-6 shadow-md"
+                    onClick={() => window.location.href = "/payroll"}
+                  >
+                    Complete & Return to Payroll
+                    <ChevronRight className="ml-2 h-4 w-4" />
                   </Button>
                 </div>
               </div>

@@ -147,7 +147,7 @@ export default function PayrollPage() {
   }, [payPeriod, date]);
 
   // Fetch payroll data with date filtering
-  const { data: records = [], isLoading, isError, error } = useQuery<PayrollWithDetails[]>({
+  const { data: records = [], isPending: isLoading, isError, error } = useQuery<PayrollWithDetails[]>({
     queryKey: ["payroll", dateRange.startDate.toISOString(), dateRange.endDate.toISOString()],
     queryFn: async () => {
       console.log("Query function executing with date range:", {

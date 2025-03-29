@@ -594,9 +594,25 @@ export class MemStorage implements IStorage {
   }
 
   async getPayrollForEmployee(employeeId: string): Promise<Payroll[]> {
-    return Array.from(this.payroll.values()).filter(
+    const payrolls = Array.from(this.payroll.values()).filter(
       (payroll) => payroll.employeeId === employeeId
     );
+    
+    // Sort payrolls by most recent period first (descending order)
+    payrolls.sort((a, b) => {
+      const aEndDate = a.periodEnd instanceof Date 
+        ? a.periodEnd 
+        : new Date(String(a.periodEnd));
+        
+      const bEndDate = b.periodEnd instanceof Date 
+        ? b.periodEnd 
+        : new Date(String(b.periodEnd));
+      
+      // Sort descending (most recent first)
+      return bEndDate.getTime() - aEndDate.getTime();
+    });
+    
+    return payrolls;
   }
 
   async getPayrollForPeriod(
@@ -664,13 +680,43 @@ export class MemStorage implements IStorage {
     
     console.log(`DEBUG: Filtered down to ${filteredPayrolls.length} payroll records within date range`);
     
+    // Sort payrolls by most recent period first (descending order)
+    filteredPayrolls.sort((a, b) => {
+      const aEndDate = a.periodEnd instanceof Date 
+        ? a.periodEnd 
+        : new Date(String(a.periodEnd));
+        
+      const bEndDate = b.periodEnd instanceof Date 
+        ? b.periodEnd 
+        : new Date(String(b.periodEnd));
+      
+      // Sort descending (most recent first)
+      return bEndDate.getTime() - aEndDate.getTime();
+    });
+    
     return filteredPayrolls;
   }
 
   async getPayrollByReferenceNumber(referenceNumber: string): Promise<Payroll[]> {
-    return Array.from(this.payroll.values()).filter((payroll) => {
+    const payrolls = Array.from(this.payroll.values()).filter((payroll) => {
       return payroll.referenceNumber === referenceNumber;
     });
+    
+    // Sort payrolls by most recent period first (descending order)
+    payrolls.sort((a, b) => {
+      const aEndDate = a.periodEnd instanceof Date 
+        ? a.periodEnd 
+        : new Date(String(a.periodEnd));
+        
+      const bEndDate = b.periodEnd instanceof Date 
+        ? b.periodEnd 
+        : new Date(String(b.periodEnd));
+      
+      // Sort descending (most recent first)
+      return bEndDate.getTime() - aEndDate.getTime();
+    });
+    
+    return payrolls;
   }
 
   async createPayroll(payrollData: InsertPayroll): Promise<Payroll> {
@@ -1335,6 +1381,17 @@ export class MemStorage implements IStorage {
     
     console.log(`Payroll period: ${formattedStartDate} to ${formattedEndDate}`);
     
+    // Check if we're in the current pay period
+    const today = new Date();
+    const currentMonthStart = new Date(today.getFullYear(), today.getMonth(), 1);
+    const currentMonthEnd = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+    
+    // Format current period dates for comparison
+    const currentPeriodStartString = currentMonthStart.toISOString().split('T')[0];
+    const currentPeriodEndString = currentMonthEnd.toISOString().split('T')[0];
+    
+    console.log(`Current pay period: ${currentPeriodStartString} to ${currentPeriodEndString}`);
+    
     // Helper to calculate realistic hourly rate based on position and tenure
     const calculateRealisticHourlyRate = (employee: Employee): number => {
       // Base hourly rates by position category
@@ -1402,7 +1459,21 @@ export class MemStorage implements IStorage {
           currentPeriodEnd.setTime(periodEnd.getTime());
         }
         
-        console.log(`Processing payroll sub-period: ${currentPeriodStart.toISOString().split('T')[0]} to ${currentPeriodEnd.toISOString().split('T')[0]}`);
+        // Check if this period is the current pay period
+        const thisPeriodStartString = currentPeriodStart.toISOString().split('T')[0];
+        const thisPeriodEndString = currentPeriodEnd.toISOString().split('T')[0];
+        
+        // Skip if this is the current pay period
+        if (thisPeriodStartString === currentPeriodStartString && 
+            thisPeriodEndString === currentPeriodEndString) {
+          console.log(`Skipping current pay period (${thisPeriodStartString} to ${thisPeriodEndString})`);
+          // Move to next month
+          currentPeriodStart.setMonth(currentPeriodStart.getMonth() + 1);
+          currentPeriodStart.setDate(1); // First day of next month
+          continue;
+        }
+        
+        console.log(`Processing payroll sub-period: ${thisPeriodStartString} to ${thisPeriodEndString}`);
         
         // Process payroll for this period
         const periodRecordsCreated = await this.processPayrollForPeriod(
@@ -1419,6 +1490,13 @@ export class MemStorage implements IStorage {
         currentPeriodStart.setDate(1); // First day of next month
       }
     } else {
+      // Check if requested period is the current pay period
+      if (formattedStartDate === currentPeriodStartString && 
+          formattedEndDate === currentPeriodEndString) {
+        console.log(`Skipping current pay period (${formattedStartDate} to ${formattedEndDate})`);
+        return 0;
+      }
+      
       // Single period processing
       recordsCreated = await this.processPayrollForPeriod(
         employees,

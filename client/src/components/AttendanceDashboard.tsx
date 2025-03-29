@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Employee } from '@shared/schema';
+import axios from 'axios';
 
 // Define the interface for attendance records
 interface AttendanceRecord {
@@ -25,12 +26,10 @@ const AttendanceDashboard: React.FC = () => {
   const today = new Date();
   const todayFormatted = today.toISOString().split('T')[0];
   
-  const { data: recordsData, isLoading: isLoadingRecords, error: recordsError } = useQuery<AttendanceRecord[]>({
+  const { data: recordsData, isPending: isLoadingRecords, error: recordsError } = useQuery<AttendanceRecord[]>({
     queryKey: ['/api/attendance', startDate || todayFormatted, endDate || todayFormatted, viewType],
     queryFn: async () => {
       const params = new URLSearchParams();
-      // Using a default employeeId if none is provided (this is a critical parameter)
-      params.append('employeeId', '1');
       params.append('startDate', startDate || todayFormatted);
       params.append('endDate', endDate || todayFormatted);
       if (viewType) params.append('viewType', viewType);
@@ -41,60 +40,21 @@ const AttendanceDashboard: React.FC = () => {
       setDebugInfo(prev => prev + '\n' + debugMsg);
       
       try {
-        const response = await fetch(`/api/attendance/all-records?${params.toString()}`);
-        const responseText = await response.text();
+        const response = await axios.get(`/api/attendance?${params.toString()}`);
         
-        if (!response.ok) {
-          const errorMsg = `Failed to fetch attendance records: ${responseText}`;
-          console.error(errorMsg);
-          setDebugInfo(prev => prev + '\n' + errorMsg);
-          throw new Error(errorMsg);
-        }
-        
-        let data;
-        try {
-          data = JSON.parse(responseText);
-        } catch (e) {
-          const parseError = `JSON parse error: ${e}. Response was: ${responseText}`;
-          console.error(parseError);
-          setDebugInfo(prev => prev + '\n' + parseError);
-          throw new Error(parseError);
-        }
-        
-        const successMsg = `Received ${data?.length || 0} attendance records`;
-        console.log(successMsg, data);
+        const successMsg = `Received ${response.data?.length || 0} attendance records`;
+        console.log(successMsg, response.data);
         setDebugInfo(prev => prev + '\n' + successMsg);
-        return data || [];
-      } catch (error) {
-        const errorMsg = `Error fetching attendance data: ${error}`;
+        return response.data;
+      } catch (error: any) {
+        const errorMsg = `Error fetching attendance data: ${error.message || error}`;
         console.error(errorMsg);
         setDebugInfo(prev => prev + '\n' + errorMsg);
         return [];
       }
     },
-    refetchInterval: 10000, // Refetch every 10 seconds
-    staleTime: 5000, // Data stays fresh for 5 seconds
-    placeholderData: [], // Use empty array as placeholder until real data loads
-  });
-
-  const { data: employeesData, isLoading: isLoadingEmployees, error: employeesError } = useQuery<Employee[]>({
-    queryKey: ['/api/employees'],
-    queryFn: async () => {
-      try {
-        const response = await fetch('/api/employees');
-        if (!response.ok) {
-          console.error('Failed to fetch employees:', await response.text());
-          throw new Error('Failed to fetch employees');
-        }
-        const data = await response.json();
-        console.log(`Fetched ${data?.length || 0} employees`);
-        return data;
-      } catch (error) {
-        console.error('Error fetching employees:', error);
-        return [];
-      }
-    },
-    placeholderData: [], // Use empty array as placeholder
+    refetchInterval: 60000, // Refetch every minute
+    staleTime: 60000, // Data stays fresh for 1 minute
   });
 
   // Log errors for debugging
@@ -103,28 +63,7 @@ const AttendanceDashboard: React.FC = () => {
       console.error('Records query error:', recordsError);
       setDebugInfo(prev => prev + '\n' + `Records error: ${recordsError}`);
     }
-    if (employeesError) {
-      console.error('Employees query error:', employeesError);
-      setDebugInfo(prev => prev + '\n' + `Employees error: ${employeesError}`);
-    }
-  }, [recordsError, employeesError]);
-
-  // If either records or employees are loading, show loading state
-  if (isLoadingRecords || isLoadingEmployees) {
-    return (
-      <div className="p-4">
-        <div className="flex justify-between mb-4">
-          <h1 className="text-xl font-semibold">Attendance Dashboard</h1>
-        </div>
-        <div className="flex justify-center items-center h-64">
-          <div className="flex flex-col items-center">
-            <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500 mb-2"></div>
-            <p className="text-gray-600">Loading attendance data...</p>
-          </div>
-        </div>
-      </div>
-    );
-  }
+  }, [recordsError]);
 
   // Use a secure fallback for records data
   const displayRecords = recordsData || [];

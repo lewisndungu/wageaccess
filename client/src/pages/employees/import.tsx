@@ -101,6 +101,7 @@ const EmployeeImportPage: React.FC = () => {
   const [steps, setSteps] = useState(IMPORT_STEPS);
   const [file, setFile] = useState<File | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [isReviewing, setIsReviewing] = useState(false);
   const [processedData, setProcessedData] = useState<ProcessedData | null>(null);
   const [showCancelDialog, setShowCancelDialog] = useState(false);
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
@@ -290,6 +291,7 @@ const EmployeeImportPage: React.FC = () => {
     
     try {
       setIsImporting(true);
+      setIsReviewing(true);
       setShowConfirmDialog(false);
       
       // Filter out excluded rows
@@ -318,6 +320,7 @@ const EmployeeImportPage: React.FC = () => {
       toast.error(`Failed to import employees: ${error instanceof Error ? error.message : 'Unknown error'}`);
     } finally {
       setIsImporting(false);
+      setIsReviewing(false);
     }
   };
 
@@ -604,255 +607,273 @@ const EmployeeImportPage: React.FC = () => {
                 </CardDescription>
               </CardHeader>
               <CardContent className="p-0 pt-2">
-                <div className="p-4 flex flex-wrap items-center gap-3 border-b">
-                  <div className="flex flex-1 items-center gap-2">
-                    <Input
-                      placeholder="Search records..."
-                      value={searchTerm}
-                      onChange={(e) => setSearchTerm(e.target.value)}
-                      className="max-w-xs"
-                    />
+                {isReviewing ? (
+                  <div className="h-[calc(100vh-460px)] min-h-[400px] flex items-center justify-center flex-col gap-4">
+                    <RefreshCw className="h-12 w-12 animate-spin text-primary" />
+                    <p className="text-lg font-medium">Importing employee data...</p>
+                    <p className="text-sm text-muted-foreground">This may take a few seconds.</p>
                   </div>
-                  
-                  <div className="flex items-center gap-2 text-sm">
-                    {processedData && (
-                      <>
-                        <Badge 
-                          variant="outline" 
-                          className={`text-xs cursor-pointer ${!statusFilter ? 'bg-primary text-primary-foreground' : ''}`}
-                          onClick={() => setStatusFilter(null)}
-                        >
-                          All ({processedData.extractedData.length})
-                        </Badge>
-                        
-                        <Badge 
-                          variant="secondary" 
-                          className={`text-xs cursor-pointer ${statusFilter === 'excluded' ? 'ring-2 ring-ring' : ''}`}
-                          onClick={() => setStatusFilter(statusFilter === 'excluded' ? null : 'excluded')}
-                        >
-                          Excluded ({processedData.extractedData.filter(r => r.excluded).length})
-                        </Badge>
-                        
-                        <Badge 
-                          variant="destructive" 
-                          className={`text-xs cursor-pointer ${statusFilter === 'error' ? 'ring-2 ring-ring' : ''}`}
-                          onClick={() => setStatusFilter(statusFilter === 'error' ? null : 'error')}
-                        >
-                          Error ({countRecordsWithStatus('error')})
-                        </Badge>
-                        
-                        <Badge 
-                          variant="warning" 
-                          className={`text-xs cursor-pointer ${statusFilter === 'warning' ? 'ring-2 ring-ring' : ''}`}
-                          onClick={() => setStatusFilter(statusFilter === 'warning' ? null : 'warning')}
-                        >
-                          Warning ({countRecordsWithStatus('warning')})
-                        </Badge>
-                        
-                        <Badge 
-                          variant="success" 
-                          className={`text-xs cursor-pointer ${statusFilter === 'valid' ? 'ring-2 ring-ring' : ''}`}
-                          onClick={() => setStatusFilter(statusFilter === 'valid' ? null : 'valid')}
-                        >
-                          Valid ({countRecordsWithStatus('valid')})
-                        </Badge>
-                      </>
-                    )}
-                  </div>
-                </div>
-                
-                {getFilteredData().length > 0 && statusFilter && (
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="text-destructive border-destructive hover:bg-destructive/10"
-                    onClick={() => setShowBulkDeleteDialog(true)}
-                  >
-                    Delete {getFilteredData().length} filtered records
-                  </Button>
-                )}
-                
-                <div className="h-[calc(100vh-460px)] min-h-[400px]">
-                  <ScrollArea className="h-full">
-                    {processedData && getFilteredData().length > 0 ? (
-                      <Table>
-                        <TableHeader>
-                          <TableRow>
-                            <TableHead className="w-[50px]">
-                              <span className="sr-only">Include</span>
-                            </TableHead>
-                            {TARGET_HEADERS.map((header) => (
-                              <TableHead key={header} className="whitespace-nowrap">
-                                {header}
-                              </TableHead>
-                            ))}
-                            <TableHead>Status</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {getFilteredData().map((row) => {
-                            // Corrected critical error checks for rendering
-                            const hasMissingEmpNo = !getNestedValue(row, 'employeeNumber');
-                            const hasMissingName = !getNestedValue(row, 'other_names') && !getNestedValue(row, 'surname');
-                            const hasCriticalError = hasMissingEmpNo || hasMissingName;
-                            // Check for warnings from backend
-                            const hasWarnings = Array.isArray(row.extractionErrors) && row.extractionErrors.length > 0; 
-                            
-                            return (
-                              <TableRow 
-                                key={row.id}
-                                className={row.excluded ? 'opacity-50 bg-muted/30' : ''}
-                              >
-                                <TableCell>
-                                  <Checkbox
-                                    checked={!row.excluded}
-                                    onCheckedChange={() => toggleRowExclusion(row.id)}
-                                  />
-                                </TableCell>
-                                
-                                {TARGET_HEADERS.map((header) => {
-                                  const fieldPath = HEADER_TO_FIELD_MAP[header];
-                                  const displayValue = getNestedValue(row, fieldPath);
-
-                                  // Determine if THIS SPECIFIC cell contributes to a critical error
-                                  const cellIsEmpNoError = (fieldPath === 'employeeNumber' && hasMissingEmpNo);
-                                  // Name error applies if either name field is missing *and* this is a name field
-                                  const cellIsNameError = ((fieldPath === 'other_names' || fieldPath === 'surname') && hasMissingName);
-                                  const cellHasError = cellIsEmpNoError || cellIsNameError;
-
-                                  return (
-                                    <TableCell key={`${row.id}-${header}`} className="py-2">
-                                      {editingCell && editingCell.rowId === row.id && editingCell.column === header ? (
-                                        <div className="flex gap-2">
-                                          <Input
-                                            value={editingCell.value}
-                                            onChange={(e) => setEditingCell({ ...editingCell, value: e.target.value })}
-                                            className="h-8 min-w-[100px]"
-                                            // Optionally set input type based on field
-                                            type={typeof getNestedValue(row, fieldPath) === 'number' ? 'number' : 'text'}
-                                          />
-                                          <Button size="sm" variant="ghost" onClick={handleCellSave} className="h-8 w-8 p-0">
-                                            <Check className="h-4 w-4" />
-                                          </Button>
-                                          <Button size="sm" variant="ghost" onClick={handleCellEditCancel} className="h-8 w-8 p-0">
-                                            <X className="h-4 w-4" />
-                                          </Button>
-                                        </div>
-                                      ) : (
-                                        <div className="flex items-center justify-between group">
-                                          <span
-                                            className={`truncate max-w-[200px] ${
-                                               cellHasError ? 'text-destructive font-semibold' : '' // Highlight specific error cell
-                                            }`}
-                                            title={String(displayValue)}
-                                          >
-                                            {/* Format the display value */}
-                                            {displayValue !== undefined && displayValue !== null
-                                              ? typeof displayValue === 'number'
-                                                ? Number.isInteger(displayValue)
-                                                  ? displayValue.toString()
-                                                  : displayValue.toFixed(2) // Keep number formatting
-                                                : typeof displayValue === 'boolean'
-                                                ? displayValue
-                                                  ? 'Yes'
-                                                  : 'No'
-                                                : String(displayValue) // Default to string
-                                              : '' /* Render empty string for null/undefined */}
-                                          </span>
-                                          <Button
-                                            size="sm"
-                                            variant="ghost"
-                                            // Pass the current display value to edit function
-                                            onClick={() => handleCellEdit(row.id, header, displayValue)}
-                                            className="opacity-0 group-hover:opacity-100 h-6 w-6 p-0"
-                                            disabled={row.excluded}
-                                          >
-                                            {/* Edit SVG Icon */}
-                                            <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-                                          </Button>
-                                        </div>
-                                      )}
-                                    </TableCell>
-                                  );
-                                })}
-                                
-                                <TableCell>
-                                  <div className="flex items-center gap-2">
-                                    <Badge
-                                      variant={
-                                        row.excluded
-                                          ? 'secondary'
-                                          : hasCriticalError
-                                          ? 'destructive'
-                                          : hasWarnings // Check for warnings
-                                          ? 'warning'
-                                          : 'success'
-                                      }
-                                      title={hasWarnings ? row.extractionErrors?.join('\n') : undefined}
-                                    >
-                                      {row.excluded
-                                        ? 'Excluded'
-                                        : hasCriticalError
-                                        ? 'Error'
-                                        : hasWarnings // Check for warnings
-                                        ? 'Warning'
-                                        : 'Valid'}
-                                    </Badge>
-                                    
-                                    {/* Add this delete button */}
-                                    <Button
-                                      size="sm"
-                                      variant="ghost"
-                                      onClick={() => handleDeleteRow(row.id)}
-                                      className="h-6 w-6 p-0 text-destructive hover:text-destructive hover:bg-destructive/10"
-                                      title="Delete record"
-                                    >
-                                      <svg
-                                        xmlns="http://www.w3.org/2000/svg"
-                                        width="15"
-                                        height="15"
-                                        viewBox="0 0 24 24"
-                                        fill="none"
-                                        stroke="currentColor"
-                                        strokeWidth="2"
-                                        strokeLinecap="round"
-                                        strokeLinejoin="round"
-                                      >
-                                        <path d="M3 6h18"></path>
-                                        <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"></path>
-                                        <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path>
-                                        <line x1="10" y1="11" x2="10" y2="17"></line>
-                                        <line x1="14" y1="11" x2="14" y2="17"></line>
-                                      </svg>
-                                    </Button>
-                                  </div>
-                                </TableCell>
-                              </TableRow>
-                            );
-                          })}
-                        </TableBody>
-                      </Table>
-                    ) : (
-                      <div className="p-8 text-center text-muted-foreground">
-                        {processedData ? 'No matching records found.' : 'No data available.'}
+                ) : (
+                  <>
+                    <div className="p-4 flex flex-wrap items-center gap-3 border-b">
+                      <div className="flex flex-1 items-center gap-2">
+                        <Input
+                          placeholder="Search records..."
+                          value={searchTerm}
+                          onChange={(e) => setSearchTerm(e.target.value)}
+                          className="max-w-xs"
+                        />
                       </div>
+                      
+                      <div className="flex items-center gap-2 text-sm">
+                        {processedData && (
+                          <>
+                            <Badge 
+                              variant="outline" 
+                              className={`text-xs cursor-pointer ${!statusFilter ? 'bg-primary text-primary-foreground' : ''}`}
+                              onClick={() => setStatusFilter(null)}
+                            >
+                              All ({processedData.extractedData.length})
+                            </Badge>
+                            
+                            <Badge 
+                              variant="secondary" 
+                              className={`text-xs cursor-pointer ${statusFilter === 'excluded' ? 'ring-2 ring-ring' : ''}`}
+                              onClick={() => setStatusFilter(statusFilter === 'excluded' ? null : 'excluded')}
+                            >
+                              Excluded ({processedData.extractedData.filter(r => r.excluded).length})
+                            </Badge>
+                            
+                            <Badge 
+                              variant="destructive" 
+                              className={`text-xs cursor-pointer ${statusFilter === 'error' ? 'ring-2 ring-ring' : ''}`}
+                              onClick={() => setStatusFilter(statusFilter === 'error' ? null : 'error')}
+                            >
+                              Error ({countRecordsWithStatus('error')})
+                            </Badge>
+                            
+                            <Badge 
+                              variant="warning" 
+                              className={`text-xs cursor-pointer ${statusFilter === 'warning' ? 'ring-2 ring-ring' : ''}`}
+                              onClick={() => setStatusFilter(statusFilter === 'warning' ? null : 'warning')}
+                            >
+                              Warning ({countRecordsWithStatus('warning')})
+                            </Badge>
+                            
+                            <Badge 
+                              variant="success" 
+                              className={`text-xs cursor-pointer ${statusFilter === 'valid' ? 'ring-2 ring-ring' : ''}`}
+                              onClick={() => setStatusFilter(statusFilter === 'valid' ? null : 'valid')}
+                            >
+                              Valid ({countRecordsWithStatus('valid')})
+                            </Badge>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                    
+                    {getFilteredData().length > 0 && statusFilter && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="text-destructive border-destructive hover:bg-destructive/10"
+                        onClick={() => setShowBulkDeleteDialog(true)}
+                      >
+                        Delete {getFilteredData().length} filtered records
+                      </Button>
                     )}
-                  </ScrollArea>
-                </div>
+                    
+                    <div className="h-[calc(100vh-460px)] min-h-[400px]">
+                      <ScrollArea className="h-full">
+                        {processedData && getFilteredData().length > 0 ? (
+                          <Table>
+                            <TableHeader>
+                              <TableRow>
+                                <TableHead className="w-[50px]">
+                                  <span className="sr-only">Include</span>
+                                </TableHead>
+                                {TARGET_HEADERS.map((header) => (
+                                  <TableHead key={header} className="whitespace-nowrap">
+                                    {header}
+                                  </TableHead>
+                                ))}
+                                <TableHead>Status</TableHead>
+                              </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                              {getFilteredData().map((row) => {
+                                // Corrected critical error checks for rendering
+                                const hasMissingEmpNo = !getNestedValue(row, 'employeeNumber');
+                                const hasMissingName = !getNestedValue(row, 'other_names') && !getNestedValue(row, 'surname');
+                                const hasCriticalError = hasMissingEmpNo || hasMissingName;
+                                // Check for warnings from backend
+                                const hasWarnings = Array.isArray(row.extractionErrors) && row.extractionErrors.length > 0; 
+                                
+                                return (
+                                  <TableRow 
+                                    key={row.id}
+                                    className={row.excluded ? 'opacity-50 bg-muted/30' : ''}
+                                  >
+                                    <TableCell>
+                                      <Checkbox
+                                        checked={!row.excluded}
+                                        onCheckedChange={() => toggleRowExclusion(row.id)}
+                                      />
+                                    </TableCell>
+                                    
+                                    {TARGET_HEADERS.map((header) => {
+                                      const fieldPath = HEADER_TO_FIELD_MAP[header];
+                                      const displayValue = getNestedValue(row, fieldPath);
+
+                                      // Determine if THIS SPECIFIC cell contributes to a critical error
+                                      const cellIsEmpNoError = (fieldPath === 'employeeNumber' && hasMissingEmpNo);
+                                      // Name error applies if either name field is missing *and* this is a name field
+                                      const cellIsNameError = ((fieldPath === 'other_names' || fieldPath === 'surname') && hasMissingName);
+                                      const cellHasError = cellIsEmpNoError || cellIsNameError;
+
+                                      return (
+                                        <TableCell key={`${row.id}-${header}`} className="py-2">
+                                          {editingCell && editingCell.rowId === row.id && editingCell.column === header ? (
+                                            <div className="flex gap-2">
+                                              <Input
+                                                value={editingCell.value}
+                                                onChange={(e) => setEditingCell({ ...editingCell, value: e.target.value })}
+                                                className="h-8 min-w-[100px]"
+                                                // Optionally set input type based on field
+                                                type={typeof getNestedValue(row, fieldPath) === 'number' ? 'number' : 'text'}
+                                              />
+                                              <Button size="sm" variant="ghost" onClick={handleCellSave} className="h-8 w-8 p-0">
+                                                <Check className="h-4 w-4" />
+                                              </Button>
+                                              <Button size="sm" variant="ghost" onClick={handleCellEditCancel} className="h-8 w-8 p-0">
+                                                <X className="h-4 w-4" />
+                                              </Button>
+                                            </div>
+                                          ) : (
+                                            <div className="flex items-center justify-between group">
+                                              <span
+                                                className={`truncate max-w-[200px] ${
+                                                   cellHasError ? 'text-destructive font-semibold' : '' // Highlight specific error cell
+                                                }`}
+                                                title={String(displayValue)}
+                                              >
+                                                {/* Format the display value */}
+                                                {displayValue !== undefined && displayValue !== null
+                                                  ? typeof displayValue === 'number'
+                                                    ? Number.isInteger(displayValue)
+                                                      ? displayValue.toString()
+                                                      : displayValue.toFixed(2) // Keep number formatting
+                                                    : typeof displayValue === 'boolean'
+                                                    ? displayValue
+                                                      ? 'Yes'
+                                                      : 'No'
+                                                    : String(displayValue) // Default to string
+                                                  : '' /* Render empty string for null/undefined */}
+                                              </span>
+                                              <Button
+                                                size="sm"
+                                                variant="ghost"
+                                                // Pass the current display value to edit function
+                                                onClick={() => handleCellEdit(row.id, header, displayValue)}
+                                                className="opacity-0 group-hover:opacity-100 h-6 w-6 p-0"
+                                                disabled={row.excluded}
+                                              >
+                                                {/* Edit SVG Icon */}
+                                                <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                                              </Button>
+                                            </div>
+                                          )}
+                                        </TableCell>
+                                      );
+                                    })}
+                                    
+                                    <TableCell>
+                                      <div className="flex items-center gap-2">
+                                        <Badge
+                                          variant={
+                                            row.excluded
+                                              ? 'secondary'
+                                              : hasCriticalError
+                                              ? 'destructive'
+                                              : hasWarnings // Check for warnings
+                                              ? 'warning'
+                                              : 'success'
+                                          }
+                                          title={hasWarnings ? row.extractionErrors?.join('\n') : undefined}
+                                        >
+                                          {row.excluded
+                                            ? 'Excluded'
+                                            : hasCriticalError
+                                            ? 'Error'
+                                            : hasWarnings // Check for warnings
+                                            ? 'Warning'
+                                            : 'Valid'}
+                                        </Badge>
+                                        
+                                        {/* Add this delete button */}
+                                        <Button
+                                          size="sm"
+                                          variant="ghost"
+                                          onClick={() => handleDeleteRow(row.id)}
+                                          className="h-6 w-6 p-0 text-destructive hover:text-destructive hover:bg-destructive/10"
+                                          title="Delete record"
+                                        >
+                                          <svg
+                                            xmlns="http://www.w3.org/2000/svg"
+                                            width="15"
+                                            height="15"
+                                            viewBox="0 0 24 24"
+                                            fill="none"
+                                            stroke="currentColor"
+                                            strokeWidth="2"
+                                            strokeLinecap="round"
+                                            strokeLinejoin="round"
+                                          >
+                                            <path d="M3 6h18"></path>
+                                            <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"></path>
+                                            <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path>
+                                            <line x1="10" y1="11" x2="10" y2="17"></line>
+                                            <line x1="14" y1="11" x2="14" y2="17"></line>
+                                          </svg>
+                                        </Button>
+                                      </div>
+                                    </TableCell>
+                                  </TableRow>
+                                );
+                              })}
+                            </TableBody>
+                          </Table>
+                        ) : (
+                          <div className="p-8 text-center text-muted-foreground">
+                            {processedData ? 'No matching records found.' : 'No data available.'}
+                          </div>
+                        )}
+                      </ScrollArea>
+                    </div>
+                  </>
+                )}
               </CardContent>
               <CardFooter className="flex justify-between border-t mt-2 pt-6">
                 <Button 
                   variant="outline" 
                   onClick={goToPreviousStep}
+                  disabled={isReviewing}
                 >
                   Back
                 </Button>
                 <Button 
                   onClick={handleConfirmImport} 
                   // Update disabled check to use the corrected function
-                  disabled={!processedData || countCriticalErrors() > 0 || processedData.extractedData.filter(r => !r.excluded).length === 0}
+                  disabled={!processedData || countCriticalErrors() > 0 || processedData.extractedData.filter(r => !r.excluded).length === 0 || isReviewing}
                 >
-                  Import Data
+                  {isReviewing ? (
+                    <>
+                      <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                      Importing...
+                    </>
+                  ) : (
+                    'Import Data'
+                  )}
                 </Button>
               </CardFooter>
             </Card>
@@ -974,7 +995,7 @@ const EmployeeImportPage: React.FC = () => {
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowConfirmDialog(false)}>
+            <Button variant="outline" onClick={() => setShowConfirmDialog(false)} disabled={isImporting}>
               Cancel
             </Button>
             <Button onClick={importData} disabled={isImporting}>

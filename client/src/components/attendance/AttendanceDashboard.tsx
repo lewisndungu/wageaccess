@@ -190,19 +190,6 @@ export function AttendanceDashboard({ records, isLoading = false }: AttendanceDa
     return true;
   });
 
-  // Query to fetch recent attendance events
-  const { data: recentEvents } = useQuery({
-    queryKey: ['/api/attendance/recent-events'],
-    queryFn: async () => {
-      const response = await fetch('/api/attendance/recent-events');
-      if (!response.ok) throw new Error('Failed to fetch recent events');
-      return response.json();
-    },
-    refetchInterval: 5000, // Refetch every 5 seconds
-    staleTime: 2000, // Data stays fresh for 2 seconds
-    initialData: []
-  });
-
   // Query to fetch dashboard statistics
   const { data: dashboardStats } = useQuery({
     queryKey: ['/api/statistics/dashboard'],
@@ -241,17 +228,8 @@ export function AttendanceDashboard({ records, isLoading = false }: AttendanceDa
     }
   });
 
-  console.log({attendanceStats, dashboardStats});
-
   // Use the filtered records as display records
   const displayRecords = filteredRecords || [];
-  
-  // Extract unique departments from the records for the department filter
-  const departments = Array.from(new Set(
-    records
-      .filter(record => record.employee?.department?.name)
-      .map(record => record.employee?.department?.name)
-  )).filter(Boolean) as string[];
 
   // Function to calculate rate change (needs to be defined before metrics)
   function calculateRateChange(currentRate: number, previousRate: number): number {
@@ -706,19 +684,6 @@ export function AttendanceDashboard({ records, isLoading = false }: AttendanceDa
                   />
                 </div>
                 <div className="flex items-center gap-2">
-                  <Select value={selectedDepartment} onValueChange={setSelectedDepartment}>
-                    <SelectTrigger className="w-[180px]">
-                      <SelectValue placeholder="Select department" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All Departments</SelectItem>
-                      {departments.map((dept) => (
-                        <SelectItem key={dept} value={dept}>
-                          {dept}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
                   <div className="flex space-x-2">
                     <Button variant="outline" size="sm" onClick={() => handleExport('csv')}>
                       <FileText className="h-4 w-4 mr-1" />
@@ -742,186 +707,6 @@ export function AttendanceDashboard({ records, isLoading = false }: AttendanceDa
                   <p className="text-muted-foreground">Try adjusting your filters or date range.</p>
                 </div>
               )}
-              
-              {/* Charts Section */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
-                {/* Department Attendance Chart */}
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-lg">Department Attendance</CardTitle>
-                    <CardDescription>Attendance rates by department</CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="h-80">
-                      <Chart
-                        config={{
-                          present: {
-                            label: "Present",
-                            color: "#10B981"
-                          },
-                          late: {
-                            label: "Late",
-                            color: "#F59E0B"
-                          },
-                          absent: {
-                            label: "Absent", 
-                            color: "#EF4444"
-                          }
-                        }}
-                      >
-                        <BarChart
-                          data={departmentData}
-                          margin={{
-                            top: 5,
-                            right: 30,
-                            left: 20,
-                            bottom: 5,
-                          }}
-                        >
-                          <CartesianGrid strokeDasharray="3 3" />
-                          <ChartXAxis dataKey="department" />
-                          <ChartYAxis />
-                          <ChartTooltip />
-                          <ChartLegend />
-                          <ChartBar dataKey="records.filter(r => r.status === 'present').length" fill="#10B981" name="Present" />
-                          <ChartBar dataKey="records.filter(r => r.status === 'late').length" fill="#F59E0B" name="Late" />
-                          <ChartBar dataKey="records.filter(r => r.status === 'absent').length" fill="#EF4444" name="Absent" />
-                        </BarChart>
-                      </Chart>
-                    </div>
-                  </CardContent>
-                </Card>
-                
-                {/* Attendance Trend Chart */}
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-lg">Attendance Trend</CardTitle>
-                    <CardDescription>Attendance rate over time</CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="h-80">
-                      <Chart
-                        config={{
-                          rate: {
-                            label: "Attendance Rate (%)",
-                            color: "#3B82F6"
-                          }
-                        }}
-                      >
-                        <AreaChart
-                          data={trendData}
-                          margin={{
-                            top: 5,
-                            right: 30,
-                            left: 20,
-                            bottom: 5,
-                          }}
-                        >
-                          <CartesianGrid strokeDasharray="3 3" />
-                          <ChartXAxis dataKey="date" />
-                          <ChartYAxis />
-                          <ChartTooltip />
-                          <ChartLegend />
-                          <ChartArea
-                            type="monotone"
-                            dataKey="rate"
-                            stroke="#3B82F6"
-                            fill="#3B82F6"
-                            fillOpacity={0.2}
-                            name="Attendance Rate (%)"
-                          />
-                        </AreaChart>
-                      </Chart>
-                    </div>
-                  </CardContent>
-                </Card>
-                
-                {/* Check-in Hours Chart */}
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-lg">Peak Check-in Hours</CardTitle>
-                    <CardDescription>Distribution of check-in times</CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="h-80">
-                      <Chart
-                        config={{
-                          count: {
-                            label: "Check-ins",
-                            color: "#3B82F6"
-                          }
-                        }}
-                      >
-                        <BarChart
-                          data={timeDistributionData}
-                          margin={{
-                            top: 5,
-                            right: 30,
-                            left: 20,
-                            bottom: 5,
-                          }}
-                        >
-                          <CartesianGrid strokeDasharray="3 3" />
-                          <ChartXAxis dataKey="hour" />
-                          <ChartYAxis />
-                          <ChartTooltip />
-                          <ChartLegend />
-                          <ChartBar dataKey="count" fill="#3B82F6" name="Check-ins" />
-                        </BarChart>
-                      </Chart>
-                    </div>
-                  </CardContent>
-                </Card>
-                
-                {/* Status Distribution Chart */}
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-lg">Attendance Status</CardTitle>
-                    <CardDescription>Distribution of attendance statuses</CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="h-80 flex items-center justify-center">
-                      <Chart
-                        config={{
-                          present: {
-                            label: "Present",
-                            color: "#10B981"
-                          },
-                          late: {
-                            label: "Late",
-                            color: "#F59E0B"
-                          },
-                          absent: {
-                            label: "Absent", 
-                            color: "#EF4444"
-                          }
-                        }}
-                      >
-                        <PieChart>
-                          <ChartPie
-                            data={[
-                              { name: 'Present', value: metrics.present, key: "present" },
-                              { name: 'Late', value: metrics.late, key: "late" },
-                              { name: 'Absent', value: metrics.absent, key: "absent" },
-                            ]}
-                            cx="50%"
-                            cy="50%"
-                            labelLine={false}
-                            outerRadius={80}
-                            dataKey="value"
-                            nameKey="name"
-                            label={({ name, percent }: {name: string, percent: number}) => 
-                              `${name}: ${(percent * 100).toFixed(0)}%`
-                            }
-                          />
-                          <ChartTooltip />
-                          <ChartLegend />
-                        </PieChart>
-                      </Chart>
-                    </div>
-                  </CardContent>
-                </Card>
-              </div>
             </TabsContent>
 
             <TabsContent value="weekly" className="p-4 text-center text-muted-foreground">

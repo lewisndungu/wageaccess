@@ -2313,16 +2313,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
         };
       });
       
+      // Flush all data before importing new ones
+      await storage.flushAllData();
+      
       // Import the employees
       // @ts-ignore
       const addedCount = await storage.addEmployees(formattedData);
       
       console.log(`Successfully imported ${addedCount} employees`);
       
+      // Generate mock data for the newly imported employees
+      console.log('Generating mock data for the newly imported employees...');
+      const mockDataResults = await storage.generateAllMockDataForEmployees(30);
+      
+      console.log(`Mock data generation results: 
+        - ${mockDataResults.attendanceRecords} attendance records
+        - ${mockDataResults.payrollRecords} payroll records
+        - ${mockDataResults.ewaRequests} EWA requests`);
+      
       return res.status(200).json({ 
         success: true, 
-        message: `Successfully imported ${addedCount} employees`,
-        count: addedCount
+        message: `Successfully imported ${addedCount} employees and generated mock data`,
+        count: addedCount,
+        mockData: mockDataResults
       });
     } catch (error) {
       console.error('Error importing employees from file:', error);
@@ -2382,6 +2395,60 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.error('Error fetching employee by number:', error);
       return res.status(500).json({ 
         message: "Failed to fetch employee", 
+        error: error instanceof Error ? error.message : "Unknown error"
+      });
+    }
+  });
+
+  // Manual clock-out endpoint for attendance
+  app.post("/api/attendance/:id/clock-out", async (req, res) => {
+    try {
+      const id = ensureStringId(req.params.id);
+      const clockOutTime = req.body.clockOutTime || new Date();
+      
+      // Get the attendance record
+      const attendanceRecord = await storage.getAttendance(id);
+      
+      if (!attendanceRecord) {
+        return res.status(404).json({ message: "Attendance record not found" });
+      }
+      
+      if (!attendanceRecord.clockInTime) {
+        return res.status(400).json({ message: "Cannot clock out without clocking in first" });
+      }
+      
+      if (attendanceRecord.clockOutTime) {
+        return res.status(400).json({ message: "Employee has already clocked out" });
+      }
+      
+      // Calculate hours worked
+      const clockIn = new Date(attendanceRecord.clockInTime);
+      const clockOut = new Date(clockOutTime);
+      const hoursWorked = differenceInHours(clockOut, clockIn) + (differenceInMinutes(clockOut, clockIn) % 60) / 60;
+      
+      // Update attendance record with clock out time and hours worked
+      const updatedRecord = await storage.updateAttendance(id, {
+        clockOutTime: clockOut,
+        hoursWorked: hoursWorked,
+        notes: attendanceRecord.notes ? 
+          `${attendanceRecord.notes}; Manually clocked out by manager` : 
+          'Manually clocked out by manager'
+      });
+      
+      // Transform the updated record to match the schema
+      const employee = await storage.getEmployeeWithDetails(updatedRecord.employeeId);
+      const transformedRecord = transformAttendanceRecord(updatedRecord, employee);
+      
+      return res.status(200).json({
+        success: true,
+        message: "Employee successfully clocked out",
+        attendance: transformedRecord
+      });
+    } catch (error) {
+      console.error('Error manually clocking out employee:', error);
+      return res.status(500).json({ 
+        success: false,
+        message: "Failed to clock out employee", 
         error: error instanceof Error ? error.message : "Unknown error"
       });
     }

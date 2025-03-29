@@ -23,6 +23,7 @@ import { Link } from "react-router-dom";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Employee as SchemaEmployee, Attendance } from "@shared/schema";
 import { convertServerEmployee } from "@/lib/store";
+import axios from "axios";
 
 export default function AttendancePage() {
   const [activeView, setActiveView] = useState<string>("dashboard");
@@ -38,19 +39,26 @@ export default function AttendancePage() {
     queryFn: async () => {
       try {
         console.log("Fetching attendance records...");
-        const response = await fetch("/api/attendance");
+        try {
+          const response = await axios.get("/api/attendance");
 
-        if (!response.ok) {
-          const errorText = await response.text();
-          console.error("Attendance API error:", response.status, errorText);
-          throw new Error(
-            `Failed to fetch attendance records: ${response.status} ${errorText}`
+          if (response.status !== 200) {
+            console.error("Attendance API error:", response.status, response.data);
+            throw new Error(
+              `Failed to fetch attendance records: ${response.status} ${response.data}`
+            );
+          }
+
+          const data = response.data;
+          console.log("Attendance data received:", data);
+          return data;
+        } catch (error: any) {
+          console.error("Error fetching attendance data:", error);
+          setError(
+            error instanceof Error ? error.message : "Unknown error occurred"
           );
+          return [];
         }
-
-        const data = await response.json();
-        console.log("Attendance data received:", data);
-        return data;
       } catch (error) {
         console.error("Error fetching attendance data:", error);
         setError(
@@ -59,7 +67,7 @@ export default function AttendancePage() {
         return [];
       }
     },
-    staleTime: 5000, // Data stays fresh for 5 seconds
+    staleTime: 60000, // Data stays fresh for 1 minute
     refetchOnMount: true, // Refetch when component mounts
     refetchOnWindowFocus: true, // Refetch when window gets focus
   });
@@ -92,28 +100,6 @@ export default function AttendancePage() {
           <AlertCircle className="h-4 w-4" />
           <AlertTitle>Error</AlertTitle>
           <AlertDescription>{error}</AlertDescription>
-        </Alert>
-      )}
-
-      {isLoading && (
-        <div className="p-4 text-center">
-          <div className="animate-spin w-6 h-6 border-2 border-primary border-t-transparent rounded-full mx-auto mb-2"></div>
-          <p>Loading attendance records...</p>
-        </div>
-      )}
-
-      {!isLoading && records?.length === 0 && (
-        <Alert>
-          <AlertCircle className="h-4 w-4" />
-          <AlertTitle>No Records Found</AlertTitle>
-          <AlertDescription>
-            There are no attendance records available. This could be because:
-            <ul className="list-disc ml-6 mt-2">
-              <li>No attendance has been recorded yet</li>
-              <li>The API endpoint isn't returning data correctly</li>
-              <li>The database is empty</li>
-            </ul>
-          </AlertDescription>
         </Alert>
       )}
 

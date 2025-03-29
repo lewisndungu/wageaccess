@@ -602,8 +602,8 @@ export class MemStorage implements IStorage {
     startDate: Date,
     endDate: Date
   ): Promise<Payroll[]> {
-    const startDateString = startDate.toISOString().split("T")[0];
-    const endDateString = endDate.toISOString().split("T")[0];
+    const startDateString = startDate.toISOString().split('T')[0];
+    const endDateString = endDate.toISOString().split('T')[0];
 
     return Array.from(this.payroll.values()).filter((payroll) => {
       const periodStart = payroll.periodStart.toString().split("T")[0];
@@ -941,6 +941,26 @@ export class MemStorage implements IStorage {
     let addedCount = 0;
     console.log(`Processing ${employeesData.length} employees for import`);
 
+    // Generate a spread of start dates for employees to make data more realistic
+    const generateStartDate = (): Date => {
+      // Generate start dates mostly within the last 3 years, with some longer tenured employees
+      const yearsAgo = faker.helpers.weightedArrayElement([
+        { weight: 50, value: faker.number.int({ min: 0, max: 1 }) }, // 0-1 years ago (50% probability)
+        { weight: 30, value: faker.number.int({ min: 1, max: 3 }) }, // 1-3 years ago (30% probability)
+        { weight: 15, value: faker.number.int({ min: 3, max: 5 }) }, // 3-5 years ago (15% probability)
+        { weight: 5, value: faker.number.int({ min: 5, max: 10 }) }  // 5-10 years ago (5% probability)
+      ]);
+      
+      const date = new Date();
+      date.setFullYear(date.getFullYear() - yearsAgo);
+      
+      // Add random offset in days within the selected year
+      const daysOffset = faker.number.int({ min: 0, max: 364 });
+      date.setDate(date.getDate() - daysOffset);
+      
+      return date;
+    };
+
     for (const empData of employeesData) {
       try {
         // Create employee directly from the provided data with defaults
@@ -993,8 +1013,8 @@ export class MemStorage implements IStorage {
           documents: empData.documents || {},
           crb_reports: empData.crb_reports || {},
           avatar_url: empData.avatar_url,
-          hourlyRate: empData.hourlyRate || 0,
-          startDate: empData.startDate,
+          hourlyRate: empData.hourlyRate || faker.number.int({ min: 300, max: 1200 }), // Ensure hourly rate is set
+          startDate: empData.startDate || generateStartDate(), // Use realistic start date
           active: empData.status ? !["inactive", "terminated", "resigned"].includes(empData.status.toLowerCase()) : true,
           house_allowance: empData.house_allowance || 0,
         };
@@ -1010,6 +1030,687 @@ export class MemStorage implements IStorage {
 
     console.log(`Completed processing. Added ${addedCount} new employees.`);
     return addedCount;
+  }
+
+  /**
+   * Generates mock attendance data for all employees for the specified number of days
+   * @param days Number of days to generate attendance for (default 30)
+   * @returns Number of attendance records created
+   */
+  async generateMockAttendanceForEmployees(days: number = 30): Promise<number> {
+    const employees = await this.getAllEmployees();
+    console.log(`Generating mock attendance for ${employees.length} employees for ${days} days`);
+    
+    const today = new Date();
+    let recordsCreated = 0;
+    
+    // Constants for attendance generation
+    const WORK_START_HOUR = 8;
+    const WORK_END_HOUR = 17;
+    const LATE_THRESHOLD_MINUTES = 15;
+    const ATTENDANCE_RATE = 0.92; // 92% attendance rate
+    const LATE_RATE = 0.15; // 15% chance of being late
+    const LEAVE_RATE = 0.05; // 5% chance of being on leave
+    
+    // Generate patterns for each employee to make attendance data more realistic
+    const employeePatterns = new Map<string, {
+      punctuality: number; // 0-1 where higher means more punctual
+      attendanceRate: number; // 0-1 where higher means more likely to attend
+      leaveDates: Date[]; // Specific dates for planned leave
+    }>();
+    
+    // Generate patterns for each employee
+    employees.forEach(employee => {
+      const punctuality = faker.number.float({ min: 0.7, max: 1 }); // Individual punctuality level
+      const attendanceRate = faker.number.float({ min: 0.85, max: 0.98 }); // Individual attendance rate
+      
+      // Generate 0-2 leave periods of 1-3 days each within the time period
+      const leaveDates: Date[] = [];
+      const leavePeriodsCount = faker.number.int({ min: 0, max: 2 });
+      
+      for (let i = 0; i < leavePeriodsCount; i++) {
+        const leaveStartDay = faker.number.int({ min: 0, max: days - 3 });
+        const leaveDuration = faker.number.int({ min: 1, max: 3 });
+        
+        for (let d = 0; d < leaveDuration; d++) {
+          const leaveDate = new Date(today);
+          leaveDate.setDate(leaveDate.getDate() - (leaveStartDay + d));
+          
+          // Skip weekends for leave dates
+          if (leaveDate.getDay() !== 0 && leaveDate.getDay() !== 6) {
+            leaveDates.push(leaveDate);
+          }
+        }
+      }
+      
+      employeePatterns.set(employee.id, {
+        punctuality,
+        attendanceRate,
+        leaveDates
+      });
+    });
+    
+    console.log(`Generated attendance patterns for ${employeePatterns.size} employees`);
+    
+    // Helper function to generate random clock in/out times
+    const generateWorkingHours = (date: Date, employeeId: string): { clockIn: Date | undefined; clockOut: Date | undefined; status: string } => {
+      const pattern = employeePatterns.get(employeeId);
+      
+      if (!pattern) {
+        return { clockIn: undefined, clockOut: undefined, status: 'absent' };
+      }
+      
+      // Check if this is a planned leave date
+      const isLeaveDate = pattern.leaveDates.some(leaveDate => 
+        leaveDate.getFullYear() === date.getFullYear() &&
+        leaveDate.getMonth() === date.getMonth() &&
+        leaveDate.getDate() === date.getDate()
+      );
+      
+      if (isLeaveDate) {
+        return { clockIn: undefined, clockOut: undefined, status: 'leave' };
+      }
+      
+      // Random chance of absence based on employee's attendance rate
+      if (Math.random() > pattern.attendanceRate) {
+        return { clockIn: undefined, clockOut: undefined, status: 'absent' };
+      }
+      
+      // Determine if employee is late based on their punctuality
+      const isLate = Math.random() > pattern.punctuality;
+      
+      const clockIn = new Date(date);
+      if (isLate) {
+        // Late arrival - between 8:15 AM and 9:30 AM
+        clockIn.setHours(
+          WORK_START_HOUR, 
+          LATE_THRESHOLD_MINUTES + faker.number.int({ min: 0, max: 75 }), 
+          faker.number.int({ min: 0, max: 59 })
+        );
+      } else {
+        // Punctual arrival - between 7:45 AM and 8:15 AM
+        clockIn.setHours(
+          WORK_START_HOUR, 
+          faker.number.int({ min: -15, max: LATE_THRESHOLD_MINUTES }), 
+          faker.number.int({ min: 0, max: 59 })
+        );
+      }
+      
+      // Clock out time varies but generally 8-10 hours after clock in
+      const workDuration = faker.number.float({ min: 7.75, max: 9.5 });
+      const clockOut = new Date(clockIn);
+      clockOut.setTime(clockIn.getTime() + workDuration * 60 * 60 * 1000);
+      
+      return { 
+        clockIn, 
+        clockOut, 
+        status: isLate ? 'late' : 'present' 
+      };
+    };
+    
+    // Helper function to calculate hours worked
+    const calculateHoursWorked = (clockIn: Date | undefined, clockOut: Date | undefined): number => {
+      if (!clockIn || !clockOut) return 0;
+      
+      const diffMs = clockOut.getTime() - clockIn.getTime();
+      return parseFloat((diffMs / (1000 * 60 * 60)).toFixed(2));
+    };
+    
+    // Prepare batch of days for processing
+    const daysToProcess = Array.from({ length: days }, (_, i) => {
+      const date = new Date(today);
+      date.setDate(date.getDate() - (days - 1) + i);
+      return date;
+    });
+    
+    // Log the date range for attendance generation
+    const startDate = daysToProcess[0];
+    const endDate = daysToProcess[daysToProcess.length - 1];
+    console.log(`Generating attendance from ${startDate.toISOString().split('T')[0]} to ${endDate.toISOString().split('T')[0]}`);
+    
+    // Process each day
+    for (const date of daysToProcess) {
+      // Skip weekends
+      const dayOfWeek = date.getDay();
+      if (dayOfWeek === 0 || dayOfWeek === 6) continue;
+      
+      console.log(`Generating attendance for ${date.toISOString().split('T')[0]}`);
+      
+      // Process each employee for this day
+      for (const employee of employees) {
+        // Skip inactive employees
+        if (!employee.active) continue;
+        
+        try {
+          const { clockIn, clockOut, status } = generateWorkingHours(date, employee.id);
+          const hoursWorked = calculateHoursWorked(clockIn, clockOut);
+          
+          let notes: string | undefined;
+          
+          if (status === 'absent') {
+            notes = faker.helpers.maybe(() => 
+              faker.helpers.arrayElement([
+                'Sick leave', 
+                'Personal emergency', 
+                'Family event', 
+                'Appointment',
+                'Transportation issues'
+              ]), { probability: 0.7 });
+          } else if (status === 'leave') {
+            notes = faker.helpers.arrayElement([
+              'Annual leave',
+              'Maternity leave',
+              'Paternity leave',
+              'Compassionate leave',
+              'Study leave'
+            ]);
+          }
+          
+          const attendance: InsertAttendance = {
+            employeeId: employee.id,
+            date: new Date(date),
+            clockInTime: clockIn,
+            clockOutTime: clockOut,
+            status,
+            hoursWorked,
+            geoLocation: clockIn ? {
+              latitude: faker.location.latitude(),
+              longitude: faker.location.longitude(),
+            } : {},
+            notes
+          };
+          
+          await this.createAttendance(attendance);
+          recordsCreated++;
+        } catch (error: any) {
+          console.error(`Error creating attendance for employee ${employee.id} on ${date.toISOString().split('T')[0]}: ${error.message}`);
+        }
+      }
+    }
+    
+    // Log summary stats
+    console.log(`Successfully created ${recordsCreated} attendance records`);
+    
+    // Calculate attendance percentages
+    const allAttendance = await this.getAllAttendance();
+    const totalRecords = allAttendance.length;
+    const presentCount = allAttendance.filter(a => a.status === 'present').length;
+    const lateCount = allAttendance.filter(a => a.status === 'late').length;
+    const absentCount = allAttendance.filter(a => a.status === 'absent').length;
+    const leaveCount = allAttendance.filter(a => a.status === 'leave').length;
+    
+    console.log(`Attendance statistics:`);
+    console.log(`- Present: ${presentCount} (${(presentCount / totalRecords * 100).toFixed(1)}%)`);
+    console.log(`- Late: ${lateCount} (${(lateCount / totalRecords * 100).toFixed(1)}%)`);
+    console.log(`- Absent: ${absentCount} (${(absentCount / totalRecords * 100).toFixed(1)}%)`);
+    console.log(`- On leave: ${leaveCount} (${(leaveCount / totalRecords * 100).toFixed(1)}%)`);
+    
+    return recordsCreated;
+  }
+
+  /**
+   * Generates mock payroll data for all employees based on attendance records
+   * @param periodStart Start date for the payroll period
+   * @param periodEnd End date for the payroll period
+   * @returns Number of payroll records created
+   */
+  async generateMockPayrollForEmployees(
+    periodStart: Date = new Date(new Date().setDate(1)), // Default to first day of current month
+    periodEnd: Date = new Date() // Default to today
+  ): Promise<number> {
+    const employees = await this.getAllActiveEmployees();
+    console.log(`Generating mock payroll for ${employees.length} active employees`);
+    
+    let recordsCreated = 0;
+    
+    // Format dates for consistent comparison
+    const formattedStartDate = periodStart.toISOString().split('T')[0];
+    const formattedEndDate = periodEnd.toISOString().split('T')[0];
+    
+    console.log(`Payroll period: ${formattedStartDate} to ${formattedEndDate}`);
+    
+    // Helper to calculate realistic hourly rate based on position and tenure
+    const calculateRealisticHourlyRate = (employee: Employee): number => {
+      // Base hourly rates by position category
+      const baseRatesByPosition: Record<string, number> = {
+        'intern': 200,
+        'trainee': 250,
+        'assistant': 300,
+        'officer': 400,
+        'specialist': 500,
+        'coordinator': 550,
+        'supervisor': 600,
+        'manager': 800,
+        'senior manager': 1000,
+        'director': 1500,
+        'executive': 2000,
+        'ceo': 3000,
+        'default': 400 // Default rate if position doesn't match any category
+      };
+      
+      // Find the closest matching position category
+      const position = (employee.position || '').toLowerCase();
+      let baseRate = baseRatesByPosition.default;
+      
+      for (const [key, rate] of Object.entries(baseRatesByPosition)) {
+        if (position.includes(key)) {
+          baseRate = rate;
+          break;
+        }
+      }
+      
+      // Calculate tenure in years
+      let tenureYears = 0;
+      if (employee.startDate) {
+        const startDate = new Date(employee.startDate);
+        const today = new Date();
+        tenureYears = (today.getFullYear() - startDate.getFullYear()) + 
+                     (today.getMonth() - startDate.getMonth()) / 12;
+      }
+      
+      // Apply tenure bonus (up to 50% increase for 10+ years)
+      const tenureMultiplier = 1 + Math.min(tenureYears, 10) * 0.05; // 5% per year up to 10 years
+      
+      // Apply some random variation (+/- 10%)
+      const variationMultiplier = faker.number.float({ min: 0.9, max: 1.1 });
+      
+      // Calculate final hourly rate
+      return Math.round(baseRate * tenureMultiplier * variationMultiplier);
+    };
+    
+    // Generate multiple payroll periods if needed
+    const generateMultiplePeriods = periodStart.getMonth() !== periodEnd.getMonth();
+    
+    // If spanning multiple months, create separate payroll records for each month
+    if (generateMultiplePeriods) {
+      const currentPeriodStart = new Date(periodStart);
+      
+      while (currentPeriodStart < periodEnd) {
+        // Calculate period end (last day of current month)
+        const currentPeriodEnd = new Date(currentPeriodStart);
+        currentPeriodEnd.setMonth(currentPeriodEnd.getMonth() + 1);
+        currentPeriodEnd.setDate(0); // Set to last day of month
+        
+        // If current period end exceeds overall end, cap it
+        if (currentPeriodEnd > periodEnd) {
+          currentPeriodEnd.setTime(periodEnd.getTime());
+        }
+        
+        console.log(`Processing payroll sub-period: ${currentPeriodStart.toISOString().split('T')[0]} to ${currentPeriodEnd.toISOString().split('T')[0]}`);
+        
+        // Process payroll for this period
+        const periodRecordsCreated = await this.processPayrollForPeriod(
+          employees,
+          currentPeriodStart,
+          currentPeriodEnd,
+          calculateRealisticHourlyRate
+        );
+        
+        recordsCreated += periodRecordsCreated;
+        
+        // Move to next month
+        currentPeriodStart.setMonth(currentPeriodStart.getMonth() + 1);
+        currentPeriodStart.setDate(1); // First day of next month
+      }
+    } else {
+      // Single period processing
+      recordsCreated = await this.processPayrollForPeriod(
+        employees,
+        periodStart,
+        periodEnd,
+        calculateRealisticHourlyRate
+      );
+    }
+    
+    console.log(`Successfully created ${recordsCreated} payroll records`);
+    return recordsCreated;
+  }
+  
+  /**
+   * Helper function to process payroll for a specific period
+   * Extracted to support multi-period payroll generation
+   */
+  private async processPayrollForPeriod(
+    employees: Employee[],
+    periodStart: Date,
+    periodEnd: Date,
+    hourlyRateCalculator: (employee: Employee) => number
+  ): Promise<number> {
+    let recordsCreated = 0;
+    
+    for (const employee of employees) {
+      try {
+        // Get attendance records for this employee in the given period
+        const attendanceRecords = await this.getAttendanceByEmployeeAndDateRange(
+          employee.id,
+          periodStart,
+          periodEnd
+        );
+        
+        console.log(`Found ${attendanceRecords.length} attendance records for employee ${employee.id} in period ${periodStart.toISOString().split('T')[0]} to ${periodEnd.toISOString().split('T')[0]}`);
+        
+        // Calculate total hours worked
+        const totalHoursWorked = attendanceRecords.reduce(
+          (total, record) => total + (record.hoursWorked || 0), 
+          0
+        );
+        
+        // Use employee's hourly rate, calculated rate, or fallback to a default
+        const hourlyRate = employee.hourlyRate || 
+                          hourlyRateCalculator(employee) || 
+                          500; // Default to 500 KES/hour
+        
+        // Calculate gross pay based on hours worked and hourly rate
+        const grossPay = totalHoursWorked * hourlyRate;
+        
+        // Calculate tax deductions (simplified)
+        // Progressive tax rates for Kenya
+        const calculateTax = (grossAmount: number): number => {
+          // Monthly PAYE rates (2023 KRA rates)
+          if (grossAmount <= 24000) {
+            return 0; // No tax for amounts <= 24,000
+          } else if (grossAmount <= 32333) {
+            return (grossAmount - 24000) * 0.25; // 25% for amounts between 24,001 and 32,333
+          } else if (grossAmount <= 500000) {
+            return 2083.25 + (grossAmount - 32333) * 0.3; // 30% for amounts between 32,334 and 500,000
+          } else if (grossAmount <= 800000) {
+            return 142083.25 + (grossAmount - 500000) * 0.325; // 32.5% for amounts between 500,001 and 800,000
+          } else {
+            return 239583.25 + (grossAmount - 800000) * 0.35; // 35% for amounts over 800,000
+          }
+        };
+        
+        // Calculate NHIF based on gross pay
+        const calculateNHIF = (grossAmount: number): number => {
+          // 2023 NHIF rates
+          if (grossAmount <= 5999) return 150;
+          if (grossAmount <= 7999) return 300;
+          if (grossAmount <= 11999) return 400;
+          if (grossAmount <= 14999) return 500;
+          if (grossAmount <= 19999) return 600;
+          if (grossAmount <= 24999) return 750;
+          if (grossAmount <= 29999) return 850;
+          if (grossAmount <= 34999) return 900;
+          if (grossAmount <= 39999) return 950;
+          if (grossAmount <= 44999) return 1000;
+          if (grossAmount <= 49999) return 1100;
+          if (grossAmount <= 59999) return 1200;
+          if (grossAmount <= 69999) return 1300;
+          if (grossAmount <= 79999) return 1400;
+          if (grossAmount <= 89999) return 1500;
+          if (grossAmount <= 99999) return 1600;
+          return 1700; // Maximum NHIF contribution
+        };
+        
+        // Calculate NSSF (1.5% of gross pay, up to 2,160 KES maximum for Tier I + II)
+        const calculateNSSF = (grossAmount: number): number => {
+          return Math.min(Math.round(grossAmount * 0.015), 2160);
+        };
+        
+        // Calculate housing levy (1.5% of gross pay)
+        const calculateHousingLevy = (grossAmount: number): number => {
+          return Math.round(grossAmount * 0.015);
+        };
+        
+        // Calculate statutory deductions
+        const taxDeductions = calculateTax(grossPay);
+        const nhifDeduction = calculateNHIF(grossPay);
+        const nssfDeduction = calculateNSSF(grossPay);
+        const housingLevy = calculateHousingLevy(grossPay);
+        const otherStatutoryDeductions = nhifDeduction + nssfDeduction + housingLevy;
+        
+        // Update employee's statutory deductions
+        await this.updateEmployee(employee.id, {
+          statutory_deductions: {
+            nhif: nhifDeduction,
+            nssf: nssfDeduction,
+            tax: taxDeductions,
+            levy: housingLevy
+          }
+        });
+        
+        // Calculate EWA deductions if any
+        const ewaRequests = await this.getEwaRequestsForEmployee(employee.id);
+        const ewaDeductions = ewaRequests
+          .filter(req => 
+            req.status === 'disbursed' && 
+            req.disbursedAt && 
+            req.disbursedAt >= periodStart && 
+            req.disbursedAt <= periodEnd
+          )
+          .reduce((total, req) => total + (req.amount || 0), 0);
+        
+        // Calculate net pay
+        const totalDeductions = taxDeductions + otherStatutoryDeductions + ewaDeductions;
+        const netPay = grossPay - totalDeductions;
+        
+        // Create payroll record
+        const payroll: InsertPayroll = {
+          employeeId: employee.id,
+          periodStart,
+          periodEnd,
+          hoursWorked: totalHoursWorked,
+          grossPay,
+          ewaDeductions,
+          taxDeductions,
+          otherDeductions: otherStatutoryDeductions,
+          netPay,
+          status: 'processed',
+          processedAt: new Date(),
+          processedBy: faker.string.uuid(), // Mock processor ID
+        };
+        
+        await this.createPayroll(payroll);
+        recordsCreated++;
+        
+        // Update employee's income values based on latest payroll
+        await this.updateEmployee(employee.id, {
+          gross_income: grossPay,
+          net_income: netPay,
+          total_deductions: totalDeductions,
+          hourlyRate: hourlyRate, // Ensure hourly rate is saved
+          // Set EWA limits based on net pay
+          max_salary_advance_limit: Math.floor(netPay * 0.5),
+          available_salary_advance_limit: Math.floor(netPay * 0.5) - ewaDeductions
+        });
+        
+        console.log(`Created payroll record for employee ${employee.id}: ${grossPay.toFixed(2)} KES gross, ${netPay.toFixed(2)} KES net`);
+      } catch (error: any) {
+        console.error(`Error creating payroll for employee ${employee.id}: ${error.message}`);
+      }
+    }
+    
+    return recordsCreated;
+  }
+
+  /**
+   * Generates mock EWA (Earned Wage Access) requests for employees
+   * @param requestsPerEmployee Number of requests to generate per employee (default 0-2)
+   * @returns Number of EWA requests created
+   */
+  async generateMockEwaRequestsForEmployees(requestsPerEmployee: number = 2): Promise<number> {
+    const employees = await this.getAllActiveEmployees();
+    console.log(`Generating mock EWA requests for ${employees.length} active employees`);
+    
+    let recordsCreated = 0;
+    const today = new Date();
+    
+    // Reasons for EWA requests
+    const ewaReasons = [
+      'Medical emergency',
+      'School fees payment',
+      'Rent payment',
+      'Family emergency',
+      'Utility bills',
+      'Home repair',
+      'Transportation costs',
+      'Debt repayment',
+      'Child care expenses',
+      'Unexpected travel'
+    ];
+    
+    // Status options with weighted probabilities
+    const statusOptions = [
+      { status: 'pending', weight: 0.3 },
+      { status: 'approved', weight: 0.4 },
+      { status: 'disbursed', weight: 0.2 },
+      { status: 'rejected', weight: 0.1 }
+    ];
+    
+    // Helper function for weighted random selection
+    const getWeightedRandomStatus = (): string => {
+      const totalWeight = statusOptions.reduce((sum, option) => sum + option.weight, 0);
+      let random = Math.random() * totalWeight;
+      
+      for (const option of statusOptions) {
+        random -= option.weight;
+        if (random <= 0) {
+          return option.status;
+        }
+      }
+      
+      return 'pending'; // Fallback
+    };
+    
+    // Generate random dates for the past 30 days
+    const getRandomPastDate = (maxDaysAgo: number = 30): Date => {
+      const daysAgo = faker.number.int({ min: 0, max: maxDaysAgo });
+      const result = new Date(today);
+      result.setDate(result.getDate() - daysAgo);
+      return result;
+    };
+    
+    for (const employee of employees) {
+      try {
+        // Get the latest payroll for this employee
+        const payrolls = await this.getPayrollForEmployee(employee.id);
+        const latestPayroll = payrolls.sort((a, b) => 
+          new Date(b.periodEnd).getTime() - new Date(a.periodEnd).getTime()
+        )[0];
+        
+        // Skip if no payroll exists
+        if (!latestPayroll) {
+          console.log(`No payroll found for employee ${employee.id}, skipping EWA generation`);
+          continue;
+        }
+        
+        // Get available EWA limit for this employee
+        const availableLimit = employee.available_salary_advance_limit || 
+                              (latestPayroll.netPay * 0.5); // Default to 50% of net pay
+        
+        // Random number of requests for this employee (0 to requestsPerEmployee)
+        const numRequests = faker.number.int({ min: 0, max: requestsPerEmployee });
+        
+        for (let i = 0; i < numRequests; i++) {
+          // Generate random amount (10% to 80% of available limit)
+          const amount = faker.number.float({ 
+            min: Math.min(1000, availableLimit * 0.1), 
+            max: availableLimit * 0.8 
+          });
+          
+          // Processing fee (1-3% of amount)
+          const processingFee = amount * faker.number.float({ min: 0.01, max: 0.03 });
+          
+          // Random status with weighted probabilities
+          const status = getWeightedRandomStatus();
+          
+          // Request date (within last 30 days)
+          const requestDate = getRandomPastDate();
+          
+          // Basic EWA request
+          const ewaRequest: InsertEwaRequest = {
+            employeeId: employee.id,
+            amount: parseFloat(amount.toFixed(2)),
+            status,
+            requestDate,
+            processingFee: parseFloat(processingFee.toFixed(2)),
+            reason: faker.helpers.arrayElement(ewaReasons)
+          };
+          
+          // Add approval details if approved or disbursed
+          if (status === 'approved' || status === 'disbursed') {
+            const approvalDate = new Date(requestDate);
+            approvalDate.setHours(approvalDate.getHours() + faker.number.int({ min: 1, max: 24 }));
+            
+            ewaRequest.approvedAt = approvalDate;
+            ewaRequest.approvedBy = faker.string.uuid(); // Mock approver ID
+          }
+          
+          // Add disbursement date if disbursed
+          if (status === 'disbursed') {
+            const disbursedDate = new Date(ewaRequest.approvedAt || requestDate);
+            disbursedDate.setHours(disbursedDate.getHours() + faker.number.int({ min: 1, max: 12 }));
+            
+            ewaRequest.disbursedAt = disbursedDate;
+          }
+          
+          // Add rejection reason if rejected
+          if (status === 'rejected') {
+            ewaRequest.rejectionReason = faker.helpers.arrayElement([
+              'Insufficient salary balance',
+              'Previous request pending',
+              'Maximum withdrawal limit reached',
+              'Account verification required',
+              'Company policy restriction'
+            ]);
+          }
+          
+          await this.createEwaRequest(ewaRequest);
+          recordsCreated++;
+          
+          console.log(`Created EWA request for employee ${employee.id}: ${amount.toFixed(2)} KES (${status})`);
+        }
+      } catch (error: any) {
+        console.error(`Error creating EWA requests for employee ${employee.id}: ${error.message}`);
+      }
+    }
+    
+    console.log(`Successfully created ${recordsCreated} EWA requests`);
+    return recordsCreated;
+  }
+
+  /**
+   * Generates all mock data for employees:
+   * - Attendance records
+   * - Payroll records
+   * - EWA requests
+   * 
+   * This can be called after importing employees to populate related data.
+   * 
+   * @param days Number of days to generate attendance for (default 30)
+   * @returns Summary of records created
+   */
+  async generateAllMockDataForEmployees(days: number = 30): Promise<{
+    attendanceRecords: number;
+    payrollRecords: number;
+    ewaRequests: number;
+  }> {
+    console.log(`Starting comprehensive mock data generation for imported employees...`);
+    
+    // Generate attendance data first
+    const attendanceRecords = await this.generateMockAttendanceForEmployees(days);
+    console.log(`Step 1/3 completed: ${attendanceRecords} attendance records generated`);
+    
+    // Generate payroll based on the attendance data
+    // Use a period from 30 days ago to today for payroll calculation
+    const periodStart = new Date();
+    periodStart.setDate(periodStart.getDate() - days);
+    const periodEnd = new Date();
+    
+    const payrollRecords = await this.generateMockPayrollForEmployees(periodStart, periodEnd);
+    console.log(`Step 2/3 completed: ${payrollRecords} payroll records generated`);
+    
+    // Generate EWA requests
+    const ewaRequests = await this.generateMockEwaRequestsForEmployees(2);
+    console.log(`Step 3/3 completed: ${ewaRequests} EWA requests generated`);
+    
+    console.log(`Mock data generation completed successfully!`);
+    
+    return {
+      attendanceRecords,
+      payrollRecords,
+      ewaRequests
+    };
   }
 
   async getEmployees(employeeIds: string[]): Promise<Employee[]> {

@@ -1,5 +1,6 @@
 import { SetStateAction, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import axios from 'axios';
 import { 
   Card, 
   CardContent, 
@@ -77,7 +78,7 @@ import { DatePicker } from "@/components/ui/date-picker";
 import { toast } from "@/hooks/use-toast";
 import { formatDate } from '@/lib/date-utils';
 import { formatTime } from '@/lib/date-utils';
-import { Employee, Department, Attendance } from '../../../../shared/schema';
+import { Employee, Attendance } from '../../../../shared/schema';
 
 interface AttendanceCorrection {
   id: string;
@@ -119,19 +120,27 @@ export function ManagerControls() {
   const [shiftDepartmentFilter, setShiftDepartmentFilter] = useState('all');
   const [isLoadingSubmit, setIsLoadingSubmit] = useState<boolean>(false);
 
+  // Get the query client for cache invalidation
+  const queryClient = useQueryClient();
+
   // Query to fetch employees
-  const { data: employeeList = [] } = useQuery<Employee[]>({
-    queryKey: ['/api/employees/active'],
+  const { data: employeeList = [], isLoading: isLoadingEmployees } = useQuery<Employee[]>({
+    queryKey: ['employees', 'active'],
+    queryFn: async () => {
+      const response = await axios.get('/api/employees/active');
+      return response.data;
+    }
   });
 
-  // Query to fetch departments
-  const { data: departments = [] } = useQuery<Department[]>({
-    queryKey: ['/api/departments'],
-  });
-  
-  // Query to fetch attendance records
+  // Query to fetch attendance records for selected date
   const { data: rawRecords = [], isLoading: isLoadingRecords } = useQuery<Attendance[]>({
-    queryKey: ['/api/attendance', selectedDate],
+    queryKey: ['attendance', selectedDate],
+    queryFn: async () => {
+      const formattedDate = selectedDate.toISOString().split('T')[0];
+      const response = await axios.get(`/api/attendance?date=${formattedDate}`);
+      return response.data;
+    },
+    enabled: !!selectedDate // Only run when selectedDate is available
   });
   
   // Enhanced records with employee data
@@ -151,14 +160,22 @@ export function ManagerControls() {
   });
   
   // Query to fetch attendance corrections
-  const { data: corrections = [] } = useQuery<AttendanceCorrection[]>({
-    queryKey: ['/api/attendance/corrections'],
+  const { data: corrections = [], isLoading: isLoadingCorrections } = useQuery<AttendanceCorrection[]>({
+    queryKey: ['attendance', 'corrections'],
+    queryFn: async () => {
+      const response = await axios.get('/api/attendance/corrections');
+      return response.data;
+    }
   });
   
   // Query to fetch currently checked in employees
-  const { data: checkedInEmployees = [] } = useQuery<Attendance[]>({
-    queryKey: ['/api/attendance/checked-in'],
-    refetchInterval: showCurrentlyCheckedIn ? 30000 : false,
+  const { data: checkedInEmployees = [], isLoading: isLoadingCheckedIn } = useQuery<Attendance[]>({
+    queryKey: ['attendance', 'checked-in'],
+    queryFn: async () => {
+      const response = await axios.get('/api/attendance/checked-in');
+      return response.data;
+    },
+    refetchInterval: showCurrentlyCheckedIn ? 30000 : false, // Refresh every 30 seconds if enabled
   });
 
   // Filter employees based on department and search
@@ -180,6 +197,170 @@ export function ManagerControls() {
     return !searchQuery || 
       record.employee?.other_names.toLowerCase().includes(searchQuery.toLowerCase()) ||
       record.employeeId.toString() === searchQuery;
+  });
+
+  // Mutation for manual attendance submission
+  const manualAttendanceMutation = useMutation({
+    mutationFn: async (data: {
+      employeeId: string;
+      date: string;
+      clockInTime?: string;
+      clockOutTime?: string;
+      status: string;
+      notes: string;
+    }) => {
+      const response = await axios.post('/api/attendance/manual', data);
+      return response.data;
+    },
+    onSuccess: () => {
+      // Invalidate relevant queries to refetch data
+      queryClient.invalidateQueries({ queryKey: ['attendance'] });
+      
+      toast({
+        title: "Attendance Recorded",
+        description: "Manual attendance entry has been saved successfully.",
+      });
+      
+      // Reset form
+      setManualEmployee("");
+      setManualClockIn("");
+      setManualClockOut("");
+      setManualReason("");
+    },
+    onError: (error) => {
+      console.error("Error submitting manual attendance:", error);
+      toast({
+        title: "Error",
+        description: "Failed to record attendance. Please try again.",
+        variant: "destructive"
+      });
+    }
+  });
+
+  // Mutation for bulk attendance submission
+  const bulkAttendanceMutation = useMutation({
+    mutationFn: async (data: {
+      employeeIds: string[];
+      date: string;
+      status: string;
+      notes: string;
+    }) => {
+      const response = await axios.post('/api/attendance/bulk', data);
+      return response.data;
+    },
+    onSuccess: () => {
+      // Invalidate relevant queries to refetch data
+      queryClient.invalidateQueries({ queryKey: ['attendance'] });
+      
+      toast({
+        title: "Bulk Attendance Recorded",
+        description: `Attendance recorded for ${selectedEmployees.length} employees.`,
+      });
+      
+      // Reset form
+      setSelectedEmployees([]);
+      setBulkReason("");
+    },
+    onError: (error) => {
+      console.error("Error submitting bulk attendance:", error);
+      toast({
+        title: "Error",
+        description: "Failed to record bulk attendance. Please try again.",
+        variant: "destructive"
+      });
+    }
+  });
+
+  // Mutation for attendance correction
+  const correctionMutation = useMutation({
+    mutationFn: async (data: {
+      attendanceId: string;
+      newClockIn?: string;
+      newClockOut?: string;
+      reason: string;
+    }) => {
+      const response = await axios.post('/api/attendance/correction', data);
+      return response.data;
+    },
+    onSuccess: () => {
+      // Invalidate relevant queries to refetch data
+      queryClient.invalidateQueries({ queryKey: ['attendance'] });
+      queryClient.invalidateQueries({ queryKey: ['attendance', 'corrections'] });
+      
+      toast({
+        title: "Correction Submitted",
+        description: "Attendance correction has been submitted for approval.",
+      });
+      
+      // Reset form
+      setEditRecord(null);
+      setNewClockIn("");
+      setNewClockOut("");
+      setCorrectionReason("");
+    },
+    onError: (error) => {
+      console.error("Error submitting correction:", error);
+      toast({
+        title: "Error",
+        description: "Failed to submit correction. Please try again.",
+        variant: "destructive"
+      });
+    }
+  });
+
+  // Mutation for correction approval/rejection
+  const correctionActionMutation = useMutation({
+    mutationFn: async ({ correctionId, action }: { correctionId: string, action: 'approve' | 'reject' }) => {
+      const response = await axios.post(`/api/attendance/correction/${correctionId}/${action}`);
+      return response.data;
+    },
+    onSuccess: (_, variables) => {
+      // Invalidate relevant queries to refetch data
+      queryClient.invalidateQueries({ queryKey: ['attendance'] });
+      queryClient.invalidateQueries({ queryKey: ['attendance', 'corrections'] });
+      
+      toast({
+        title: variables.action === 'approve' ? "Correction Approved" : "Correction Rejected",
+        description: `The attendance correction has been ${variables.action === 'approve' ? 'approved' : 'rejected'}.`,
+      });
+      
+      // Reset selected correction
+      setSelectedCorrectionId(null);
+    },
+    onError: (error, variables) => {
+      console.error(`Error ${variables.action}ing correction:`, error);
+      toast({
+        title: "Error",
+        description: `Failed to ${variables.action} correction. Please try again.`,
+        variant: "destructive"
+      });
+    }
+  });
+
+  // Manual clock-out mutation
+  const manualClockOutMutation = useMutation({
+    mutationFn: async (attendanceId: string) => {
+      return axios.post(`/api/attendance/${attendanceId}/clock-out`, {
+        clockOutTime: new Date()
+      });
+    },
+    onSuccess: () => {
+      // Invalidate related queries
+      queryClient.invalidateQueries({ queryKey: ['attendance'] });
+      queryClient.invalidateQueries({ queryKey: ['attendance', 'checked-in'] });
+      toast({
+        title: "Employee Clocked Out",
+        description: "Employee has been manually clocked out successfully",
+      });
+    },
+    onError: (error) => {
+      console.error('Failed to clock out employee:', error);
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Failed to clock out employee. Please try again.",
+      });
+    }
   });
 
   // Function to handle toggling employee selection in bulk mode
@@ -216,25 +397,33 @@ export function ManagerControls() {
     setIsLoadingSubmit(true);
     
     try {
-      // In a real implementation, this would call an API endpoint
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      // Format date and times for API
+      const formattedDate = selectedDate.toISOString().split('T')[0];
       
-      toast({
-        title: "Attendance Recorded",
-        description: "Manual attendance entry has been saved successfully.",
-      });
+      // Create full datetime strings by combining the date with the time inputs
+      let clockInDateTime = undefined;
+      if (manualClockIn) {
+        const date = new Date(selectedDate);
+        const [hours, minutes] = manualClockIn.split(':').map(Number);
+        date.setHours(hours, minutes, 0, 0);
+        clockInDateTime = date.toISOString();
+      }
       
-      // Reset form
-      setManualEmployee("");
-      setManualClockIn("");
-      setManualClockOut("");
-      setManualReason("");
+      let clockOutDateTime = undefined;
+      if (manualClockOut) {
+        const date = new Date(selectedDate);
+        const [hours, minutes] = manualClockOut.split(':').map(Number);
+        date.setHours(hours, minutes, 0, 0);
+        clockOutDateTime = date.toISOString();
+      }
       
-    } catch (error) {
-      toast({
-        title: "Error",
-        description: "Failed to record attendance. Please try again.",
-        variant: "destructive"
+      await manualAttendanceMutation.mutateAsync({
+        employeeId: manualEmployee,
+        date: formattedDate,
+        clockInTime: clockInDateTime,
+        clockOutTime: clockOutDateTime,
+        status: selectedStatus,
+        notes: manualReason
       });
     } finally {
       setIsLoadingSubmit(false);
@@ -255,23 +444,14 @@ export function ManagerControls() {
     setIsLoadingSubmit(true);
     
     try {
-      // In a real implementation, this would call an API endpoint
-      await new Promise(resolve => setTimeout(resolve, 1500));
+      // Format date for API
+      const formattedDate = selectedDate.toISOString().split('T')[0];
       
-      toast({
-        title: "Bulk Attendance Recorded",
-        description: `Attendance recorded for ${selectedEmployees.length} employees.`,
-      });
-      
-      // Reset form
-      setSelectedEmployees([]);
-      setBulkReason("");
-      
-    } catch (error) {
-      toast({
-        title: "Error",
-        description: "Failed to record bulk attendance. Please try again.",
-        variant: "destructive"
+      await bulkAttendanceMutation.mutateAsync({
+        employeeIds: selectedEmployees,
+        date: formattedDate,
+        status: selectedStatus,
+        notes: bulkReason
       });
     } finally {
       setIsLoadingSubmit(false);
@@ -292,25 +472,28 @@ export function ManagerControls() {
     setIsLoadingSubmit(true);
     
     try {
-      // In a real implementation, this would call an API endpoint
-      await new Promise(resolve => setTimeout(resolve, 1200));
+      // Format times for API
+      let formattedClockIn = undefined;
+      if (newClockIn) {
+        const recordDate = new Date(editRecord.date || new Date());
+        const [hours, minutes] = newClockIn.split(':').map(Number);
+        recordDate.setHours(hours, minutes, 0, 0);
+        formattedClockIn = recordDate.toISOString();
+      }
       
-      toast({
-        title: "Correction Submitted",
-        description: "Attendance correction has been submitted for approval.",
-      });
+      let formattedClockOut = undefined;
+      if (newClockOut) {
+        const recordDate = new Date(editRecord.date || new Date());
+        const [hours, minutes] = newClockOut.split(':').map(Number);
+        recordDate.setHours(hours, minutes, 0, 0);
+        formattedClockOut = recordDate.toISOString();
+      }
       
-      // Reset form
-      setEditRecord(null);
-      setNewClockIn("");
-      setNewClockOut("");
-      setCorrectionReason("");
-      
-    } catch (error) {
-      toast({
-        title: "Error",
-        description: "Failed to submit correction. Please try again.",
-        variant: "destructive"
+      await correctionMutation.mutateAsync({
+        attendanceId: editRecord.id,
+        newClockIn: formattedClockIn,
+        newClockOut: formattedClockOut,
+        reason: correctionReason
       });
     } finally {
       setIsLoadingSubmit(false);
@@ -320,24 +503,15 @@ export function ManagerControls() {
   // Function to handle correction approval/rejection
   const handleCorrectionAction = async (correctionId: string, action: 'approve' | 'reject') => {
     try {
-      // In a real implementation, this would call an API endpoint
-      await new Promise(resolve => setTimeout(resolve, 800));
-      
-      toast({
-        title: action === 'approve' ? "Correction Approved" : "Correction Rejected",
-        description: `The attendance correction has been ${action === 'approve' ? 'approved' : 'rejected'}.`,
-      });
-      
-      // Reset selected correction
-      setSelectedCorrectionId(null);
-      
+      await correctionActionMutation.mutateAsync({ correctionId, action });
     } catch (error) {
-      toast({
-        title: "Error",
-        description: `Failed to ${action} correction. Please try again.`,
-        variant: "destructive"
-      });
+      // Error is handled in the mutation
     }
+  };
+
+  // Function to handle manual clock-out
+  const handleManualClockOut = (attendanceId: string) => {
+    manualClockOutMutation.mutate(attendanceId);
   };
 
   // Column definition for the employee selection table in bulk mode
@@ -613,6 +787,11 @@ export function ManagerControls() {
               <TabsTrigger value="tracker" className="flex items-center">
                 <Clock className="mr-2 h-4 w-4" />
                 Shift Tracker
+                {showCurrentlyCheckedIn && 
+                  <Badge variant="outline" className="ml-2">
+                    {isLoadingCheckedIn ? "..." : filteredCheckedIn.length}
+                  </Badge>
+                }
               </TabsTrigger>
             </TabsList>
             
@@ -699,8 +878,16 @@ export function ManagerControls() {
               
               <div className="flex justify-end space-x-2 mt-6">
                 <Button variant="outline">Cancel</Button>
-                <Button onClick={handleManualSubmit} disabled={isLoadingSubmit}>
-                  {isLoadingSubmit ? "Submitting..." : "Submit Entry"}
+                <Button 
+                  onClick={handleManualSubmit} 
+                  disabled={isLoadingSubmit || manualAttendanceMutation.isPending}
+                >
+                  {manualAttendanceMutation.isPending ? (
+                    <>
+                      <div className="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-background border-t-foreground" />
+                      Submitting...
+                    </>
+                  ) : "Submit Entry"}
                 </Button>
               </div>
             </TabsContent>
@@ -709,23 +896,6 @@ export function ManagerControls() {
             <TabsContent value="bulk" className="space-y-6">
               <div className="flex flex-col md:flex-row gap-4 justify-between mb-2">
                 <div className="flex flex-col md:flex-row gap-4">
-                  <div>
-                    <Label htmlFor="bulk-department" className="mb-2 block">Department</Label>
-                    <Select value={selectedDepartment} onValueChange={setSelectedDepartment}>
-                      <SelectTrigger id="bulk-department" className="w-[180px]">
-                        <SelectValue placeholder="All Departments" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="">All Departments</SelectItem>
-                        {departments.map(dept => (
-                          <SelectItem key={dept.id} value={dept.name}>
-                            {dept.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  
                   <div>
                     <Label htmlFor="bulk-date" className="mb-2 block">Date</Label>
                     <DatePicker 
@@ -807,8 +977,16 @@ export function ManagerControls() {
               
               <AlertDialog>
                 <AlertDialogTrigger asChild>
-                  <Button className="w-full mt-4" disabled={selectedEmployees.length === 0 || isLoadingSubmit}>
-                    {isLoadingSubmit ? "Processing..." : "Apply to Selected Employees"}
+                  <Button 
+                    className="w-full mt-4" 
+                    disabled={selectedEmployees.length === 0 || isLoadingSubmit || bulkAttendanceMutation.isPending}
+                  >
+                    {bulkAttendanceMutation.isPending ? (
+                      <>
+                        <div className="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-background border-t-foreground" />
+                        Processing...
+                      </>
+                    ) : "Apply to Selected Employees"}
                   </Button>
                 </AlertDialogTrigger>
                 <AlertDialogContent>
@@ -851,10 +1029,16 @@ export function ManagerControls() {
                       </CardDescription>
                     </CardHeader>
                     <CardContent>
-                      <DataTable 
-                        columns={attendanceRecordColumns} 
-                        data={recentAttendanceRecords} 
-                      />
+                      {isLoadingRecords ? (
+                        <div className="flex justify-center py-10">
+                          <div className="h-8 w-8 animate-spin rounded-full border-2 border-muted-foreground border-t-primary" />
+                        </div>
+                      ) : (
+                        <DataTable 
+                          columns={attendanceRecordColumns} 
+                          data={recentAttendanceRecords} 
+                        />
+                      )}
                     </CardContent>
                   </Card>
                 </div>
@@ -868,55 +1052,61 @@ export function ManagerControls() {
                       </CardDescription>
                     </CardHeader>
                     <CardContent className="max-h-[400px] overflow-y-auto">
-                      <div className="space-y-4">
-                        {corrections.map((correction) => (
-                          <div
-                            key={correction.id}
-                            className={`p-3 rounded-lg border ${
-                              correction.status === 'pending' ? 'bg-blue-50 border-blue-200 dark:bg-blue-950/20 dark:border-blue-900' :
-                              correction.status === 'approved' ? 'bg-green-50 border-green-200 dark:bg-green-950/20 dark:border-green-900' :
-                              'bg-red-50 border-red-200 dark:bg-red-950/20 dark:border-red-900'
-                            }`}
-                          >
-                            <div className="flex items-start justify-between">
-                              <div>
-                                <div className="flex items-center">
-                                  <Avatar className="h-7 w-7 mr-2">
-                                    <AvatarFallback>
-                                      {correction.employee?.other_names.charAt(0)}
-                                    </AvatarFallback>
-                                  </Avatar>
-                                  <p className="font-medium text-sm">{correction.employee?.other_names} {correction.employee?.surname}</p>
-                                </div>
-                                <p className="text-xs mt-1 text-muted-foreground">
-                                  {formatDate(correction.date)}
-                                </p>
-                                <div className="mt-1.5 text-xs">
-                                  <p>
-                                    <span className="font-semibold">From: </span>
-                                    {formatTime(correction.clockInTime?.toISOString() || "")}
+                      {isLoadingCorrections ? (
+                        <div className="flex justify-center py-10">
+                          <div className="h-6 w-6 animate-spin rounded-full border-2 border-muted-foreground border-t-primary" />
+                        </div>
+                      ) : (
+                        <div className="space-y-4">
+                          {corrections.map((correction) => (
+                            <div
+                              key={correction.id}
+                              className={`p-3 rounded-lg border ${
+                                correction.status === 'pending' ? 'bg-blue-50 border-blue-200 dark:bg-blue-950/20 dark:border-blue-900' :
+                                correction.status === 'approved' ? 'bg-green-50 border-green-200 dark:bg-green-950/20 dark:border-green-900' :
+                                'bg-red-50 border-red-200 dark:bg-red-950/20 dark:border-red-900'
+                              }`}
+                            >
+                              <div className="flex items-start justify-between">
+                                <div>
+                                  <div className="flex items-center">
+                                    <Avatar className="h-7 w-7 mr-2">
+                                      <AvatarFallback>
+                                        {correction.employee?.other_names.charAt(0)}
+                                      </AvatarFallback>
+                                    </Avatar>
+                                    <p className="font-medium text-sm">{correction.employee?.other_names} {correction.employee?.surname}</p>
+                                  </div>
+                                  <p className="text-xs mt-1 text-muted-foreground">
+                                    {formatDate(correction.date)}
                                   </p>
-                                  <p>
-                                    <span className="font-semibold">To: </span>
-                                    {formatTime(correction.clockOutTime?.toISOString() || "")}
-                                  </p>
+                                  <div className="mt-1.5 text-xs">
+                                    <p>
+                                      <span className="font-semibold">From: </span>
+                                      {formatTime(correction.clockInTime?.toISOString() || "")}
+                                    </p>
+                                    <p>
+                                      <span className="font-semibold">To: </span>
+                                      {formatTime(correction.clockOutTime?.toISOString() || "")}
+                                    </p>
+                                  </div>
+                                  <p className="mt-1.5 text-xs italic">"{correction.notes}"</p>
                                 </div>
-                                <p className="mt-1.5 text-xs italic">"{correction.notes}"</p>
+                                <Badge
+                                  variant="outline"
+                                  className={
+                                    correction.status === 'pending' ? 'text-blue-600 bg-blue-50' :
+                                    correction.status === 'approved' ? 'text-green-600 bg-green-50' :
+                                    'text-red-600 bg-red-50'
+                                  }
+                                >
+                                  {correction.status}
+                                </Badge>
                               </div>
-                              <Badge
-                                variant="outline"
-                                className={
-                                  correction.status === 'pending' ? 'text-blue-600 bg-blue-50' :
-                                  correction.status === 'approved' ? 'text-green-600 bg-green-50' :
-                                  'text-red-600 bg-red-50'
-                                }
-                              >
-                                {correction.status}
-                              </Badge>
                             </div>
-                          </div>
-                        ))}
-                      </div>
+                          ))}
+                        </div>
+                      )}
                     </CardContent>
                     <CardFooter>
                       <Button variant="outline" className="w-full">
@@ -1009,8 +1199,16 @@ export function ManagerControls() {
                     <Button variant="outline" onClick={() => setEditRecord(null)}>
                       Cancel
                     </Button>
-                    <Button onClick={handleCorrectionSubmit} disabled={isLoadingSubmit}>
-                      {isLoadingSubmit ? "Submitting..." : "Submit Correction"}
+                    <Button 
+                      onClick={handleCorrectionSubmit} 
+                      disabled={isLoadingSubmit || correctionMutation.isPending}
+                    >
+                      {correctionMutation.isPending ? (
+                        <>
+                          <div className="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-background border-t-foreground" />
+                          Submitting...
+                        </>
+                      ) : "Submit Correction"}
                     </Button>
                   </DialogFooter>
                 </DialogContent>
@@ -1170,29 +1368,16 @@ export function ManagerControls() {
                 <div className="space-y-2">
                   <Label>Currently Checked In Employees</Label>
                   <div className="flex items-center">
-                    <p className="text-2xl font-bold">{filteredCheckedIn.length}</p>
+                    <p className="text-2xl font-bold">
+                      {isLoadingCheckedIn ? (
+                        <span className="inline-block h-8 w-8 animate-pulse">...</span>
+                      ) : filteredCheckedIn.length}
+                    </p>
                     <p className="text-muted-foreground ml-2 text-sm">employees on shift</p>
                   </div>
                 </div>
                 
                 <div className="flex flex-col md:flex-row gap-4">
-                  <div>
-                    <Label htmlFor="department-filter" className="mb-2 block">Department</Label>
-                    <Select value={shiftDepartmentFilter} onValueChange={setShiftDepartmentFilter}>
-                      <SelectTrigger id="department-filter" className="w-[180px]">
-                        <SelectValue placeholder="All Departments" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">All Departments</SelectItem>
-                        {departments.map(dept => (
-                          <SelectItem key={dept.id} value={dept.name}>
-                            {dept.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  
                   <div className="self-end">
                     <Button variant="outline" className="flex items-center">
                       <AlertCircle className="mr-2 h-4 w-4" />
@@ -1203,7 +1388,14 @@ export function ManagerControls() {
               </div>
               
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                {filteredCheckedIn.length > 0 ? (
+                {isLoadingCheckedIn ? (
+                  <Card className="md:col-span-3 shadow-glass dark:shadow-glass-dark">
+                    <CardContent className="flex flex-col items-center justify-center py-10">
+                      <div className="h-10 w-10 animate-spin rounded-full border-4 border-muted-foreground border-t-primary mb-4" />
+                      <h3 className="text-lg font-medium">Loading shift data...</h3>
+                    </CardContent>
+                  </Card>
+                ) : filteredCheckedIn.length > 0 ? (
                   filteredCheckedIn.map((record) => {
                     const employee = employeeList.find(e => e.id === record.employeeId);
                     
@@ -1276,7 +1468,17 @@ export function ManagerControls() {
                                     </AlertDialogHeader>
                                     <AlertDialogFooter>
                                       <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                      <AlertDialogAction>Confirm Clock Out</AlertDialogAction>
+                                      <AlertDialogAction 
+                                        onClick={() => handleManualClockOut(record.id)}
+                                        disabled={manualClockOutMutation.isPending}
+                                      >
+                                        {manualClockOutMutation.isPending ? (
+                                          <>
+                                            <div className="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-background border-t-foreground" />
+                                            Processing...
+                                          </>
+                                        ) : "Confirm Clock Out"}
+                                      </AlertDialogAction>
                                     </AlertDialogFooter>
                                   </AlertDialogContent>
                                 </AlertDialog>

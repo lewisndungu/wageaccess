@@ -321,20 +321,34 @@ You can also use the quick action buttons below the chat to access common functi
       // Implement employee import logic with server-generated IDs
       const addedCount = await storageModule.storage.addEmployees(data);
 
-      // Save a message about the import
+      // Generate mock data for the newly imported employees
+      console.log('Generating mock data for the newly imported employees...');
+      const mockDataResults = await storageModule.storage.generateAllMockDataForEmployees(30);
+      
+      console.log(`Mock data generation results: 
+        - ${mockDataResults.attendanceRecords} attendance records
+        - ${mockDataResults.payrollRecords} payroll records
+        - ${mockDataResults.ewaRequests} EWA requests`);
+
+      // Save a message about the import and data generation
       const importMessage: ChatMessage = {
         id: Date.now().toString(),
         userId,
         type: "system",
-        content: `✅ Successfully imported ${addedCount} employees.`,
+        content: `✅ Successfully imported ${addedCount} employees and generated: 
+- ${mockDataResults.attendanceRecords} attendance records
+- ${mockDataResults.payrollRecords} payroll records
+- ${mockDataResults.ewaRequests} EWA requests`,
         timestamp: new Date(),
       };
 
       await storageModule.saveMessage(importMessage);
 
-      // TODO: Generate mock data with the newly imported employees
-
-      return { success: true, count: addedCount };
+      return { 
+        success: true, 
+        count: addedCount,
+        mockData: mockDataResults 
+      };
     },
     
     async calculatePayroll(employeeIds: string[], userId: string): Promise<any> {

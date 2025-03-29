@@ -159,6 +159,7 @@ import {
   HoverCardContent,
   HoverCardTrigger,
 } from "@/components/ui/hover-card";
+import { useNavigate, Link } from "react-router-dom";
 
 // Workflow stages
 const STAGES = {
@@ -903,9 +904,30 @@ export default function ProcessPayrollPage() {
   const handleProcessPayroll = async () => {
     try {
       const response = await axios.post("/api/payroll/process", {
-        payPeriod,
-        payrollData: payrollCalculations,
-        notes: finalizationNote,
+        payPeriodStart: payPeriod.startDate,
+        payPeriodEnd: payPeriod.endDate,
+        employeePayrolls: payrollCalculations.map((calc) => ({
+          employeeId: calc.id,
+          employeeNumber: calc.employeeNumber,
+          name: calc.name,
+          position: calc.position,
+          hoursWorked: calc.hoursWorked,
+          overtimeHours: calc.overtimeHours || 0,
+          hourlyRate: calc.hourlyRate,
+          grossPay: calc.grossPay,
+          taxableIncome: calc.taxableIncome,
+          paye: calc.paye,
+          nhif: calc.nhif,
+          nssf: calc.nssf,
+          housingLevy: calc.housingLevy,
+          ewaDeductions: calc.ewaDeductions || 0,
+          loanDeductions: calc.loanDeductions || 0,
+          otherDeductions: calc.otherDeductions || 0,
+          totalDeductions: calc.totalDeductions,
+          netPay: calc.netPay,
+          status: "completed"
+        })),
+        notes: finalizationNote
       });
 
       // Store the reference number from the response
@@ -915,10 +937,14 @@ export default function ProcessPayrollPage() {
 
       toast({
         title: "Payroll processed successfully",
-        description: "The payroll has been processed and saved.",
+        description: "The payroll has been processed and saved. Click 'Back to Payroll' to return to the payroll list.",
       });
 
       setCurrentStage("complete");
+      
+      // Invalidate the payroll query cache to ensure fresh data
+      queryClient.invalidateQueries({ queryKey: ["payroll"] });
+      
     } catch (error) {
       console.error("Error processing payroll:", error);
       toast({
@@ -1349,10 +1375,9 @@ export default function ProcessPayrollPage() {
           employeeId: calc.id,
           employeeNumber: calc.employeeNumber,
           name: calc.name,
-          department: calc.role, // Use role instead of department
           position: calc.position,
           hoursWorked: calc.hoursWorked,
-          overtimeHours: calc.overtimeHours,
+          overtimeHours: calc.overtimeHours || 0,
           hourlyRate: calc.hourlyRate,
           grossPay: calc.grossPay,
           taxableIncome: calc.taxableIncome,
@@ -1360,9 +1385,9 @@ export default function ProcessPayrollPage() {
           nhif: calc.nhif,
           nssf: calc.nssf,
           housingLevy: calc.housingLevy,
-          ewaDeductions: calc.ewaDeductions,
-          loanDeductions: calc.loanDeductions,
-          otherDeductions: calc.otherDeductions,
+          ewaDeductions: calc.ewaDeductions || 0,
+          loanDeductions: calc.loanDeductions || 0,
+          otherDeductions: calc.otherDeductions || 0,
           totalDeductions: calc.totalDeductions,
           netPay: calc.netPay,
           paymentMethod: calc.mpesaNumber ? "mpesa" : "bank",
@@ -1408,7 +1433,7 @@ export default function ProcessPayrollPage() {
       setIsPayrollProcessed(true);
 
       // Force refresh any cached data
-      queryClient.invalidateQueries({ queryKey: ["/api/payroll"] });
+      queryClient.invalidateQueries({ queryKey: ["payroll"] });
 
       toast({
         title: "Payroll Finalized",
@@ -1418,7 +1443,7 @@ export default function ProcessPayrollPage() {
           payPeriod.endDate
         ).toLocaleDateString()} has been finalized. Reference: ${
           savedPayroll.id || "N/A"
-        }`,
+        }. Go back to payroll list to view processed payroll.`,
       });
     } catch (error) {
       console.error("Error finalizing payroll:", error);
@@ -2237,10 +2262,12 @@ export default function ProcessPayrollPage() {
 
                   <Button 
                     className="bg-primary hover:bg-primary/90 text-white font-medium px-6 shadow-md"
-                    onClick={() => window.location.href = "/payroll"}
+                    asChild
                   >
-                    Complete & Return to Payroll
-                    <ChevronRight className="ml-2 h-4 w-4" />
+                    <Link to="/payroll">
+                      Complete & Return to Payroll
+                      <ChevronRight className="ml-2 h-4 w-4" />
+                    </Link>
                   </Button>
                 </div>
               </div>

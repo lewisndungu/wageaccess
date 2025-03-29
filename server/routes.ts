@@ -1327,12 +1327,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Transform the payroll data to include employee names and departments
       const transformedRecords = await Promise.all(payrollRecords.map(async record => {
-        const employee = await storage.getEmployeeWithDetails(record.employeeId);
+        // Make sure employeeId is a string before looking up the employee
+        const employeeId = ensureStringId(record.employeeId);
+        const employee = await storage.getEmployeeWithDetails(employeeId);
         
         return {
           id: record.id,
-          employeeId: record.employeeId,
-          employeeName: employee ? `${employee.other_names} ${employee.surname}` : 'Unknown Employee', // Changed from employee.user.name
+          employeeId: employeeId,
+          employeeName: employee ? `${employee.other_names} ${employee.surname}` : 'Unknown Employee',
           department: employee ? employee?.department?.name || employee?.role : 'Unknown Department',
           periodStart: record.periodStart,
           periodEnd: record.periodEnd,
@@ -1343,7 +1345,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           taxDeductions: Number(record.taxDeductions) || 0,
           otherDeductions: Number(record.otherDeductions) || 0,
           netPay: Number(record.netPay) || 0,
-          status: record.status
+          status: record.status,
+          employee: employee || undefined
         };
       }));
       
@@ -1453,19 +1456,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
           employeeId: employeePayroll.employeeId,
           periodStart: new Date(payrollData.payPeriodStart),
           periodEnd: new Date(payrollData.payPeriodEnd),
-          hoursWorked: employeePayroll.hoursWorked, // Remove .toString()
-          grossPay: employeePayroll.grossPay, // Remove .toString()
-          netPay: employeePayroll.netPay, // Remove .toString()
-          ewaDeductions: employeePayroll.ewaDeductions, // Remove .toString()
-          taxDeductions: (employeePayroll.paye + employeePayroll.nhif + employeePayroll.nssf + employeePayroll.housingLevy), // Remove .toString()
-          otherDeductions: (employeePayroll.loanDeductions + employeePayroll.otherDeductions), // Remove .toString()
+          hoursWorked: Number(employeePayroll.hoursWorked),
+          grossPay: Number(employeePayroll.grossPay),
+          netPay: Number(employeePayroll.netPay),
+          ewaDeductions: Number(employeePayroll.ewaDeductions || 0),
+          taxDeductions: Number(employeePayroll.paye + employeePayroll.nhif + employeePayroll.nssf + employeePayroll.housingLevy),
+          otherDeductions: Number(employeePayroll.loanDeductions + employeePayroll.otherDeductions),
           status: "processed",
           processedBy: "1", // Default admin user ID
+          processedAt: new Date(),
           referenceNumber: referenceNumber // Store the reference number in each record
         });
         
         createdPayrolls.push(payroll);
       }
+      
+      // Clear the payroll cache to ensure fresh data on next fetch
+      (global as any).payrollCache = {};
       
       // Return the processed payroll with the reference number
       res.status(200).json({

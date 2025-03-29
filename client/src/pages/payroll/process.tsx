@@ -946,16 +946,25 @@ export default function ProcessPayrollPage() {
       let fileName = "";
 
       if (exportType === "xlsx") {
-        // Include the reference number in the filename if available
-        fileName = payrollReferenceNumber 
-          ? `Payroll_${payrollReferenceNumber}_${periodStr}.xlsx`
-          : `Payroll_${periodStr}.xlsx`;
+        // Check if we have a payroll reference number
+        if (!payrollReferenceNumber) {
+          toast({
+            title: "Missing Payroll Reference",
+            description: "Please process the payroll before exporting.",
+            variant: "destructive",
+          });
+          setIsExporting(false);
+          return;
+        }
+
+        // Include the reference number in the filename
+        fileName = `Payroll_${payrollReferenceNumber}_${periodStr}.xlsx`;
         
         // Call the Excel export API endpoint with axios
+        // Only send the reference number and period - server will fetch the data
         const response = await axios.post("/api/payroll/export/xlsx", {
-          payPeriod,
-          payrollCalculations,
           referenceNumber: payrollReferenceNumber,
+          payPeriod,
         }, {
           responseType: 'blob' // Important for handling binary data
         });
@@ -975,11 +984,33 @@ export default function ProcessPayrollPage() {
         window.URL.revokeObjectURL(url);
         document.body.removeChild(a);
       } else if (exportType === "payslips") {
-        fileName = `Payslips_${periodStr}.zip`;
+        // Validate that we have a reference number for other export types too
+        if (!payrollReferenceNumber) {
+          toast({
+            title: "Missing Payroll Reference",
+            description: "Please process the payroll before exporting.",
+            variant: "destructive",
+          });
+          setIsExporting(false);
+          return;
+        }
+        
+        fileName = `Payslips_${payrollReferenceNumber}_${periodStr}.zip`;
         // Simulate export process for other types
         await new Promise((resolve) => setTimeout(resolve, 1500));
       } else if (exportType === "summary") {
-        fileName = `PayrollSummary_${periodStr}.pdf`;
+        // Validate that we have a reference number for other export types too
+        if (!payrollReferenceNumber) {
+          toast({
+            title: "Missing Payroll Reference",
+            description: "Please process the payroll before exporting.",
+            variant: "destructive",
+          });
+          setIsExporting(false);
+          return;
+        }
+        
+        fileName = `PayrollSummary_${payrollReferenceNumber}_${periodStr}.pdf`;
         // Simulate export process for other types
         await new Promise((resolve) => setTimeout(resolve, 1500));
       }
@@ -1358,6 +1389,9 @@ export default function ProcessPayrollPage() {
 
       // Get the saved payroll data
       const savedPayroll = await response.json();
+      
+      // Store the payroll reference number in state
+      setPayrollReferenceNumber(savedPayroll.id);
 
       // Mark calculations as finalized
       const finalizedCalculations = payrollCalculations.map((calc) => ({
@@ -2048,11 +2082,9 @@ export default function ProcessPayrollPage() {
                     <CardContent className="p-4 flex-grow">
                       <div className="space-y-3">
                         {payrollReferenceNumber && (
-                          <div className="flex justify-between items-center py-2 border-b border-border/40">
-                            <span className="font-semibold text-muted-foreground">Reference Number</span>
-                            <span className="font-medium text-primary">
-                              {payrollReferenceNumber}
-                            </span>
+                          <div className="flex justify-between items-center py-2 border-b border-border/40 bg-blue-50/50 dark:bg-blue-900/10 px-2 rounded">
+                            <span className="font-semibold text-muted-foreground">Reference No.</span>
+                            <span className="font-medium text-primary">{payrollReferenceNumber}</span>
                           </div>
                         )}
                         <div className="flex justify-between items-center py-2 border-b border-border/40">

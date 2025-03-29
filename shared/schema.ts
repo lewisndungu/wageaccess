@@ -163,6 +163,7 @@ export interface Payroll {
   processedAt?: Date;
   processedBy?: string;
   employee?: Employee;
+  referenceNumber?: string;
 }
 
 // EWA (Earned Wage Access) model

@@ -83,6 +83,7 @@ export interface IStorage {
   getPayroll(id: string): Promise<Payroll | undefined>;
   getPayrollForEmployee(employeeId: string): Promise<Payroll[]>;
   getPayrollForPeriod(startDate: Date, endDate: Date): Promise<Payroll[]>;
+  getPayrollByReferenceNumber(referenceNumber: string): Promise<Payroll[]>;
   createPayroll(payroll: InsertPayroll): Promise<Payroll>;
   updatePayroll(
     id: string,
@@ -612,6 +613,12 @@ export class MemStorage implements IStorage {
     });
   }
 
+  async getPayrollByReferenceNumber(referenceNumber: string): Promise<Payroll[]> {
+    return Array.from(this.payroll.values()).filter((payroll) => {
+      return payroll.referenceNumber === referenceNumber;
+    });
+  }
+
   async createPayroll(payrollData: InsertPayroll): Promise<Payroll> {
     const id = payrollData.id && typeof payrollData.id === 'string'
         ? payrollData.id
@@ -632,6 +639,7 @@ export class MemStorage implements IStorage {
       status: payrollData.status ?? '', // Default to empty string if undefined
       processedBy: payrollData.processedBy, // Optional, no default needed if undefined
       processedAt: payrollData.processedAt ?? new Date(),
+      referenceNumber: payrollData.referenceNumber
     };
     this.payroll.set(id, newPayroll);
     return newPayroll;
@@ -1502,6 +1510,7 @@ export class MemStorage implements IStorage {
           status: 'processed',
           processedAt: new Date(),
           processedBy: faker.string.uuid(), // Mock processor ID
+          referenceNumber: faker.string.uuid()
         };
         
         await this.createPayroll(payroll);

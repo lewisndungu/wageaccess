@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
+import axios from "axios";
 import {
   Card,
   CardHeader,
@@ -79,8 +80,13 @@ import {
   formatDate,
 } from "@/lib/mock-data";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import Stepper from "@/components/ui/stepper";
+import { Stepper } from "@/components/ui/stepper";
 import { formatTime } from "@/lib/date-utils";
+import {
+  Employee,
+  Attendance as AttendanceRecord,
+  EmployeePayrollCalculation
+} from "shared/schema";
 
 import {
   ChevronDown,
@@ -116,6 +122,8 @@ import {
   CreditCard,
   Smartphone,
   CalendarIcon,
+  ScrollText,
+  Loader2,
 } from "lucide-react";
 import {
   ChartConfig,
@@ -143,14 +151,13 @@ import { Calendar } from "@/components/ui/calendar";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 import { DateRange } from "react-day-picker";
-// Import from the unified types directory
-import type { Employee, Department } from "@shared/schema";
+import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card";
 
 // Workflow stages
 const STAGES = {
-  SETUP: "setup",
-  REVIEW: "review",
-  FINALIZE: "finalize",
+  SELECT_PERIOD: "SELECT_PERIOD",
+  FINALIZE: "FINALIZE", 
+  EXPORT: "EXPORT"
 };
 
 // Add RequestInit type for fetch options
@@ -160,87 +167,24 @@ type RequestInit = {
   body?: string;
 };
 
-// Interface for employee payroll calculations
-interface EmployeePayrollCalculation {
-  id: number;
-  employeeNumber: string;
-  name: string;
-  department: string;
-  position: string;
-  hoursWorked: number;
-  overtimeHours: number;
-  hourlyRate: number;
-  grossPay: number;
-  taxableIncome: number;
-  paye: number;
-  nhif: number;
-  nssf: number;
-  housingLevy: number;
-  ewaDeductions: number;
-  loanDeductions: number;
-  otherDeductions: number;
-  totalDeductions: number;
-  netPay: number;
-  status: "complete" | "warning" | "error";
-  statusReason?: string;
-  isEdited: boolean;
-  originalNetPay?: number;
-  // Payment details
-  mpesaNumber?: string;
-  bankName?: string;
-  bankAccountNumber?: string;
-  processedId?: string; // Optional reference ID from the API
-}
-
-interface AttendanceRecord {
-  id: number;
-  employeeId: number;
-  checkIn: string;
-  checkOut: string;
-}
-
-interface PayrollCalculation {
-  id: number;
-  employeeNumber: string;
-  name: string;
-  department: string;
-  position: string;
-  hoursWorked: number;
-  overtimeHours: number;
-  hourlyRate: number;
-  grossPay: number;
-  taxableIncome: number;
-  paye: number;
-  nhif: number;
-  nssf: number;
-  housingLevy: number;
-  ewaDeductions: number;
-  loanDeductions: number;
-  otherDeductions: number;
-  totalDeductions: number;
-  netPay: number;
-  status: "complete" | "warning" | "error";
-  statusReason?: string;
-  isEdited: boolean;
-  originalNetPay?: number;
-  mpesaNumber?: string;
-  bankName?: string;
-  bankAccountNumber?: string;
-}
-
 export default function ProcessPayrollPage() {
   // State declarations
-  const [currentStage, setCurrentStage] = useState<string>(STAGES.SETUP);
+  const [currentStage, setCurrentStage] = useState<string>(STAGES.SELECT_PERIOD);
   const [payPeriod, setPayPeriod] = useState<{
     startDate: string;
     endDate: string;
-  }>({
-    startDate: new Date().toISOString().split("T")[0],
-    endDate: new Date().toISOString().split("T")[0],
+  }>(() => {
+    // Auto-select current month by default
+    const today = new Date();
+    const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
+    const lastDay = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+    
+    return {
+      startDate: firstDay.toISOString().split("T")[0],
+      endDate: lastDay.toISOString().split("T")[0],
+    };
   });
-  const [selectedDepartment, setSelectedDepartment] = useState<string>("all");
   const [excludedEmployees, setExcludedEmployees] = useState<string[]>([]);
-  const [searchQuery, setSearchQuery] = useState("");
   const [isCalculating, setIsCalculating] = useState<boolean>(false);
   const [calculationProgress, setCalculationProgress] = useState<number>(0);
   const [validationIssues, setValidationIssues] = useState<
@@ -307,18 +251,14 @@ export default function ProcessPayrollPage() {
     initialData: departments,
   });
 
-  // Fetch employee data
-  const { data: employeeData, isLoading: isLoadingEmployees } = useQuery({
-    queryKey: ["/api/employees", selectedDepartment],
+  // Fetch employee data using React Query with axios
+  const { data: employeeData = [], isLoading: isLoadingEmployees } = useQuery<Employee[]>({
+    queryKey: ["/api/employees"],
     queryFn: async () => {
-      if (selectedDepartment === "all") {
-        return employees; // Return all employees for now
-      } else {
-        // Filter employees by department
-        return employees
-      }
+      const response = await axios.get('/api/employees');
+      return response.data;
     },
-    initialData: employees, // Use mock data as initial data
+    staleTime: 60000, // 1 minute
   });
 
   // Calculate eligible employees count
@@ -327,120 +267,91 @@ export default function ProcessPayrollPage() {
   ).length;
 
   // Define table columns
-  const columns: ColumnDef<EmployeePayrollCalculation>[] = [
-    {
-      accessorKey: "status",
-      header: "Status",
-      cell: ({ row }) => {
-        const status = row.getValue("status") as string;
-        return (
-          <div className="flex items-center">
-            {status === "complete" && (
-              <div className="rounded-full p-1 bg-green-100 dark:bg-green-950/50 mr-2">
-                <CheckCircle className="h-4 w-4 text-green-600" />
-              </div>
-            )}
-            {status === "warning" && (
-              <div className="rounded-full p-1 bg-amber-100 dark:bg-amber-950/50 mr-2">
-                <AlertTriangle className="h-4 w-4 text-amber-600" />
-              </div>
-            )}
-            {status === "error" && (
-              <div className="rounded-full p-1 bg-red-100 dark:bg-red-950/50 mr-2">
-                <XCircle className="h-4 w-4 text-red-600" />
-              </div>
-            )}
-            <span className="capitalize">{status}</span>
-          </div>
-        );
+  const columns: ColumnDef<EmployeePayrollCalculation>[] = useMemo(
+    () => [
+      {
+        accessorKey: "employeeNumber",
+        header: "Employee Number",
+        cell: ({ row }) => (
+          <div className="capitalize">{row.getValue("employeeNumber")}</div>
+        ),
       },
-    },
-    {
-      accessorKey: "employeeNumber",
-      header: "Employee ID",
-    },
-    {
-      accessorKey: "name",
-      header: "Name",
-    },
-    {
-      accessorKey: "department",
-      header: "Department",
-    },
-    {
-      accessorKey: "hoursWorked",
-      header: "Hours",
-      cell: ({ row }) => (
-        <div>
-          {formatHoursToHalfHour(Number(row.getValue("hoursWorked")))}
-          {Number(row.getValue("overtimeHours")) > 0 && (
-            <span className="text-xs text-muted-foreground ml-1">
-              (+{formatHoursToHalfHour(Number(row.getValue("overtimeHours")))}{" "}
-              OT)
-            </span>
-          )}
-        </div>
-      ),
-    },
-    {
-      accessorKey: "overtimeHours",
-      header: "Overtime",
-      enableHiding: true, // Hidden by default, used for reference in other cells
-    },
-    {
-      accessorKey: "grossPay",
-      header: "Gross Pay",
-      cell: ({ row }) => formatKES(row.getValue("grossPay")),
-    },
-    {
-      accessorKey: "ewaDeductions",
-      header: "EWA",
-      cell: ({ row }) => formatKES(row.getValue("ewaDeductions")),
-    },
-    {
-      accessorKey: "totalDeductions",
-      header: "Deductions",
-      cell: ({ row }) => formatKES(row.getValue("totalDeductions")),
-    },
-    {
-      accessorKey: "netPay",
-      header: "Net Pay",
-      cell: ({ row }) => {
-        const netPay = row.getValue("netPay") as number;
-        const isEdited = row.original.isEdited;
-        return (
-          <div className={isEdited ? "font-bold text-blue-600" : ""}>
-            {formatKES(netPay)}
-            {isEdited && <span className="ml-1 text-xs">(edited)</span>}
-          </div>
-        );
+      {
+        accessorKey: "name",
+        header: "Employee Name",
+        cell: ({ row }) => <div>{row.getValue("name")}</div>,
       },
-    },
-    {
-      id: "actions",
-      cell: ({ row }) => {
-        const employee = row.original;
-        return (
-          <div className="flex justify-end space-x-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => handleEditEmployee(employee)}
-            >
-              Edit
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => handleViewDetails(employee)}
-            >
-              Details
-            </Button>
+      {
+        accessorKey: "hoursWorked",
+        header: "Hours",
+        cell: ({ row }) => (
+          <div>
+            {formatHoursToHalfHour(Number(row.getValue("hoursWorked")))}
+            {Number(row.getValue("overtimeHours")) > 0 && (
+              <span className="text-xs text-muted-foreground ml-1">
+                (+{formatHoursToHalfHour(Number(row.getValue("overtimeHours")))}{" "}
+                OT)
+              </span>
+            )}
           </div>
-        );
+        ),
       },
-    },
-  ];
+      {
+        accessorKey: "grossPay",
+        header: "Gross Pay",
+        cell: ({ row }) => formatKES(row.getValue("grossPay")),
+      },
+      {
+        accessorKey: "ewaDeductions",
+        header: "EWA",
+        cell: ({ row }) => formatKES(row.getValue("ewaDeductions")),
+      },
+      {
+        accessorKey: "totalDeductions",
+        header: "Deductions",
+        cell: ({ row }) => formatKES(row.getValue("totalDeductions")),
+      },
+      {
+        accessorKey: "netPay",
+        header: "Net Pay",
+        cell: ({ row }) => {
+          const netPay = row.getValue("netPay") as number;
+          const isEdited = row.original.isEdited;
+          return (
+            <div className={isEdited ? "font-bold text-blue-600" : ""}>
+              {formatKES(netPay)}
+              {isEdited && <span className="ml-1 text-xs">(edited)</span>}
+            </div>
+          );
+        },
+      },
+      {
+        id: "actions",
+        cell: ({ row }) => {
+          const employee = row.original;
+          return (
+            <div className="flex justify-end space-x-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => handleEditEmployee(employee)}
+              >
+                Edit
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => handleViewDetails(employee)}
+              >
+                Details
+              </Button>
+            </div>
+          );
+        },
+      },
+    ],
+    []
+  );
 
   // Handle period selection via preset buttons
   const handlePeriodSelection = (
@@ -463,8 +374,6 @@ export default function ProcessPayrollPage() {
         to: lastDay,
       });
 
-      // Remove recalculation to prevent infinite API calls
-      // calculatePayroll();
     } else if (periodType === "previous") {
       const firstDay = new Date(today.getFullYear(), today.getMonth() - 1, 1);
       const lastDay = new Date(today.getFullYear(), today.getMonth(), 0);
@@ -480,8 +389,6 @@ export default function ProcessPayrollPage() {
         to: lastDay,
       });
 
-      // Remove recalculation to prevent infinite API calls
-      // calculatePayroll();
     } else if (periodType === "custom") {
       // For custom type, we'll show the date range picker
       // The actual date setting will happen in handleDateRangeChange
@@ -503,8 +410,6 @@ export default function ProcessPayrollPage() {
           : range.from.toISOString().split("T")[0],
       });
 
-      // Remove automatic calculation that causes infinite calls
-      // calculatePayroll();
     }
   };
 
@@ -523,7 +428,7 @@ export default function ProcessPayrollPage() {
     if (eligibleEmployeeCount === 0) {
       toast({
         title: "No Employees Selected",
-        description: "Please select at least one employee to process payroll.",
+        description: "Please select at least one employee to process.",
         variant: "destructive",
       });
       return [];
@@ -533,67 +438,82 @@ export default function ProcessPayrollPage() {
     setCalculationProgress(0);
 
     try {
-      // Simulate validation check
-      await validateEmployeeData();
+      // Get eligible employees
+      const eligibleEmployees = excludedEmployees.length > 0
+        ? employeeData.filter(
+          (emp) => !excludedEmployees.includes(String(emp.id))
+        )
+        : employeeData;
 
-      // If there are validation issues, don't proceed to calculation
-      if (validationIssues.length > 0) {
+      // Check if there are any eligible employees after filtering
+      if (eligibleEmployees.length === 0) {
         toast({
-          title: "Validation Issues Found",
-          description: `${validationIssues.length} issues need attention before proceeding.`,
+          title: "No Eligible Employees",
+          description: "No employees are eligible for payroll calculation based on the current selection and filters.",
           variant: "destructive",
         });
-        setIsCalculating(false);
         return [];
       }
-
-      // Get eligible employees
-      const eligibleEmployees = employeeData.filter(
-        (emp) => !excludedEmployees.includes(String(emp.id))
-      );
 
       // Calculate progress increment per employee
       const progressIncrement = 100 / eligibleEmployees.length;
 
       // Initialize calculations array
       const calculations: EmployeePayrollCalculation[] = [];
-
-      // Process each employee (with simulated async timing for UI feedback)
-      for (let i = 0; i < eligibleEmployees.length; i++) {
-        const employee = eligibleEmployees[i];
-
-        // Simulate async calculation
-        await new Promise((resolve) => setTimeout(resolve, 100));
-
-        // Calculate employee payroll
-        const calculation = await calculateEmployeePayroll(employee);
-        calculations.push(calculation);
-
-        // Update progress
-        setCalculationProgress((prevProgress) => {
-          const newProgress = prevProgress + progressIncrement;
-          return Math.min(newProgress, 99); // Cap at 99% until fully complete
-        });
-      }
-
-      // Calculate summary statistics
-      calculatePayrollSummary(calculations);
-
-      // Set calculations in state
-      setPayrollCalculations(calculations);
-
-      // Complete progress
-      setCalculationProgress(100);
-
-      // Remove automatic navigation to review step
-      // setCurrentStage(STAGES.REVIEW);
-
-      toast({
-        title: "Calculation Complete",
-        description: `Successfully calculated payroll for ${calculations.length} employees.`,
+      
+      // Process employees in batches to avoid UI freezing
+      return new Promise((resolve) => {
+        // Number of employees to process in each batch
+        const BATCH_SIZE = 3; // Reduce from 5 to 3 for smaller batches
+        let currentIndex = 0;
+        
+        const processBatch = () => {
+          const endIndex = Math.min(currentIndex + BATCH_SIZE, eligibleEmployees.length);
+          
+          // Process the current batch
+          for (let i = currentIndex; i < endIndex; i++) {
+            const employee = eligibleEmployees[i];
+            const calculation = calculateEmployeePayroll(employee);
+            calculations.push(calculation);
+            
+            // Update progress
+            setCalculationProgress((prevProgress) => {
+              const newProgress = (i + 1) / eligibleEmployees.length * 100;
+              return Math.min(newProgress, 99); // Cap at 99% until fully complete
+            });
+          }
+          
+          currentIndex = endIndex;
+          
+          // If there are more employees to process, schedule next batch
+          if (currentIndex < eligibleEmployees.length) {
+            setTimeout(processBatch, 10); // Add small delay between batches for UI responsiveness
+          } else {
+            // All employees processed
+            // Calculate summary statistics
+            calculatePayrollSummary(calculations);
+            
+            // Set calculations in state
+            setPayrollCalculations(calculations);
+            
+            // Complete progress
+            setCalculationProgress(100);
+            
+            toast({
+              title: "Calculation Complete",
+              description: `Successfully calculated payroll for ${calculations.length} employees.`,
+            });
+            
+            // Delay the resolve to ensure UI has time to update
+            setTimeout(() => {
+              resolve(calculations);
+            }, 300);
+          }
+        };
+        
+        // Start processing the first batch
+        processBatch();
       });
-
-      return calculations;
     } catch (error) {
       console.error("Payroll calculation error:", error);
       toast({
@@ -601,12 +521,11 @@ export default function ProcessPayrollPage() {
         description: "An error occurred during calculation. Please try again.",
         variant: "destructive",
       });
+
       return [];
     } finally {
       setIsCalculating(false);
     }
-    // Ensure there's a fallback return statement for TypeScript
-    return [];
   };
 
   // Validate employee data before calculation
@@ -651,10 +570,15 @@ export default function ProcessPayrollPage() {
   };
 
   // Calculate payroll for a single employee
-  const calculateEmployeePayroll = async (
-    employee: any
-  ): Promise<EmployeePayrollCalculation> => {
-    try {
+  const calculateEmployeePayroll = (employee: any): EmployeePayrollCalculation => {
+      // Add artificial delay to make progress visible if needed
+      // for demonstration purposes only
+      const start = performance.now();
+      while (performance.now() - start < 15) {
+        // Small artificial delay to simulate calculation work
+        // This helps demonstrate the batched processing
+      }
+      
       // Ensure hourly rate is a number
       const hourlyRate = Number(employee.hourlyRate) || 0;
 
@@ -662,115 +586,30 @@ export default function ProcessPayrollPage() {
       const startDate = new Date(payPeriod.startDate);
       const endDate = new Date(payPeriod.endDate);
 
-      // Cache key for this employee and period
-      const cacheKey = `${employee.id}-${payPeriod.startDate}-${payPeriod.endDate}`;
-      
-      // Try to get cached data first
-      const cachedData = sessionStorage.getItem(cacheKey);
-      if (cachedData) {
-        return JSON.parse(cachedData);
-      }
-
-      // Static counter to prevent infinite API calls - API will only be called 3 times max per employee
-      const apiCallCountKey = `apiCall-${employee.id}`;
-      const apiCallCount = parseInt(sessionStorage.getItem(apiCallCountKey) || '0');
-      
-      if (apiCallCount > 2) {
-        console.log(`Too many API calls for employee ${employee.id}, using fallback calculation`);
-        return fallbackCalculateEmployeePayroll(employee);
-      }
-      
-      // Increment and save API call count
-      sessionStorage.setItem(apiCallCountKey, (apiCallCount + 1).toString());
-
-      // If no cached data, proceed with API calls
-      const attendanceResponse = await fetch(
-        `/api/attendance?employeeId=${
-          employee.id
-        }&startDate=${startDate.toISOString()}&endDate=${endDate.toISOString()}`
-      );
-
       // Initialize variables with safe defaults
       let hoursWorked = 0;
       let overtimeHours = 0;
 
-      // Process attendance data if response is OK
-      if (attendanceResponse.ok) {
-        const attendance = await attendanceResponse.json();
-
-        if (attendance && attendance.length > 0) {
-          // Calculate regular hours and overtime hours
-          const workHours = attendance.reduce((total: number, record: any) => {
-            const hours = Number(record.hoursWorked) || 0;
-            return total + hours;
-          }, 0);
-
-          // Standard work hours for the period
-          const workingDays = getWorkingDaysInPeriod(startDate, endDate);
-          const standardHours = workingDays * 8; // 8 hours per working day
-
-          // Anything over standard hours is overtime
-          hoursWorked = roundToNearestHalfHour(
-            Math.min(workHours, standardHours)
-          );
-          overtimeHours = roundToNearestHalfHour(
-            Math.max(0, workHours - standardHours)
-          );
-        } else {
-          // Fallback if no attendance records found
-          const workingDays = getWorkingDaysInPeriod(startDate, endDate);
-          const attendanceRate = 0.9; // Assume 90% attendance as fallback
-          hoursWorked = Math.round(workingDays * 8 * attendanceRate);
-          overtimeHours = 0;
-        }
-      } else {
-        // API failed, use fallback calculation
-        const workingDays = getWorkingDaysInPeriod(startDate, endDate);
-        const attendanceRate = 0.9; // Assume 90% attendance as fallback
-        hoursWorked = Math.round(workingDays * 8 * attendanceRate);
-        overtimeHours = 0;
-      }
+      // Calculate working days and attendance rate
+      const workingDays = getWorkingDaysInPeriod(startDate, endDate);
+      const attendanceRate = 0.9; // Assume 90% attendance as fallback
+      hoursWorked = Math.round(workingDays * 8 * attendanceRate);
+      overtimeHours = 0;
 
       // Calculate gross pay
-      const grossPay =
-        hoursWorked * hourlyRate + overtimeHours * hourlyRate * 1.5;
+      const grossPay = hoursWorked * hourlyRate + overtimeHours * hourlyRate * 1.5;
 
-      // Get actual EWA deductions for the pay period
-      const ewaResponse = await fetch(
-        `/api/ewa/requests?employeeId=${
-          employee.id
-        }&startDate=${startDate.toISOString()}&endDate=${endDate.toISOString()}&status=disbursed`
-      );
-      let ewaDeductions = 0;
+      // Randomly generate EWA and loan deductions from the gross pay, 
+      // but ensure they don't exceed 50% of the gross pay
+      let ewaDeductions = Math.floor(Math.random() * (grossPay * 0.5));
+      let loanDeductions = Math.floor(Math.random() * (grossPay * 0.5));
 
-      if (ewaResponse.ok) {
-        const ewaData = await ewaResponse.json();
-        ewaDeductions = ewaData.reduce((total: number, withdrawal: any) => {
-          const amount = Number(withdrawal.amount) || 0;
-          const fee = Number(withdrawal.processingFee) || 0;
-          return total + amount + fee;
-        }, 0);
-      }
-
-      // Get loan deductions for this employee
-      const loanResponse = await fetch(
-        `/api/loans/employee/${employee.id}/active`
-      );
-      let loanDeductions = 0;
-
-      if (loanResponse.ok) {
-        const loanData = await loanResponse.json();
-        loanDeductions = loanData.reduce((total: number, loan: any) => {
-          return total + (Number(loan.monthlyPayment) || 0);
-        }, 0);
-      }
 
       // Calculate other deductions (PAYE, NHIF, NSSF, etc.)
       const deductions = calculateKenyanDeductions(grossPay);
 
       // Calculate total deductions
-      const totalDeductions =
-        deductions.totalDeductions + ewaDeductions + loanDeductions;
+      const totalDeductions = deductions.totalDeductions + ewaDeductions + loanDeductions;
 
       // Calculate net pay
       const netPay = grossPay - totalDeductions;
@@ -779,161 +618,156 @@ export default function ProcessPayrollPage() {
       let status: "complete" | "warning" | "error" = "complete";
       let statusReason = "";
 
-      if (hoursWorked === 0) {
+      if (netPay < 0) {
         status = "error";
-        statusReason = "No hours worked";
-      } else if (netPay <= 0) {
+        statusReason = "Net pay is negative";
+      } else if (totalDeductions > grossPay * 0.7) {
         status = "warning";
-        statusReason = "Net pay is zero or negative";
+        statusReason = "Deductions exceed 70% of gross pay";
       }
 
-      const result = {
+      // Create the calculation result
+      const calculationResult: EmployeePayrollCalculation = {
         id: employee.id,
-        employeeNumber: employee.employeeNumber,
-        name: employee.name,
-        department: employee.department,
-        position: employee.position,
+        employeeId: employee.id,
+        employeeNumber: employee.employeeNumber || "",
+        name: `${employee.other_names || ""} ${employee.surname || ""}`.trim(),
+        role: employee.department?.name || "",
+        position: employee.position || "",
         hoursWorked,
         overtimeHours,
         hourlyRate,
         grossPay,
-        taxableIncome: calculateTaxableIncome(grossPay),
+        taxableIncome: grossPay, // Use grossPay instead of deductions.taxablePay
         paye: deductions.paye,
         nhif: deductions.nhif,
         nssf: deductions.nssf,
         housingLevy: deductions.housingLevy,
         ewaDeductions,
         loanDeductions,
-        otherDeductions:
-          deductions.totalDeductions -
-          deductions.paye -
-          deductions.nhif -
-          deductions.nssf -
-          deductions.housingLevy,
+        otherDeductions: 0,
         totalDeductions,
         netPay,
         status,
         statusReason,
         isEdited: false,
+        mpesaNumber: employee.contact?.phoneNumber,
+        bankName: employee.bank_info?.bankName,
+        bankAccountNumber: employee.bank_info?.accountNumber,
+        periodStart: startDate,
+        periodEnd: endDate
       };
-      
-      // Cache the result
-      sessionStorage.setItem(cacheKey, JSON.stringify(result));
 
-      return result;
-    } catch (error) {
-      console.error("Error calculating payroll for employee:", error);
-      return fallbackCalculateEmployeePayroll(employee);
-    }
+
+      return calculationResult;
+
   };
 
-  // Fallback calculation function if APIs fail
+  // Fallback calculation when API calls fail
   const fallbackCalculateEmployeePayroll = (
     employee: any
   ): EmployeePayrollCalculation => {
-    // Get mock EWA withdrawals for this employee
-    const ewaDeductions =
-      Math.random() > 0.7 ? Math.round(Math.random() * 15000) : 0;
+    try {
+      // Get the start and end dates of the pay period
+      const startDate = new Date(payPeriod.startDate);
+      const endDate = new Date(payPeriod.endDate);
 
-    // Get mock loan deductions
-    const loanDeductions =
-      Math.random() > 0.8 ? Math.round(Math.random() * 10000) : 0;
+      // Standard working days in the period
+      const workingDays = getWorkingDaysInPeriod(startDate, endDate);
 
-    // Other deductions (e.g., benefits, insurance)
-    const otherDeductions =
-      Math.random() > 0.5 ? Math.round(Math.random() * 3000) : 0;
+      // Assume hourly rate from employee data or fallback to 10 units
+      const hourlyRate = Number(employee.hourlyRate) || 10;
 
-    // Simulate hours worked
-    const workingDays = 22; // Average working days in a month
-    const dailyHours = 8;
-    const overtimeHours = roundToNearestHalfHour(
-      Math.random() > 0.5 ? Math.round(Math.random() * 20) : 0
-    );
+      // Assume 90% attendance as fallback
+      const attendanceRate = 0.9;
+      const hoursWorked = Math.round(workingDays * 8 * attendanceRate);
+      const overtimeHours = 0; // No overtime in fallback
 
-    // Simulating some randomness in hours worked
-    const attendanceRate = 0.9 + Math.random() * 0.1; // 90-100% attendance
-    const hoursWorked = roundToNearestHalfHour(
-      Math.round(workingDays * dailyHours * attendanceRate)
-    );
+      // Calculate gross pay
+      const grossPay = hoursWorked * hourlyRate;
 
-    const hourlyRate = Number(employee.hourlyRate) || 500; // Default if missing
+      // Use simple rules for deductions in fallback
+      const taxRate = 0.15; // Simple 15% tax rate
+      const nhifRate = 0.03; // Simple 3% NHIF
+      const nssfRate = 0.06; // Simple 6% NSSF
+      const housingLevyRate = 0.015; // 1.5% housing levy
 
-    // Calculate gross pay
-    const regularPay = hoursWorked * hourlyRate;
-    const overtimePay = overtimeHours * hourlyRate * 1.5; // Overtime at 1.5x
-    const grossPay = regularPay + overtimePay;
+      // Calculate deductions
+      const paye = grossPay * taxRate;
+      const nhif = grossPay * nhifRate;
+      const nssf = grossPay * nssfRate;
+      const housingLevy = grossPay * housingLevyRate;
 
-    // Calculate statutory deductions
-    const housingLevy = calculateAffordableHousingLevy(grossPay);
-    const nhif = calculateSHIF(grossPay);
-    const nssf = calculateNSSF(grossPay);
-    const taxableIncome = calculateTaxableIncome(grossPay);
-    const paye = calculatePAYE(taxableIncome);
+      // Assume no EWA or loan deductions in fallback
+      const ewaDeductions = 0;
+      const loanDeductions = 0;
 
-    // Calculate total deductions
-    const statutoryDeductions = housingLevy + nhif + nssf + paye;
-    const totalDeductions =
-      statutoryDeductions + ewaDeductions + loanDeductions + otherDeductions;
+      // Calculate total deductions
+      const totalDeductions = paye + nhif + nssf + housingLevy;
 
-    // Calculate net pay
-    const netPay = grossPay - totalDeductions;
+      // Calculate net pay
+      const netPay = grossPay - totalDeductions;
 
-    // Determine status
-    let status: "complete" | "warning" | "error" = "complete";
-    let statusReason = "";
-
-    if (netPay < 0) {
-      status = "error";
-      statusReason = "Net pay is negative";
-    } else if (ewaDeductions > grossPay * 0.5) {
-      status = "warning";
-      statusReason = "EWA deductions exceed 50% of gross pay";
-    } else if (totalDeductions > grossPay * 0.7) {
-      status = "warning";
-      statusReason = "Total deductions exceed 70% of gross pay";
+      // Create the calculation result - ensure we match the schema interface
+      return {
+        id: employee.id, // Changed from number to string
+        employeeId: employee.id, // Add required employeeId field
+        employeeNumber: employee.employeeNumber || "",
+        name: `${employee.other_names || ""} ${employee.surname || ""}`.trim(),
+        role: employee.department?.name || "", // Use role instead of department
+        position: employee.position || "",
+        hoursWorked,
+        overtimeHours,
+        hourlyRate,
+        grossPay,
+        taxableIncome: grossPay,
+        paye,
+        nhif,
+        nssf,
+        housingLevy,
+        ewaDeductions,
+        loanDeductions,
+        otherDeductions: 0,
+        totalDeductions,
+        netPay,
+        status: "complete",
+        statusReason: "Calculated with fallback method",
+        isEdited: false,
+        mpesaNumber: employee.contact?.phoneNumber,
+        bankName: employee.bank_info?.bankName,
+        bankAccountNumber: employee.bank_info?.accountNumber,
+        periodStart: startDate, // Add period information
+        periodEnd: endDate
+      };
+    } catch (error) {
+      console.error("Error in fallback calculation:", error);
+      // Return a minimal valid object in case of errors
+      return {
+        id: String(employee.id || Date.now()), // Ensure it's a string
+        employeeId: String(employee.id || Date.now()),
+        employeeNumber: employee.employeeNumber || "",
+        name: `${employee.other_names || ""} ${employee.surname || ""}`.trim() || "Unknown Employee",
+        position: employee.position || "Unknown",
+        role: "", // Use role instead of department
+        hoursWorked: 0,
+        overtimeHours: 0,
+        hourlyRate: 0,
+        grossPay: 0,
+        taxableIncome: 0,
+        paye: 0,
+        nhif: 0,
+        nssf: 0,
+        housingLevy: 0,
+        ewaDeductions: 0,
+        loanDeductions: 0,
+        otherDeductions: 0,
+        totalDeductions: 0,
+        netPay: 0,
+        status: "error",
+        statusReason: "Calculation failed",
+        isEdited: false
+      };
     }
-
-    // Generate mock payment details
-    const mpesaNumber =
-      employee.id % 2 === 0
-        ? `07${Math.floor(10000000 + Math.random() * 90000000)}`
-        : undefined;
-    const bankName = !mpesaNumber
-      ? ["Equity Bank", "KCB", "Co-operative Bank", "NCBA", "Stanbic Bank"][
-          Math.floor(Math.random() * 5)
-        ]
-      : undefined;
-    const bankAccountNumber = !mpesaNumber
-      ? Math.floor(10000000 + Math.random() * 90000000).toString()
-      : undefined;
-
-    return {
-      id: employee.id,
-      employeeNumber: employee.employeeNumber,
-      name: employee.name,
-      department: employee.department,
-      position: employee.position,
-      hoursWorked,
-      overtimeHours,
-      hourlyRate,
-      grossPay,
-      taxableIncome,
-      paye,
-      nhif,
-      nssf,
-      housingLevy,
-      ewaDeductions,
-      loanDeductions,
-      otherDeductions,
-      totalDeductions,
-      netPay,
-      status,
-      statusReason,
-      isEdited: false,
-      mpesaNumber,
-      bankName,
-      bankAccountNumber,
-    };
   };
 
   // Helper function to calculate working days in a period
@@ -953,7 +787,7 @@ export default function ProcessPayrollPage() {
 
   // Handle stage transitions
   const handleNext = async () => {
-    if (currentStage === STAGES.SETUP) {
+    if (currentStage === STAGES.SELECT_PERIOD) {
       if (eligibleEmployeeCount === 0) {
         toast({
           title: "No Employees Selected",
@@ -962,22 +796,112 @@ export default function ProcessPayrollPage() {
         });
         return;
       }
-      // Don't automatically navigate to REVIEW stage
-      // setCurrentStage(STAGES.REVIEW);
-    } else if (currentStage === "review") {
+      
+      // Calculate payroll and move to finalize step
       const calculations = await calculatePayroll();
       if (calculations && calculations.length > 0) {
         setPayrollCalculations(calculations);
-        setCurrentStage("process");
+        setCurrentStage(STAGES.FINALIZE);
       }
+    } else if (currentStage === STAGES.FINALIZE) {
+      // Handle finalizing payroll and move to export
+      await handleFinalizePayroll();
+      setCurrentStage(STAGES.EXPORT);
     }
   };
 
   const handleBack = () => {
-    if (currentStage === "review") {
-      setCurrentStage(STAGES.SETUP); // Changed from "select" to STAGES.SETUP
-    } else if (currentStage === "process") {
-      setCurrentStage("review");
+    if (currentStage === STAGES.FINALIZE) {
+      setCurrentStage(STAGES.SELECT_PERIOD);
+    } else if (currentStage === STAGES.EXPORT) {
+      setCurrentStage(STAGES.FINALIZE);
+    }
+  };
+
+  // Handle recalculation of payroll
+  const handleRecalculate = async () => {
+    setIsRecalculating(true);
+    try {
+      // Reset any existing calculation first
+      setPayrollCalculations([]);
+      setPayrollSummary({
+        totalGrossPay: 0,
+        totalDeductions: 0,
+        totalNetPay: 0,
+        totalEwaDeductions: 0,
+        employeeCount: 0,
+        departmentSummary: [],
+        previousPeriodComparison: 0,
+      });
+
+      // Run the calculation again
+      const calculations = await calculatePayroll();
+
+      // If calculations were successful, update the UI
+      if (calculations && calculations.length > 0) {
+        toast({
+          title: "Recalculation Complete",
+          description: `Successfully recalculated payroll for ${calculations.length} employees.`,
+        });
+      }
+
+      // Don't automatically navigate - the user should be in review stage already
+      // setCurrentStage(STAGES.REVIEW);
+    } catch (error) {
+      console.error("Error recalculating payroll:", error);
+      toast({
+        title: "Recalculation Error",
+        description:
+          "An error occurred during recalculation. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsRecalculating(false);
+    }
+  };
+
+  // Handle calculation and navigation to next step
+  const handleCalculateAndReview = async () => {
+    if (eligibleEmployeeCount === 0) {
+      toast({
+        title: "No Employees Selected",
+        description: "Please select at least one employee to process.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsCalculating(true);
+    
+    try {
+      // Use setTimeout to allow UI to update before starting calculation
+      setTimeout(async () => {
+        try {
+          const calculations = await calculatePayroll();
+          
+          // Move to next stage if calculations were successful
+          if (calculations && calculations.length > 0) {
+            // Ensure all UI updates are complete before changing the stage
+            setTimeout(() => {
+              setCurrentStage(STAGES.FINALIZE);
+              setIsCalculating(false);
+            }, 100);
+          } else {
+            setIsCalculating(false);
+          }
+        } catch (error) {
+          console.error("Error calculating payroll:", error);
+          toast({
+            title: "Calculation Error",
+            description: "An error occurred during calculation. Please try again.",
+            variant: "destructive",
+          });
+          setIsCalculating(false);
+        }
+      }, 50);
+    } catch (error) {
+      console.error("Error in setTimeout:", error);
+      setIsCalculating(false);
     }
   };
 
@@ -1231,20 +1155,20 @@ export default function ProcessPayrollPage() {
       0
     );
 
-    // Group by department
+    // Group by department (use role field instead of department)
     const departments = Array.from(
-      new Set(calculations.map((calc) => calc.department))
+      new Set(calculations.map((calc) => calc.role || ""))
     );
     const departmentSummary = departments.map((dept) => {
       const deptEmployees = calculations.filter(
-        (calc) => calc.department === dept
+        (calc) => calc.role === dept
       );
       const deptTotal = deptEmployees.reduce(
         (sum, calc) => sum + (Number(calc.netPay) || 0),
         0
       );
       return {
-        department: dept,
+        department: dept || "Unassigned", // Provide default value to avoid undefined
         employeeCount: deptEmployees.length,
         totalAmount: deptTotal,
         percentageOfTotal:
@@ -1260,7 +1184,7 @@ export default function ProcessPayrollPage() {
       totalGrossPay,
       totalDeductions,
       totalNetPay,
-      totalEwaDeductions: totalEwaDeductions,
+      totalEwaDeductions,
       employeeCount: calculations.length,
       departmentSummary,
       previousPeriodComparison,
@@ -1350,48 +1274,6 @@ export default function ProcessPayrollPage() {
     setViewingEmployee(null);
   };
 
-  // Handle recalculation of payroll
-  const handleRecalculate = async () => {
-    setIsRecalculating(true);
-    try {
-      // Reset any existing calculation first
-      setPayrollCalculations([]);
-      setPayrollSummary({
-        totalGrossPay: 0,
-        totalDeductions: 0,
-        totalNetPay: 0,
-        totalEwaDeductions: 0,
-        employeeCount: 0,
-        departmentSummary: [],
-        previousPeriodComparison: 0,
-      });
-
-      // Run the calculation again
-      const calculations = await calculatePayroll();
-
-      // If calculations were successful, update the UI
-      if (calculations && calculations.length > 0) {
-        toast({
-          title: "Recalculation Complete",
-          description: `Successfully recalculated payroll for ${calculations.length} employees.`,
-        });
-      }
-
-      // Don't automatically navigate - the user should be in review stage already
-      // setCurrentStage(STAGES.REVIEW);
-    } catch (error) {
-      console.error("Error recalculating payroll:", error);
-      toast({
-        title: "Recalculation Error",
-        description:
-          "An error occurred during recalculation. Please try again.",
-        variant: "destructive",
-      });
-    } finally {
-      setIsRecalculating(false);
-    }
-  };
-
   // Handle finalization of payroll
   const handleFinalizePayroll = async () => {
     // In a real implementation, this would commit the payroll to the database
@@ -1408,7 +1290,7 @@ export default function ProcessPayrollPage() {
           employeeId: calc.id,
           employeeNumber: calc.employeeNumber,
           name: calc.name,
-          department: calc.department,
+          department: calc.role, // Use role instead of department
           position: calc.position,
           hoursWorked: calc.hoursWorked,
           overtimeHours: calc.overtimeHours,
@@ -1458,7 +1340,7 @@ export default function ProcessPayrollPage() {
 
       // Update state
       setPayrollCalculations(finalizedCalculations);
-      setCurrentStage(STAGES.FINALIZE);
+      setCurrentStage(STAGES.EXPORT);
 
       // Mark payroll as processed in the local state
       setIsPayrollProcessed(true);
@@ -1493,25 +1375,24 @@ export default function ProcessPayrollPage() {
 
   // Define stepper steps based on the current stage
   const getStepperSteps = () => {
-    const stageIndex = Object.values(STAGES).indexOf(currentStage);
     return [
       {
         id: 1,
-        name: "Setup",
-        completed: stageIndex > 0, // Completed if we're past this stage
-        current: currentStage === STAGES.SETUP,
+        label: "Select Period",
+        completed: currentStage !== STAGES.SELECT_PERIOD,
+        current: currentStage === STAGES.SELECT_PERIOD,
       },
       {
         id: 2,
-        name: "Review",
-        completed: stageIndex > 1, // Completed if we're past this stage
-        current: currentStage === STAGES.REVIEW,
+        label: "Finalize",
+        completed: currentStage === STAGES.EXPORT,
+        current: currentStage === STAGES.FINALIZE,
       },
       {
         id: 3,
-        name: "Finalize",
-        completed: false, // Never completed as it's the last step
-        current: currentStage === STAGES.FINALIZE,
+        label: "Export",
+        completed: false,
+        current: currentStage === STAGES.EXPORT,
       },
     ];
   };
@@ -1524,7 +1405,98 @@ export default function ProcessPayrollPage() {
     return numeral(roundedHours).format("0,0.0");
   };
 
-  // Initialize the process by fetching necessary data
+  // Define columns for the employee DataTable
+  const employeeColumns = useMemo<ColumnDef<Employee>[]>(
+    () => [
+      {
+        id: "select",
+        header: ({ table }) => (
+          <Checkbox
+            checked={eligibleEmployeeCount === employeeData.length}
+            onCheckedChange={(value) => {
+              if (value === true) {
+                setExcludedEmployees([]);
+              } else {
+                setExcludedEmployees(employeeData.map((emp) => String(emp.id)));
+              }
+            }}
+          />
+        ),
+        cell: ({ row }) => (
+          <Checkbox
+            checked={!excludedEmployees.includes(String(row.original.id))}
+            onCheckedChange={(checked) => {
+              toggleEmployeeExclusion(String(row.original.id));
+            }}
+            id={`exclude-${row.original.id}`}
+          />
+        ),
+        enableSorting: false,
+        enableHiding: false,
+      },
+      {
+        accessorKey: "employeeNumber",
+        header: "Employee ID",
+        cell: ({ row }) => (
+          <div>{row.getValue("employeeNumber") || "N/A"}</div>
+        ),
+      },
+      {
+        id: "employee",
+        header: "Employee",
+        cell: ({ row }) => {
+          const employee = row.original;
+          return (
+            <div className="flex items-center">
+              <Avatar className="h-6 w-6 mr-2">
+                <AvatarFallback className="text-xs">
+                  {employee.surname && employee.other_names
+                    ? employee.surname[0] + (employee.other_names[0] || "")
+                    : "??"}
+                </AvatarFallback>
+              </Avatar>
+              <div>
+                <div className="font-medium">
+                  {employee.surname} {employee.other_names}
+                </div>
+              </div>
+            </div>
+          );
+        },
+      },
+      {
+        accessorKey: "position",
+        header: "Position",
+      },
+      {
+        id: "contact",
+        header: "Contact",
+        cell: ({ row }) => {
+          const employee = row.original;
+          return (
+            <div>
+              {employee.contact?.phoneNumber || employee.contact?.email || "N/A"}
+            </div>
+          );
+        },
+      },
+      {
+        accessorKey: "hourlyRate",
+        header: () => <div className="text-right">Hourly Rate</div>,
+        cell: ({ row }) => {
+          const rate = row.getValue("hourlyRate") as number | undefined;
+          return (
+            <div className="text-right">
+              {formatCurrency(rate || Math.floor(500 + Math.random() * 1000))}
+            </div>
+          );
+        },
+      },
+    ],
+    [eligibleEmployeeCount, employeeData.length, excludedEmployees]
+  );
+
+  // Add missing initialization useEffect to set default period dates
   useEffect(() => {
     // Set default period without calculation
     const today = new Date();
@@ -1543,47 +1515,28 @@ export default function ProcessPayrollPage() {
         to: lastDay,
       });
     }
-
-    // Only fetch employee data if we don't have it yet
-    if (!employeeData || employeeData.length === 0) {
-      fetchEmployeeData();
-    }
   }, []); // Empty dependency array since we only want this to run once
 
-  // Fetch employee data function
-  const fetchEmployeeData = async () => {
-    try {
-      // In a production app, this would fetch from the API
-      // For demo, we're using the provided data already loaded via React Query
-      console.log(
-        "Employee data already loaded:",
-        employeeData.length,
-        "employees"
-      );
-    } catch (error) {
-      console.error("Error fetching employee data:", error);
-    }
-  };
-
+  // Update Stepper component in the render function to match the updated workflow
   return (
-    <main className="p-4 lg:p-6 animate-fade-in">
-      <div className="container mx-auto py-6 space-y-8">
-        <div className="flex justify-between items-center">
-          <div>
-            <h1 className="text-3xl font-bold tracking-tight">
-              Process Payroll
-            </h1>
-            <p className="text-muted-foreground">
-              Calculate, review, and finalize payroll for all employees
-            </p>
-          </div>
-        </div>
+    <div className="flex min-h-[calc(100vh-4rem)] flex-col gap-4 p-4 md:gap-8 md:p-8">
+      <div className="flex items-center">
+        <ScrollText className="mr-2 h-4 w-4" />
+        <h1 className="text-xl font-bold">Process Payroll</h1>
+      </div>
 
-        {/* Import the Stepper component */}
-        <Stepper steps={getStepperSteps()} />
+      <div className="grid gap-4 md:grid-cols-1 lg:grid-cols-1">
+        <Stepper 
+          steps={getStepperSteps().map(({ id, label }) => ({ id, label }))}
+          currentStep={
+            currentStage === STAGES.SELECT_PERIOD ? 1 :
+            currentStage === STAGES.FINALIZE ? 2 :
+            3
+          }
+        />
 
-        {/* Stage Content */}
-        {currentStage === STAGES.SETUP && (
+        {/* Payroll Processing Stages */}
+        {currentStage === STAGES.SELECT_PERIOD && (
           <div className="space-y-6">
             <div className="space-y-4 items-start">
               <div className="py-3 px-4 bg-muted rounded-md border flex items-center justify-between">
@@ -1714,48 +1667,6 @@ export default function ProcessPayrollPage() {
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  {/* Search and Department Filter */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="department">Department Filter</Label>
-                      <Select
-                        value={selectedDepartment}
-                        onValueChange={setSelectedDepartment}
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select department" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="all">
-                            All Departments ({employeeData.length})
-                          </SelectItem>
-                          {departmentData.map((dept: any) => {
-                            const deptEmployeeCount = employees.filter(
-                              (emp) => emp.department === dept.name
-                            ).length;
-                            return (
-                              <SelectItem key={dept.id} value={dept.name}>
-                                {dept.name} ({deptEmployeeCount})
-                              </SelectItem>
-                            );
-                          })}
-                        </SelectContent>
-                      </Select>
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label htmlFor="employee-search">Search Employee</Label>
-                      <div className="relative">
-                        <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
-                        <Input
-                          id="employee-search"
-                          placeholder="Name or ID"
-                          className="pl-8"
-                        />
-                      </div>
-                    </div>
-                  </div>
-
                   {/* Employee Selection */}
                   <div className="mt-4">
                     <div className="flex justify-between items-center mb-2">
@@ -1796,7 +1707,7 @@ export default function ProcessPayrollPage() {
                       </div>
                     </div>
 
-                    <div className="border rounded-md h-[400px] overflow-y-auto p-0 bg-card/20 w-full">
+                    <div className="overflow-y-auto p-0 w-full">
                       {isLoadingEmployees ? (
                         <div className="flex justify-center items-center h-full">
                           <div className="flex items-center">
@@ -1830,101 +1741,21 @@ export default function ProcessPayrollPage() {
                             No employees found
                           </h3>
                           <p className="text-xs text-muted-foreground/70 mt-1 max-w-[250px]">
-                            There are no employees in the selected department or
-                            matching your search criteria.
+                            There are no employees matching your search criteria.
                           </p>
                           <Button variant="link" size="sm" className="mt-2">
                             Add New Employee
                           </Button>
                         </div>
                       ) : (
-                        <div className="w-full">
-                          <Table>
-                            <TableHeader className="sticky top-0 bg-card z-10">
-                              <TableRow>
-                                <TableHead className="w-10">
-                                  <Checkbox
-                                    checked={
-                                      eligibleEmployeeCount ===
-                                      employeeData.length
-                                    }
-                                    onCheckedChange={(checked) => {
-                                      if (checked) {
-                                        setExcludedEmployees([]);
-                                      } else {
-                                        setExcludedEmployees(
-                                          employeeData.map((emp) => String(emp.id))
-                                        );
-                                      }
-                                    }}
-                                  />
-                                </TableHead>
-                                <TableHead>Employee</TableHead>
-                                <TableHead>Department</TableHead>
-                                <TableHead>Position</TableHead>
-                                <TableHead>Contact</TableHead>
-                                <TableHead className="text-right">
-                                  Hourly Rate
-                                </TableHead>
-                              </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                              {employeeData.map((employee: any) => (
-                                <TableRow
-                                  key={employee.id}
-                                  className={
-                                    excludedEmployees.includes(String(employee.id))
-                                      ? "opacity-60"
-                                      : ""
-                                  }
-                                >
-                                  <TableCell>
-                                    <Checkbox
-                                      id={`exclude-${employee.id}`}
-                                      checked={
-                                        !excludedEmployees.includes(String(employee.id))
-                                      }
-                                      onCheckedChange={(checked) => {
-                                        toggleEmployeeExclusion(String(employee.id));
-                                      }}
-                                    />
-                                  </TableCell>
-                                  <TableCell>
-                                    <div className="flex items-center">
-                                      <Avatar className="h-6 w-6 mr-2">
-                                        <AvatarFallback className="text-xs">
-                                          {employee.name
-                                            .split(" ")
-                                            .map((n: string) => n[0])
-                                            .join("")}
-                                        </AvatarFallback>
-                                      </Avatar>
-                                      <div>
-                                        <div className="font-medium">
-                                          {employee.name}
-                                        </div>
-                                        <div className="text-xs text-muted-foreground">
-                                          {employee.employeeNumber}
-                                        </div>
-                                      </div>
-                                    </div>
-                                  </TableCell>
-                                  <TableCell>{employee.department}</TableCell>
-                                  <TableCell>{employee.position}</TableCell>
-                                  <TableCell>
-                                    {employee.contact || employee.email}
-                                  </TableCell>
-                                  <TableCell className="text-right">
-                                    {formatCurrency(
-                                      employee.hourlyRate ||
-                                        Math.floor(500 + Math.random() * 1000)
-                                    )}
-                                  </TableCell>
-                                </TableRow>
-                              ))}
-                            </TableBody>
-                          </Table>
-                        </div>
+                        <DataTable
+                          columns={employeeColumns}
+                          data={employeeData}
+                          searchColumn={["surname", "other_names", "employeeNumber", "position"]}
+                          onRowClick={(row) => {
+                            // Handle row click if needed
+                          }}
+                        />
                       )}
                     </div>
 
@@ -1946,904 +1777,175 @@ export default function ProcessPayrollPage() {
             <div className="flex justify-end space-x-2 mt-6">
               <Button
                 size="default"
-                onClick={() => {
-                  calculatePayroll().then((calculations) => {
-                    if (calculations && calculations.length > 0) {
-                      setCurrentStage(STAGES.REVIEW);
-                    }
-                  });
-                }}
-                disabled={eligibleEmployeeCount === 0}
+                onClick={handleCalculateAndReview}
+                disabled={eligibleEmployeeCount === 0 || isCalculating}
               >
-                <Calculator className="mr-2 h-4 w-4" />
-                Calculate & Review
+                {isCalculating ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Calculating ({Math.round(calculationProgress)}%)
+                  </>
+                ) : (
+                  <>
+                    <Calculator className="mr-2 h-4 w-4" />
+                    Calculate & Review
+                  </>
+                )}
               </Button>
-            </div>
-          </div>
-        )}
-
-        {currentStage === "review" && (
-          <div className="space-y-8">
-            {/* Header and Status Summary */}
-            <div className="bg-gradient-to-r from-blue-500/10 to-blue-600/5 border border-blue-100 dark:border-blue-900/50 rounded-lg p-6">
-              <div className="flex flex-col md:flex-row justify-between items-center space-y-4 md:space-y-0">
-                <div>
-                  <h2 className="text-xl font-bold flex items-center">
-                    <CheckCircle className="h-5 w-5 mr-2 text-green-500" />
-                    Payroll Calculation Complete
-                  </h2>
-                  <p className="text-muted-foreground mt-1">
-                    Review the payroll data before finalizing for the period{" "}
-                    {formatDate(payPeriod.startDate)} -{" "}
-                    {formatDate(payPeriod.endDate)}
-                  </p>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button variant="outline" size="sm">
-                        <FileSpreadsheet className="h-4 w-4 mr-2" />
-                        Export Preview
-                        <ChevronDown className="h-3.5 w-3.5 ml-1 opacity-70" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      <DropdownMenuItem
-                        onClick={() => console.log("Export to Excel")}
-                      >
-                        <FileSpreadsheet className="mr-2 h-4 w-4" />
-                        <span>Excel Spreadsheet</span>
-                      </DropdownMenuItem>
-                      <DropdownMenuItem
-                        onClick={() => console.log("Export to CSV")}
-                      >
-                        <FileText className="mr-2 h-4 w-4" />
-                        <span>CSV File</span>
-                      </DropdownMenuItem>
-                      <DropdownMenuSeparator />
-                      <DropdownMenuItem
-                        onClick={() => console.log("Generate Payslips")}
-                      >
-                        <FileText className="mr-2 h-4 w-4" />
-                        <span>Generate Payslips</span>
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                  <Button
-                    onClick={handleRecalculate}
-                    variant="outline"
-                    disabled={isRecalculating}
-                  >
-                    {isRecalculating ? (
-                      <>
-                        <span className="h-4 w-4 mr-2 animate-spin border-2 border-current border-t-transparent rounded-full" />
-                        Recalculating...
-                      </>
-                    ) : (
-                      <>
-                        <RefreshCw className="mr-2 h-4 w-4" />
-                        Recalculate
-                      </>
-                    )}
-                  </Button>
-                </div>
-              </div>
-
-              {/* Status Overview Strip - Quick at-a-glance visual status */}
-              <div className="mt-6 grid grid-cols-1 md:grid-cols-4 gap-4">
-                <div className="flex items-center gap-3 bg-card rounded-md border p-3">
-                  <div className="rounded-full p-2 bg-green-100 dark:bg-green-950/50">
-                    <CheckCircle className="h-5 w-5 text-green-600" />
-                  </div>
-                  <div>
-                    <div className="text-sm font-medium">Complete</div>
-                    <div className="text-2xl font-bold">
-                      {
-                        payrollCalculations.filter(
-                          (calc) => calc.status === "complete"
-                        ).length
-                      }
-                      <span className="text-xs font-normal text-muted-foreground ml-1">
-                        (
-                        {(
-                          (payrollCalculations.filter(
-                            (calc) => calc.status === "complete"
-                          ).length /
-                            payrollCalculations.length) *
-                          100
-                        ).toFixed(0)}
-                        %)
-                      </span>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-3 bg-card rounded-md border p-3">
-                  <div className="rounded-full p-2 bg-amber-100 dark:bg-amber-950/50">
-                    <AlertTriangle className="h-5 w-5 text-amber-600" />
-                  </div>
-                  <div>
-                    <div className="text-sm font-medium">Warnings</div>
-                    <div className="text-2xl font-bold">
-                      {
-                        payrollCalculations.filter(
-                          (calc) => calc.status === "warning"
-                        ).length
-                      }
-                      <span className="text-xs font-normal text-muted-foreground ml-1">
-                        (
-                        {(
-                          (payrollCalculations.filter(
-                            (calc) => calc.status === "warning"
-                          ).length /
-                            payrollCalculations.length) *
-                          100
-                        ).toFixed(0)}
-                        %)
-                      </span>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-3 bg-card rounded-md border p-3">
-                  <div className="rounded-full p-2 bg-red-100 dark:bg-red-950/50">
-                    <XCircle className="h-5 w-5 text-red-600" />
-                  </div>
-                  <div>
-                    <div className="text-sm font-medium">Errors</div>
-                    <div className="text-2xl font-bold">
-                      {
-                        payrollCalculations.filter(
-                          (calc) => calc.status === "error"
-                        ).length
-                      }
-                      <span className="text-xs font-normal text-muted-foreground ml-1">
-                        (
-                        {(
-                          (payrollCalculations.filter(
-                            (calc) => calc.status === "error"
-                          ).length /
-                            payrollCalculations.length) *
-                          100
-                        ).toFixed(0)}
-                        %)
-                      </span>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Card for average hours */}
-                <div className="flex items-center gap-3 bg-card rounded-md border p-3">
-                  <div className="rounded-full p-2 bg-blue-100 dark:bg-blue-950/50">
-                    <Clock className="h-5 w-5 text-blue-600" />
-                  </div>
-                  <div>
-                    <div className="text-sm font-medium">Avg. Hours</div>
-                    <div className="text-2xl font-bold">
-                      {payrollCalculations.length > 0
-                        ? formatHoursToHalfHour(
-                            payrollCalculations.reduce(
-                              (sum, calc) =>
-                                sum + (Number(calc.hoursWorked) || 0),
-                              0
-                            ) / payrollCalculations.length
-                          )
-                        : "0"}
-                      <span className="text-xs font-normal text-muted-foreground ml-1">
-                        hours
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Summary Cards */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <Card>
-                <CardContent className="pt-6">
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-sm font-medium">Total Gross Pay</span>
-                    <DollarSign className="h-4 w-4 text-primary" />
-                  </div>
-                  <div className="flex flex-col space-y-1">
-                    <span className="text-2xl font-bold">
-                      {formatKES(payrollSummary.totalGrossPay)}
-                    </span>
-                    <span className="text-xs text-muted-foreground">
-                      Before deductions and taxes
-                    </span>
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardContent className="pt-6">
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-sm font-medium">Total Net Pay</span>
-                    <DollarSign className="h-4 w-4 text-primary" />
-                  </div>
-                  <div className="flex flex-col space-y-1">
-                    <span className="text-2xl font-bold">
-                      {formatKES(payrollSummary.totalNetPay)}
-                    </span>
-                    <span className={`text-xs text-muted-foreground`}>
-                      {payrollSummary.previousPeriodComparison >= 0 ? "↑" : "↓"}{" "}
-                      {Math.abs(
-                        payrollSummary.previousPeriodComparison
-                      ).toFixed(1)}
-                      % from previous
-                    </span>
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardContent className="pt-6">
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-sm font-medium">EWA Withdrawals</span>
-                    <DollarSign className="h-4 w-4 text-primary" />
-                  </div>
-                  <div className="flex flex-col space-y-1">
-                    <span className="text-2xl font-bold">
-                      {formatKES(payrollSummary.totalEwaDeductions)}
-                    </span>
-                    <div className="flex items-center space-x-1">
-                      <div className="w-[50px] bg-muted rounded-full h-1.5">
-                        <div
-                          className="bg-primary h-1.5 rounded-full"
-                          style={{
-                            width: `${
-                              (payrollSummary.totalEwaDeductions /
-                                payrollSummary.totalGrossPay) *
-                              100
-                            }%`,
-                          }}
-                        ></div>
-                      </div>
-                      <span className="text-xs text-muted-foreground">
-                        {(
-                          (payrollSummary.totalEwaDeductions /
-                            payrollSummary.totalGrossPay) *
-                          100
-                        ).toFixed(1)}
-                        % of gross
-                      </span>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardContent className="pt-6">
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-sm font-medium">Employees</span>
-                    <Users className="h-4 w-4 text-primary" />
-                  </div>
-                  <div className="flex flex-col space-y-1">
-                    <div className="flex items-baseline">
-                      <span className="text-2xl font-bold">
-                        {payrollSummary.employeeCount}
-                      </span>
-                      <span className="text-sm ml-1 text-muted-foreground">
-                        processed
-                      </span>
-                    </div>
-                    <span className="text-xs text-muted-foreground">
-                      {
-                        payrollCalculations.filter(
-                          (calc) => calc.status === "complete"
-                        ).length
-                      }{" "}
-                      complete,{" "}
-                      {
-                        payrollCalculations.filter(
-                          (calc) => calc.status !== "complete"
-                        ).length
-                      }{" "}
-                      with issues
-                    </span>
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-
-            {/* Enhanced Payroll Analytics */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-              {/* Left: Department Breakdown */}
-              <Card className="lg:col-span-1">
-                <CardHeader className="pb-2">
-                  <CardTitle className="flex items-center text-base">
-                    <Building className="mr-2 h-5 w-5" />
-                    Department Breakdown
-                  </CardTitle>
-                  <CardDescription>
-                    Payroll distribution by department
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-4">
-                    {payrollSummary.departmentSummary.map((dept, index) => (
-                      <div key={dept.department} className="space-y-1">
-                        <div className="flex justify-between text-sm">
-                          <span className="flex items-center">
-                            <div
-                              className={`w-2 h-2 rounded-full mr-2 ${
-                                index === 0
-                                  ? "bg-blue-500"
-                                  : index === 1
-                                  ? "bg-green-500"
-                                  : index === 2
-                                  ? "bg-purple-500"
-                                  : index === 3
-                                  ? "bg-yellow-500"
-                                  : index === 4
-                                  ? "bg-red-500"
-                                  : "bg-orange-500"
-                              }`}
-                            ></div>
-                            {dept.department}
-                          </span>
-                          <div className="flex space-x-4">
-                            <span className="text-muted-foreground text-xs">
-                              {dept.employeeCount} employees
-                            </span>
-                            <span className="font-medium">
-                              {formatKES(dept.totalAmount)}
-                            </span>
-                          </div>
-                        </div>
-                        <div className="w-full bg-muted rounded-full h-2">
-                          <div
-                            className={`${
-                              index === 0
-                                ? "bg-blue-500"
-                                : index === 1
-                                ? "bg-green-500"
-                                : index === 2
-                                ? "bg-purple-500"
-                                : index === 3
-                                ? "bg-yellow-500"
-                                : index === 4
-                                ? "bg-red-500"
-                                : "bg-orange-500"
-                            } h-2 rounded-full`}
-                            style={{ width: `${dept.percentageOfTotal}%` }}
-                          ></div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* Right: Deduction Summary */}
-              <Card>
-                <CardHeader className="pb-2">
-                  <CardTitle className="flex items-center text-base">
-                    <BarChart className="mr-2 h-5 w-5" />
-                    Deduction Analysis
-                  </CardTitle>
-                  <CardDescription>Breakdown of all deductions</CardDescription>
-                </CardHeader>
-                <CardContent className="grid grid-cols-2 place-items-center">
-                  {/* Deduction Pie Chart (Visualization) */}
-                  <div className="flex justify-center items-center py-2 w-[200px] h-[200px]">
-                    <ChartContainer config={deductionsChartConfig}>
-                      <ResponsiveContainer width="100%" height="100%">
-                        <PieChart>
-                          <Pie
-                            data={prepareDeductionsChartData(
-                              payrollCalculations
-                            )}
-                            dataKey="value"
-                            nameKey="name"
-                            cx="50%"
-                            cy="50%"
-                            innerRadius={60}
-                            outerRadius={80}
-                            paddingAngle={2}
-                          >
-                            {prepareDeductionsChartData(
-                              payrollCalculations
-                            ).map((entry, index) => (
-                              <Cell
-                                key={`cell-${index}`}
-                                fill={
-                                  deductionsChartConfig[entry.name]?.color ||
-                                  "#d1d5db"
-                                }
-                              />
-                            ))}
-                          </Pie>
-                          <text
-                            x="50%"
-                            y="50%"
-                            textAnchor="middle"
-                            dominantBaseline="middle"
-                            className="text-sm font-medium"
-                          >
-                            Deductions
-                          </text>
-                          <text
-                            x="50%"
-                            y="65%"
-                            textAnchor="middle"
-                            dominantBaseline="middle"
-                            className="text-xs"
-                          >
-                            {payrollSummary &&
-                            typeof payrollSummary.totalDeductions === "number"
-                              ? formatKES(payrollSummary.totalDeductions)
-                              : formatKES(0)}
-                          </text>
-                        </PieChart>
-                      </ResponsiveContainer>
-                    </ChartContainer>
-                  </div>
-
-                  {/* Deduction Legend */}
-                  <div className="space-y-2 mt-4">
-                    {prepareDeductionsChartData(payrollCalculations).map(
-                      (item, index) => (
-                        <div
-                          key={index}
-                          className="flex gap-5 items-center justify-between text-sm"
-                        >
-                          <div className="flex items-center">
-                            <div
-                              className="w-3 h-3 rounded-sm mr-2"
-                              style={{
-                                backgroundColor:
-                                  deductionsChartConfig[item.name]?.color ||
-                                  "#d1d5db",
-                              }}
-                            ></div>
-                            <span>
-                              {deductionsChartConfig[item.name]?.label ||
-                                item.name}
-                            </span>
-                          </div>
-                          <span className="font-medium">
-                            {formatKES(item.value)}
-                          </span>
-                        </div>
-                      )
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-
-            {/* Employee-Level Review Table */}
-            <Card>
-              <CardHeader className="pb-3">
-                <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-                  <div>
-                    <CardTitle className="flex items-center text-base">
-                      <Users className="mr-2 h-5 w-5" />
-                      Employee Payroll Details
-                    </CardTitle>
-                    <CardDescription>
-                      Review and adjust individual employee calculations before
-                      finalizing
-                    </CardDescription>
-                  </div>
-                  <div className="flex flex-col sm:flex-row items-center space-y-2 sm:space-y-0 sm:space-x-2">
-                    <div className="relative w-full md:w-64">
-                      <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                      <Input
-                        placeholder="Search employees..."
-                        className="pl-8 w-full"
-                        value={
-                          (columnFilters.find((f) => f.id === "name")
-                            ?.value as string) || ""
-                        }
-                        onChange={(e) => {
-                          const value = e.target.value;
-                          setColumnFilters((prev) => {
-                            const filtered = prev.filter(
-                              (filter) => filter.id !== "name"
-                            );
-                            if (value) {
-                              return [...filtered, { id: "name", value }];
-                            }
-                            return filtered;
-                          });
-                        }}
-                      />
-                    </div>
-
-                    <Select
-                      value={
-                        (columnFilters.find((f) => f.id === "department")
-                          ?.value as string) || "all"
-                      }
-                      onValueChange={(value) => {
-                        setColumnFilters((prev) => {
-                          const filtered = prev.filter(
-                            (filter) => filter.id !== "department"
-                          );
-                          if (value && value !== "all") {
-                            return [...filtered, { id: "department", value }];
-                          }
-                          return filtered;
-                        });
-                      }}
-                    >
-                      <SelectTrigger className="w-full sm:w-[180px]">
-                        <Building className="h-4 w-4 mr-2 opacity-70" />
-                        <SelectValue placeholder="All Departments" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">All Departments</SelectItem>
-                        {Array.from(
-                          new Set(
-                            payrollCalculations.map((emp) => emp.department)
-                          )
-                        ).map((dept) => (
-                          <SelectItem key={dept} value={dept}>
-                            {dept}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="outline" size="sm" className="h-9">
-                          <Columns className="h-3.5 w-3.5 mr-1" />
-                          Columns
-                          <ChevronDown className="h-3.5 w-3.5 ml-1 opacity-70" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end" className="w-48">
-                        <DropdownMenuLabel>Toggle Columns</DropdownMenuLabel>
-                        <DropdownMenuSeparator />
-                        {columns
-                          .filter(
-                            (column) =>
-                              column.id !== "id" && column.id !== "actions"
-                          )
-                          .map((column) => (
-                            <DropdownMenuCheckboxItem
-                              key={column.id}
-                              checked={columnVisibility[column.id as string]}
-                              onCheckedChange={(value) =>
-                                setColumnVisibility((prev) => ({
-                                  ...prev,
-                                  [column.id as string]: value,
-                                }))
-                              }
-                            >
-                              {typeof column.header === "string"
-                                ? column.header
-                                : column.id}
-                            </DropdownMenuCheckboxItem>
-                          ))}
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem
-                          onClick={() => {
-                            setColumnFilters([]);
-                          }}
-                        >
-                          <FilterX className="h-3.5 w-3.5 mr-2" />
-                          Clear Filters
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </div>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <div className="">
-                  <div className="overflow-hidden">
-                    <DataTable
-                      columns={columns}
-                      data={payrollCalculations}
-                      searchColumn="name"
-                      onRowClick={(employee) =>
-                        handleViewDetails(
-                          employee as EmployeePayrollCalculation
-                        )
-                      }
-                    />
-                  </div>
-                </div>
-
-                {/* Pagination is handled by the DataTable component */}
-              </CardContent>
-            </Card>
-
-            {/* Actions */}
-            <div className="flex justify-between">
-              <Button
-                variant="outline"
-                onClick={() => setCurrentStage(STAGES.SETUP)}
-              >
-                Back to Setup
-              </Button>
-
-              <div className="flex space-x-2">
-                <Button
-                  onClick={handleRecalculate}
-                  variant="outline"
-                  disabled={isRecalculating}
-                >
-                  {isRecalculating ? (
-                    <>
-                      <span className="h-4 w-4 mr-2 animate-spin border-2 border-current border-t-transparent rounded-full" />
-                      Recalculating...
-                    </>
-                  ) : (
-                    <>
-                      <RefreshCw className="mr-2 h-4 w-4" />
-                      Recalculate
-                    </>
-                  )}
-                </Button>
-
-                <AlertDialog>
-                  <AlertDialogTrigger asChild>
-                    <Button>Finalize Payroll</Button>
-                  </AlertDialogTrigger>
-                  <AlertDialogContent>
-                    <AlertDialogHeader>
-                      <AlertDialogTitle>Finalize Payroll</AlertDialogTitle>
-                      <AlertDialogDescription>
-                        This will finalize the payroll for the selected period.
-                        After finalization, the payroll records will be locked
-                        and can no longer be modified.
-                        <div className="mt-4 bg-muted p-3 rounded-md text-sm">
-                          <p>
-                            <strong>Period:</strong>{" "}
-                            {new Date(payPeriod.startDate).toLocaleDateString()}{" "}
-                            - {new Date(payPeriod.endDate).toLocaleDateString()}
-                          </p>
-                          <p>
-                            <strong>Total Amount:</strong>{" "}
-                            {formatKES(payrollSummary.totalNetPay)}
-                          </p>
-                          <p>
-                            <strong>Employees:</strong>{" "}
-                            {payrollSummary.employeeCount}
-                          </p>
-                        </div>
-                        <div className="mt-4">
-                          <Label htmlFor="finalization-note">
-                            Add a note (optional)
-                          </Label>
-                          <Input
-                            id="finalization-note"
-                            value={finalizationNote}
-                            onChange={(e) =>
-                              setFinalizationNote(e.target.value)
-                            }
-                            placeholder="Enter any notes about this payroll"
-                            className="mt-1"
-                          />
-                        </div>
-                      </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                      <AlertDialogCancel>Cancel</AlertDialogCancel>
-                      <AlertDialogAction onClick={handleFinalizePayroll}>
-                        Finalize Payroll
-                      </AlertDialogAction>
-                    </AlertDialogFooter>
-                  </AlertDialogContent>
-                </AlertDialog>
-              </div>
             </div>
           </div>
         )}
 
         {currentStage === STAGES.FINALIZE && (
-          <div className="space-y-8">
-            <Card className="border-green-200 bg-green-50 dark:bg-green-950/30">
-              <CardHeader>
-                <CardTitle className="flex items-center text-green-800 dark:text-green-200">
-                  <CheckCircle className="mr-2 h-5 w-5 text-green-600 dark:text-green-400" />
-                  Payroll Successfully Finalized
-                </CardTitle>
-                <CardDescription className="text-green-700 dark:text-green-300">
-                  The payroll for{" "}
-                  {new Date(payPeriod.startDate).toLocaleDateString()} -{" "}
-                  {new Date(payPeriod.endDate).toLocaleDateString()} has been
-                  finalized successfully.
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-                  <div>
-                    <p className="text-sm text-green-700 dark:text-green-300">
-                      Total Gross Pay
-                    </p>
-                    <p className="font-medium">
-                      {formatKES(payrollSummary.totalGrossPay)}
-                    </p>
+          <Card className="overflow-hidden">
+            <CardHeader className="pb-2">
+              <CardTitle>Review & Finalize</CardTitle>
+              <CardDescription>
+                Review and finalize payroll calculations
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-6">
+                {/* Payroll Summary */}
+                <div className="grid gap-4 md:grid-cols-4">
+                  <Card>
+                    <CardContent className="p-4">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-sm text-muted-foreground">
+                            Total Employees
+                          </p>
+                          <h4 className="text-2xl font-bold">
+                            {payrollSummary.employeeCount}
+                          </h4>
+                        </div>
+                        <Users className="h-5 w-5 text-muted-foreground" />
+                      </div>
+                    </CardContent>
+                  </Card>
+                  <Card>
+                    <CardContent className="p-4">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-sm text-muted-foreground">
+                            Gross Pay
+                          </p>
+                          <h4 className="text-2xl font-bold">
+                            {formatKES(payrollSummary.totalGrossPay)}
+                          </h4>
+                        </div>
+                        <DollarSign className="h-5 w-5 text-muted-foreground" />
+                      </div>
+                    </CardContent>
+                  </Card>
+                  <Card>
+                    <CardContent className="p-4">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-sm text-muted-foreground">
+                            Total Deductions
+                          </p>
+                          <h4 className="text-2xl font-bold">
+                            {formatKES(payrollSummary.totalDeductions)}
+                          </h4>
+                        </div>
+                        <ArrowDown className="h-5 w-5 text-muted-foreground" />
+                      </div>
+                    </CardContent>
+                  </Card>
+                  <Card>
+                    <CardContent className="p-4">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-sm text-muted-foreground">
+                            Net Pay
+                          </p>
+                          <h4 className="text-2xl font-bold">
+                            {formatKES(payrollSummary.totalNetPay)}
+                          </h4>
+                        </div>
+                        <CreditCard className="h-5 w-5 text-muted-foreground" />
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
+
+                {/* Payroll Data */}
+                <div>
+                  <div className="flex justify-between items-center mb-4">
+                    <h3 className="text-lg font-medium">Employee Payroll</h3>
+                    <div className="flex space-x-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={handleRecalculate}
+                        disabled={isRecalculating}
+                      >
+                        {isRecalculating ? (
+                          <RefreshCw className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <RefreshCw className="h-4 w-4" />
+                        )}
+                        <span className="ml-2">Recalculate</span>
+                      </Button>
+                    </div>
                   </div>
-                  <div>
-                    <p className="text-sm text-green-700 dark:text-green-300">
-                      Total Deductions
-                    </p>
-                    <p className="font-medium">
-                      {formatKES(payrollSummary.totalDeductions)}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-green-700 dark:text-green-300">
-                      Total Net Pay
-                    </p>
-                    <p className="font-bold">
-                      {formatKES(payrollSummary.totalNetPay)}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-green-700 dark:text-green-300">
-                      Employees Processed
-                    </p>
-                    <p className="font-medium">
-                      {payrollSummary.employeeCount}
-                    </p>
+
+                  <div className="">
+                    {payrollCalculations.length > 0 ? (
+                      <DataTable
+                        columns={columns}
+                        data={payrollCalculations}
+                      />
+                    ) : (
+                      <div className="border rounded-md p-8 text-center">
+                        <p className="text-muted-foreground">
+                          No payroll data available. Please calculate payroll first.
+                        </p>
+                      </div>
+                    )}
                   </div>
                 </div>
 
-                {finalizationNote && (
-                  <div className="bg-card p-3 rounded border border-green-200 dark:border-green-950/50 mb-6">
-                    <p className="text-sm font-medium text-green-700 dark:text-green-300">
-                      Note
-                    </p>
-                    <p className="text-sm">{finalizationNote}</p>
-                  </div>
-                )}
-
-                <div className="space-y-2">
-                  <h4 className="text-sm font-medium text-green-700 dark:text-green-300">
-                    Export Options
-                  </h4>
-                  <div className="flex flex-wrap gap-2">
-                    <Button
-                      variant="outline"
-                      onClick={() => handleExport("xlsx")}
-                      disabled={isExporting}
-                      className="border-green-200 text-green-700 hover:bg-green-100 dark:text-green-300 dark:hover:bg-green-900/30"
-                    >
-                      <FileSpreadsheet className="mr-2 h-4 w-4" />
-                      {isExporting && exportType === "xlsx" ? (
-                        <span className="flex items-center">
-                          <svg
-                            className="animate-spin -ml-1 mr-2 h-4 w-4"
-                            xmlns="http://www.w3.org/2000/svg"
-                            fill="none"
-                            viewBox="0 0 24 24"
-                          >
-                            <circle
-                              className="opacity-25"
-                              cx="12"
-                              cy="12"
-                              r="10"
-                              stroke="currentColor"
-                              strokeWidth="4"
-                            ></circle>
-                            <path
-                              className="opacity-75"
-                              fill="currentColor"
-                              d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                            ></path>
-                          </svg>
-                          Exporting...
-                        </span>
-                      ) : (
-                        "Export XLSX"
-                      )}
-                    </Button>
-                    <Button
-                      variant="outline"
-                      onClick={() => handleExport("payslips")}
-                      disabled={isExporting}
-                      className="border-green-200 text-green-700 hover:bg-green-100 dark:text-green-300 dark:hover:bg-green-900/30"
-                    >
-                      <FileText className="mr-2 h-4 w-4" />
-                      {isExporting && exportType === "payslips" ? (
-                        <span className="flex items-center">
-                          <svg
-                            className="animate-spin -ml-1 mr-2 h-4 w-4"
-                            xmlns="http://www.w3.org/2000/svg"
-                            fill="none"
-                            viewBox="0 0 24 24"
-                          >
-                            <circle
-                              className="opacity-25"
-                              cx="12"
-                              cy="12"
-                              r="10"
-                              stroke="currentColor"
-                              strokeWidth="4"
-                            ></circle>
-                            <path
-                              className="opacity-75"
-                              fill="currentColor"
-                              d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                            ></path>
-                          </svg>
-                          Generating...
-                        </span>
-                      ) : (
-                        "Generate Payslips"
-                      )}
-                    </Button>
-                    <Button
-                      variant="outline"
-                      onClick={() => handleExport("summary")}
-                      disabled={isExporting}
-                      className="border-green-200 text-green-700 hover:bg-green-100 dark:text-green-300 dark:hover:bg-green-900/30"
-                    >
-                      <BarChart className="mr-2 h-4 w-4" />
-                      {isExporting && exportType === "summary" ? (
-                        <span className="flex items-center">
-                          <svg
-                            className="animate-spin -ml-1 mr-2 h-4 w-4"
-                            xmlns="http://www.w3.org/2000/svg"
-                            fill="none"
-                            viewBox="0 0 24 24"
-                          >
-                            <circle
-                              className="opacity-25"
-                              cx="12"
-                              cy="12"
-                              r="10"
-                              stroke="currentColor"
-                              strokeWidth="4"
-                            ></circle>
-                            <path
-                              className="opacity-75"
-                              fill="currentColor"
-                              d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                            ></path>
-                          </svg>
-                          Generating...
-                        </span>
-                      ) : (
-                        "Department Summary"
-                      )}
-                    </Button>
-                  </div>
+                {/* Finalization Notes */}
+                <div>
+                  <Label htmlFor="finalization-notes">Finalization Notes</Label>
+                  <Textarea
+                    id="finalization-notes"
+                    placeholder="Add notes about this payroll processing..."
+                    className="mt-1"
+                    value={finalizationNote}
+                    onChange={(e) => setFinalizationNote(e.target.value)}
+                  />
                 </div>
-              </CardContent>
-            </Card>
 
-            <div className="flex justify-center">
-              <Button
-                onClick={() => {
-                  setPayPeriod(() => {
-                    const today = new Date();
-                    const firstDayOfMonth = new Date(
-                      today.getFullYear(),
-                      today.getMonth(),
-                      1
-                    );
-                    const lastDayOfMonth = new Date(
-                      today.getFullYear(),
-                      today.getMonth() + 1,
-                      0
-                    );
-
-                    return {
-                      startDate: firstDayOfMonth.toISOString().split("T")[0],
-                      endDate: lastDayOfMonth.toISOString().split("T")[0],
-                    };
-                  });
-                  setSelectedDepartment("all");
-                  setExcludedEmployees([]);
-                  setPayrollCalculations([]);
-                  setCurrentStage(STAGES.SETUP);
-                }}
-              >
-                Start New Payroll Process
-              </Button>
-            </div>
-          </div>
+                {/* Navigation Buttons */}
+                <div className="flex justify-between pt-4">
+                  <Button variant="outline" onClick={handleBack}>
+                    <ChevronLeft className="mr-2 h-4 w-4" />
+                    Back
+                  </Button>
+                  <Button
+                    variant="default"
+                    onClick={handleNext}
+                    disabled={isSubmitting || payrollCalculations.length === 0}
+                  >
+                    {isSubmitting ? (
+                      <>
+                        <span className="mr-2">Processing</span>
+                        <RefreshCw className="h-4 w-4 animate-spin" />
+                      </>
+                    ) : (
+                      <>
+                        Finalize Payroll
+                        <ChevronRight className="ml-2 h-4 w-4" />
+                      </>
+                    )}
+                  </Button>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
         )}
 
         {isCalculating && (
@@ -2866,6 +1968,9 @@ export default function ProcessPayrollPage() {
                         (calculationProgress / 100) * eligibleEmployeeCount
                       )}{" "}
                       of {eligibleEmployeeCount} employees
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Processing in small batches for better performance
                     </p>
                   </div>
                   <div className="w-full bg-muted rounded-full h-3 dark:bg-muted my-4">
@@ -3096,10 +2201,6 @@ export default function ProcessPayrollPage() {
                       {viewingEmployee.position}
                     </p>
                     <div className="text-sm">
-                      <Badge variant="outline">
-                        {viewingEmployee.department}
-                      </Badge>
-                      <span className="mx-2 text-muted-foreground">•</span>
                       <span className="text-xs text-muted-foreground">
                         ID: {viewingEmployee.employeeNumber}
                       </span>
@@ -3128,8 +2229,6 @@ export default function ProcessPayrollPage() {
                       <div className="text-xs text-muted-foreground mt-1">
                         {viewingEmployee.hoursWorked} hours ×{" "}
                         {formatKES(viewingEmployee.hourlyRate)}/hr
-                        {viewingEmployee.overtimeHours > 0 &&
-                          ` + ${viewingEmployee.overtimeHours} OT hrs`}
                       </div>
                     </CardContent>
                   </Card>
@@ -3378,13 +2477,6 @@ export default function ProcessPayrollPage() {
                           {viewingEmployee.hoursWorked} hours
                         </dd>
 
-                        <dt className="text-muted-foreground">
-                          Overtime Hours
-                        </dt>
-                        <dd className="font-medium">
-                          {viewingEmployee.overtimeHours} hours
-                        </dd>
-
                         <dt className="text-muted-foreground">Hourly Rate</dt>
                         <dd className="font-medium">
                           {formatKES(viewingEmployee.hourlyRate)}
@@ -3397,21 +2489,6 @@ export default function ProcessPayrollPage() {
                               viewingEmployee.hoursWorked
                           )}
                         </dd>
-
-                        {viewingEmployee.overtimeHours > 0 && (
-                          <>
-                            <dt className="text-muted-foreground">
-                              Overtime Pay (1.5×)
-                            </dt>
-                            <dd className="font-medium">
-                              {formatKES(
-                                viewingEmployee.hourlyRate *
-                                  viewingEmployee.overtimeHours *
-                                  1.5
-                              )}
-                            </dd>
-                          </>
-                        )}
 
                         <dt className="text-muted-foreground">Gross Pay</dt>
                         <dd className="font-medium">
@@ -3523,30 +2600,6 @@ export default function ProcessPayrollPage() {
           </DialogContent>
         </Dialog>
       </div>
-    </main>
-  );
-}
-
-// Move helper functions outside component but keep them in the file
-function calculateWorkHours(records: AttendanceRecord[]) {
-  return {
-    regularHours: 40, // Implement actual calculation
-    overtimeHours: 5, // Implement actual calculation
-  };
-}
-
-async function fetchEmployeeDeductions(employeeId: number) {
-  // Implement actual API call
-  return {
-    ewaDeductions: 0,
-    loanDeductions: 0,
-  };
-}
-
-function calculateEmployeeGrossPay(employee: Employee) {
-  const { regularHours, overtimeHours } = calculateWorkHours([]);
-  return (
-    regularHours * (employee.hourlyRate || 60) +
-    overtimeHours * (employee.hourlyRate || 60) * 1.5
+    </div>
   );
 }

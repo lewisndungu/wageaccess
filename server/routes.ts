@@ -357,6 +357,7 @@ async function transformPayrollRecord(record: any): Promise<Payroll> {
     processedAt: record.processedAt || undefined,
     processedBy: record.processedBy || undefined,
     employee: employee || undefined,
+    referenceNumber: record.referenceNumber,
   };
 }
 

@@ -515,7 +515,7 @@ export default function PayrollPage() {
             <DataTable
               columns={columns}
               data={records}
-              searchColumn="employeeName"
+              searchColumn={["employee.other_names", "employee.surname"]}
             />
           </CardContent>
         </Card>

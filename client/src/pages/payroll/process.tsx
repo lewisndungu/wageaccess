@@ -320,9 +320,9 @@ export default function ProcessPayrollPage() {
         cell: ({ row }) => (
           <div>
             {formatHoursToHalfHour(Number(row.getValue("hoursWorked")))}
-            {Number(row.getValue("overtimeHours")) > 0 && (
+            {row.original.overtimeHours && Number(row.original.overtimeHours) > 0 && (
               <span className="text-xs text-muted-foreground ml-1">
-                (+{formatHoursToHalfHour(Number(row.getValue("overtimeHours")))}{" "}
+                (+{formatHoursToHalfHour(Number(row.original.overtimeHours))}{" "}
                 OT)
               </span>
             )}

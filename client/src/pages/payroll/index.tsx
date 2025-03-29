@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
@@ -274,7 +274,7 @@ export default function PayrollPage() {
     },
   ];
 
-  const payrollSummary = {
+  const payrollSummary = useMemo(() => ({
     totalEmployees: records.length,
     totalGrossPay: records.reduce((sum, record) => sum + Number(record.grossPay), 0),
     totalNetPay: records.reduce((sum, record) => sum + Number(record.netPay), 0),
@@ -286,7 +286,7 @@ export default function PayrollPage() {
       (sum, record) => sum + Number(record.taxDeductions || 0),
       0
     ),
-  };
+  }), [records]);
 
   // Show loading indicator
   if (isLoading) {

@@ -283,7 +283,7 @@ export const walletData: Wallet & {
 // User profile
 export const userProfile: User = {
   id: faker.string.uuid(),
-  username: faker.internet.userName(),
+  username: faker.internet.username(),
   password: faker.internet.password(),
   role: faker.helpers.arrayElement(["hr", "admin", "employee", "supervisor"]),
   profileImage: faker.image.avatar(),

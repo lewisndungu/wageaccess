@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { MoreHorizontal } from "lucide-react";
 import { Employee } from "@shared/schema";
+import { Loader } from "@/components/ui/loader";
 
 // Utility function to safely parse JSON strings
 const parseJsonField = (jsonString: string | null | undefined) => {
@@ -108,7 +109,7 @@ export function EmployeeTable({ data = [], isLoading }: EmployeeTableProps) {
   const inactiveCount = data.filter((emp) => emp.status === "inactive").length;
 
   if (isLoading) {
-    return <div>Loading...</div>;
+    return <Loader size="sm" text="Loading employee data..." />;
   }
 
   return (

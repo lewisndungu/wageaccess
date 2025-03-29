@@ -355,8 +355,37 @@ export async function registerRoutes(app: Express): Promise<Server> {
   
   // User routes
   app.get("/api/users/current", async (req, res) => {
-    // In a real app, get user from session
-    const user = await storage.getUserByUsername("hrmanager");
+    // First, check if hrmanager user exists
+    let user = await storage.getUserByUsername("hrmanager");
+    
+    // If no HR manager exists, create one
+    if (!user) {
+      console.log("Creating default HR manager user");
+      const hrUser: InsertUser = {
+        username: "hrmanager",
+        password: "password123", // In a real app, this would be hashed
+        role: "hr",
+        profileImage: "https://api.dicebear.com/7.x/avataaars/svg?seed=hr-admin",
+        surname: "Manager",
+        other_names: "HR",
+        id_no: "HR12345678",
+        sex: "other",
+        contact: {
+          email: "hr.manager@company.com",
+          phoneNumber: "0700000000"
+        },
+        created_at: new Date(),
+        modified_at: new Date()
+      };
+      
+      try {
+        user = await storage.createUser(hrUser);
+        console.log(`Created default HR manager user with ID: ${user.id}`);
+      } catch (error) {
+        console.error("Failed to create default HR manager:", error);
+        return res.status(500).json({ message: "Failed to create default user" });
+      }
+    }
     
     if (!user) {
       return res.status(404).json({ message: "User not found" });
@@ -1415,12 +1444,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
           employeeId: employeePayroll.employeeId,
           periodStart: new Date(payrollData.payPeriodStart),
           periodEnd: new Date(payrollData.payPeriodEnd),
-          hoursWorked: employeePayroll.hoursWorked.toString(),
-          grossPay: employeePayroll.grossPay.toString(),
-          netPay: employeePayroll.netPay.toString(),
-          ewaDeductions: employeePayroll.ewaDeductions.toString(),
-          taxDeductions: (employeePayroll.paye + employeePayroll.nhif + employeePayroll.nssf + employeePayroll.housingLevy).toString(),
-          otherDeductions: (employeePayroll.loanDeductions + employeePayroll.otherDeductions).toString(),
+          hoursWorked: employeePayroll.hoursWorked, // Remove .toString()
+          grossPay: employeePayroll.grossPay, // Remove .toString()
+          netPay: employeePayroll.netPay, // Remove .toString()
+          ewaDeductions: employeePayroll.ewaDeductions, // Remove .toString()
+          taxDeductions: (employeePayroll.paye + employeePayroll.nhif + employeePayroll.nssf + employeePayroll.housingLevy), // Remove .toString()
+          otherDeductions: (employeePayroll.loanDeductions + employeePayroll.otherDeductions), // Remove .toString()
           status: "processed",
           processedBy: "1" // Default admin user ID
         });
@@ -2329,7 +2358,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.log(`Mock data generation results: 
         - ${mockDataResults.attendanceRecords} attendance records
         - ${mockDataResults.payrollRecords} payroll records
-        - ${mockDataResults.ewaRequests} EWA requests`);
+        - ${mockDataResults.ewaRequests} EWA requests
+        - ${mockDataResults.todayRecords} attendance records for today (not clocked in yet)`);
       
       return res.status(200).json({ 
         success: true, 
@@ -2450,6 +2480,77 @@ export async function registerRoutes(app: Express): Promise<Server> {
         success: false,
         message: "Failed to clock out employee", 
         error: error instanceof Error ? error.message : "Unknown error"
+      });
+    }
+  });
+
+  // Get EWA deductions for an employee within a date range (optional)
+  app.get("/api/employees/:id/ewa-deductions", async (req, res) => {
+    try {
+      const employeeId = ensureStringId(req.params.id);
+      const { startDate, endDate } = req.query;
+
+      let filterByDate = false;
+      let parsedStartDate: Date | undefined;
+      let parsedEndDate: Date | undefined;
+
+      // Check if dates are provided and valid
+      if (startDate && endDate && typeof startDate === 'string' && typeof endDate === 'string') {
+        parsedStartDate = new Date(startDate);
+        parsedEndDate = new Date(endDate);
+        // Set end date to the very end of the day for inclusive comparison
+        parsedEndDate.setHours(23, 59, 59, 999);
+
+        if (!isNaN(parsedStartDate.getTime()) && !isNaN(parsedEndDate.getTime())) {
+          filterByDate = true;
+          console.log(`Filtering EWA deductions for employee ${employeeId} by date: ${startDate} to ${endDate}`);
+        } else {
+          console.log(`Invalid date format provided for employee ${employeeId}, fetching all disbursed EWA.`);
+          // Optionally return a 400 error if dates are provided but invalid
+          // return res.status(400).json({ message: "Invalid date format for startDate or endDate." });
+        }
+      } else {
+          console.log(`No date range provided for employee ${employeeId}, fetching all disbursed EWA.`);
+      }
+
+      // Fetch all EWA requests for the employee
+      const allEwaRequests = await storage.getEwaRequestsForEmployee(employeeId);
+
+      // Filter requests
+      const relevantRequests = allEwaRequests.filter(req => {
+        // Must be disbursed
+        if (req.status !== 'disbursed' || !req.disbursedAt) {
+          return false;
+        }
+        const disbursedDate = new Date(req.disbursedAt);
+        if (isNaN(disbursedDate.getTime())) {
+            return false; // Ignore requests with invalid disbursement dates
+        }
+        
+        // Apply date filter only if valid dates were provided
+        if (filterByDate && parsedStartDate && parsedEndDate) {
+            return disbursedDate >= parsedStartDate && disbursedDate <= parsedEndDate;
+        }
+        
+        // If not filtering by date, include all disbursed requests
+        return true; 
+      });
+
+      // Sum the amounts of the relevant requests
+      const totalEwaDeductions = relevantRequests.reduce((sum, req) => {
+        const amount = Number(req.amount);
+        return sum + (isNaN(amount) ? 0 : amount);
+      }, 0);
+
+      console.log(`Calculated total EWA deductions for employee ${employeeId}: ${totalEwaDeductions}`);
+
+      return res.status(200).json({ totalEwaDeductions });
+
+    } catch (error: any) {
+      console.error(`Error fetching EWA deductions for employee ${req.params.id}:`, error);
+      return res.status(500).json({ 
+        message: "Failed to fetch EWA deductions", 
+        error: error.message || "Unknown error"
       });
     }
   });

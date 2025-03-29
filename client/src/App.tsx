@@ -25,6 +25,7 @@ import ProfilePage from "@/pages/profile";
 import NotFound from "@/pages/not-found";
 import ChatInterface from "./components/chat/ChatInterface";
 import EmployeeImportPage from "./pages/employees/import";
+import { Loader } from "@/components/ui/loader";
 
 // This component uses context hooks and will only be rendered inside their providers
 function SystemComponents() {
@@ -79,14 +80,7 @@ function LoadingOverlay() {
   
   if (!isLoading) return null;
   
-  return (
-    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center">
-      <div className="bg-white dark:bg-gray-800 p-4 rounded-lg shadow-lg flex flex-col items-center">
-        <div className="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full mb-2"></div>
-        <p className="text-sm font-medium text-gray-700 dark:text-gray-300">Loading...</p>
-      </div>
-    </div>
-  );
+  return <Loader fullPage text="Loading..." />;
 }
 
 function App() {

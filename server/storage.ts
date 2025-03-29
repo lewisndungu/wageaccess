@@ -613,24 +613,28 @@ export class MemStorage implements IStorage {
   }
 
   async createPayroll(payrollData: InsertPayroll): Promise<Payroll> {
-    const id = faker.string.numeric(8).toString();
-    const payroll: Payroll = {
-      id,
-      status: payrollData.status || "",
-      employeeId: payrollData.employeeId || "",
-      hoursWorked: Number(payrollData.hoursWorked || 0),
-      periodStart: payrollData.periodStart || new Date(),
-      periodEnd: payrollData.periodEnd || new Date(),
-      grossPay: Number(payrollData.grossPay || 0),
-      ewaDeductions: payrollData.ewaDeductions,
-      taxDeductions: payrollData.taxDeductions,
-      otherDeductions: payrollData.otherDeductions,
-      netPay: Number(payrollData.netPay || 0),
-      processedAt: new Date(),
-      processedBy: payrollData.processedBy || "",
+    const id = payrollData.id && typeof payrollData.id === 'string'
+        ? payrollData.id
+        : generateId(); // Use helper function for ID
+
+    // Assign default values or transform data if needed
+    const newPayroll: Payroll = {
+      id: id,
+      employeeId: payrollData.employeeId ?? '', // Default to empty string if undefined
+      periodStart: payrollData.periodStart ?? new Date(), // Default to now if undefined
+      periodEnd: payrollData.periodEnd ?? new Date(), // Default to now if undefined
+      hoursWorked: payrollData.hoursWorked ?? 0,
+      grossPay: payrollData.grossPay ?? 0,
+      netPay: payrollData.netPay ?? 0,
+      ewaDeductions: payrollData.ewaDeductions ?? 0,
+      taxDeductions: payrollData.taxDeductions ?? 0,
+      otherDeductions: payrollData.otherDeductions ?? 0,
+      status: payrollData.status ?? '', // Default to empty string if undefined
+      processedBy: payrollData.processedBy, // Optional, no default needed if undefined
+      processedAt: payrollData.processedAt ?? new Date(),
     };
-    this.payroll.set(id, payroll);
-    return payroll;
+    this.payroll.set(id, newPayroll);
+    return newPayroll;
   }
 
   async updatePayroll(
@@ -1670,13 +1674,7 @@ export class MemStorage implements IStorage {
   }
 
   /**
-   * Generates all mock data for employees:
-   * - Attendance records
-   * - Payroll records
-   * - EWA requests
-   * 
-   * This can be called after importing employees to populate related data.
-   * 
+   * Generate comprehensive mock data for all employees
    * @param days Number of days to generate attendance for (default 30)
    * @returns Summary of records created
    */
@@ -1684,12 +1682,17 @@ export class MemStorage implements IStorage {
     attendanceRecords: number;
     payrollRecords: number;
     ewaRequests: number;
+    todayRecords: number;
   }> {
     console.log(`Starting comprehensive mock data generation for imported employees...`);
     
     // Generate attendance data first
     const attendanceRecords = await this.generateMockAttendanceForEmployees(days);
-    console.log(`Step 1/3 completed: ${attendanceRecords} attendance records generated`);
+    console.log(`Step 1/4 completed: ${attendanceRecords} attendance records generated`);
+    
+    // Generate today's records with employees not clocked in yet
+    const todayRecords = await this.generateTodayAttendanceRecords();
+    console.log(`Step 2/4 completed: ${todayRecords} attendance records for today generated`);
     
     // Generate payroll based on the attendance data
     // Use a period from 30 days ago to today for payroll calculation
@@ -1698,19 +1701,67 @@ export class MemStorage implements IStorage {
     const periodEnd = new Date();
     
     const payrollRecords = await this.generateMockPayrollForEmployees(periodStart, periodEnd);
-    console.log(`Step 2/3 completed: ${payrollRecords} payroll records generated`);
+    console.log(`Step 3/4 completed: ${payrollRecords} payroll records generated`);
     
     // Generate EWA requests
     const ewaRequests = await this.generateMockEwaRequestsForEmployees(2);
-    console.log(`Step 3/3 completed: ${ewaRequests} EWA requests generated`);
+    console.log(`Step 4/4 completed: ${ewaRequests} EWA requests generated`);
     
     console.log(`Mock data generation completed successfully!`);
     
     return {
       attendanceRecords,
       payrollRecords,
-      ewaRequests
+      ewaRequests,
+      todayRecords
     };
+  }
+
+  /**
+   * Generate attendance records for today with all employees showing as not clocked in yet
+   * @returns Number of attendance records created for today
+   */
+  async generateTodayAttendanceRecords(): Promise<number> {
+    const employees = await this.getAllActiveEmployees();
+    console.log(`Generating today's attendance records for ${employees.length} employees (not clocked in yet)`);
+    
+    const today = new Date();
+    let recordsCreated = 0;
+    
+    // First remove any existing attendance records for today to avoid duplicates
+    const existingRecords = await this.getAttendanceForDate(today);
+    for (const record of existingRecords) {
+      try {
+        await this.deleteAttendance(record.id);
+        console.log(`Deleted existing attendance record for today: ${record.id}`);
+      } catch (error) {
+        console.error(`Failed to delete existing attendance record: ${error}`);
+      }
+    }
+    
+    // Create new records for each active employee
+    for (const employee of employees) {
+      try {
+        const attendance: InsertAttendance = {
+          employeeId: employee.id,
+          date: new Date(today),
+          clockInTime: undefined, // Not clocked in yet
+          clockOutTime: undefined, // Not clocked out yet
+          status: 'pending', // Status is pending until they clock in
+          hoursWorked: 0,
+          geoLocation: {},
+          notes: undefined
+        };
+        
+        await this.createAttendance(attendance);
+        recordsCreated++;
+      } catch (error: any) {
+        console.error(`Error creating today's attendance for employee ${employee.id}: ${error.message}`);
+      }
+    }
+    
+    console.log(`Successfully created ${recordsCreated} attendance records for today (not clocked in yet)`);
+    return recordsCreated;
   }
 
   async getEmployees(employeeIds: string[]): Promise<Employee[]> {

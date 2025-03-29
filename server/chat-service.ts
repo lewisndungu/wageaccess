@@ -1,5 +1,5 @@
 import * as storageModule from './storage';
-import { Employee, InsertEmployee } from '../shared/schema';
+import { Employee, InsertEmployee, ServerPayrollResponse } from '../shared/schema';
 import { formatKEDate, formatKESCurrency } from '../client/src/lib/format-utils';
 import { calculatePayrollBasedOnAttendance } from '../client/src/lib/kenyan-payroll';
 import * as XLSX from 'xlsx';
@@ -328,7 +328,8 @@ You can also use the quick action buttons below the chat to access common functi
       console.log(`Mock data generation results: 
         - ${mockDataResults.attendanceRecords} attendance records
         - ${mockDataResults.payrollRecords} payroll records
-        - ${mockDataResults.ewaRequests} EWA requests`);
+        - ${mockDataResults.ewaRequests} EWA requests
+        - ${mockDataResults.todayRecords} attendance records for today (not clocked in yet)`);
 
       // Save a message about the import and data generation
       const importMessage: ChatMessage = {
@@ -338,7 +339,8 @@ You can also use the quick action buttons below the chat to access common functi
         content: `✅ Successfully imported ${addedCount} employees and generated: 
 - ${mockDataResults.attendanceRecords} attendance records
 - ${mockDataResults.payrollRecords} payroll records
-- ${mockDataResults.ewaRequests} EWA requests`,
+- ${mockDataResults.ewaRequests} EWA requests
+- ${mockDataResults.todayRecords} attendance records for today (not clocked in yet)`,
         timestamp: new Date(),
       };
 
@@ -351,17 +353,35 @@ You can also use the quick action buttons below the chat to access common functi
       };
     },
     
-    async calculatePayroll(employeeIds: string[], userId: string): Promise<any> {
+    async calculatePayroll(employeeIds: string[], userId: string): Promise<ServerPayrollResponse[]> {
       // Implement payroll calculation logic
       const employees = await storageModule.storage.getEmployees(employeeIds);
       
       const payrollData = employees.map((employee: any) => {
-        const grossPay = employee.salary || 0;
-        if (grossPay <= 0) return null;
+        const grossPay = employee.salary || employee.gross_income || 0;
         
         // Mock attendance data
         const standardHours = 160;
         const workedHours = Math.floor(Math.random() * 40) + 130;
+        
+        // For employees with no salary/gross_income, return minimal data
+        if (grossPay <= 0) {
+          return {
+            'Employee ID': employee.id || 'N/A',
+            'Name': `${employee.other_names || ''} ${employee.surname || ''}`.trim() || 'Unknown',
+            'Position': employee.position || 'N/A',
+            'Standard Hours': standardHours,
+            'Worked Hours': 0,
+            'Gross Pay': 0,
+            'Taxable Pay': 0,
+            'Tax (PAYE)': 0,
+            'NHIF': 0,
+            'NSSF': 0,
+            'Housing Levy': 0,
+            'Total Deductions': 0,
+            'Net Pay': 0
+          };
+        }
         
         const payrollCalculation = calculatePayrollBasedOnAttendance(
           grossPay,
@@ -371,7 +391,7 @@ You can also use the quick action buttons below the chat to access common functi
         
         return {
           'Employee ID': employee.id || 'N/A',
-          'Name': employee.name || 'Unknown',
+          'Name': `${employee.other_names || ''} ${employee.surname || ''}`.trim() || 'Unknown',
           'Position': employee.position || 'N/A',
           'Standard Hours': standardHours,
           'Worked Hours': workedHours,
@@ -384,7 +404,7 @@ You can also use the quick action buttons below the chat to access common functi
           'Total Deductions': payrollCalculation.totalDeductions,
           'Net Pay': payrollCalculation.netPay
         };
-      }).filter(Boolean);
+      });
       
       // Save a message about the payroll calculation
       const payrollMessage: ChatMessage = {

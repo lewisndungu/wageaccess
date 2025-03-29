@@ -476,10 +476,6 @@ export default function EmployeeDetailPage() {
                 </CardHeader>
                 <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-1">
-                    <p className="text-sm font-medium text-muted-foreground">Department</p>
-                    <p>{employee.department?.name || 'N/A'}</p>
-                  </div>
-                  <div className="space-y-1">
                     <p className="text-sm font-medium text-muted-foreground">Position</p>
                     <p>{employee.position || 'N/A'}</p>
                   </div>

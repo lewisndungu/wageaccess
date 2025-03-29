@@ -64,6 +64,7 @@ import {
 } from "lucide-react";
 import { DatePicker } from "@/components/ui/date-picker";
 import { Attendance, Employee } from '../../../../shared/schema';
+import { Loader } from "@/components/ui/loader";
 
 // Helper functions for date/time formatting
 const formatDate = (dateString: string | Date | undefined): string => {
@@ -518,31 +519,7 @@ export function AttendanceDashboard({ records, isLoading = false }: AttendanceDa
 
   // If loading, show loading skeleton
   if (isLoading) {
-    return (
-      <div className="space-y-6">
-        <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-          {Array(5).fill(0).map((_, i) => (
-            <Card key={i} className="shadow-glass dark:shadow-glass-dark">
-              <CardContent className="p-6">
-                <div className="h-20 animate-pulse bg-gray-200 dark:bg-gray-700 rounded-md"></div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-        
-        <Card className="shadow-glass dark:shadow-glass-dark">
-          <CardHeader>
-            <div className="h-8 w-1/3 animate-pulse bg-gray-200 dark:bg-gray-700 rounded-md"></div>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-6">
-              <div className="h-10 animate-pulse bg-gray-200 dark:bg-gray-700 rounded-md"></div>
-              <div className="h-40 animate-pulse bg-gray-200 dark:bg-gray-700 rounded-md"></div>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-    );
+    return <Loader text="Loading attendance data..." />;
   }
 
   // Render the dashboard

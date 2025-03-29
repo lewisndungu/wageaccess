@@ -11,6 +11,7 @@ import { toast } from "@/hooks/use-toast";
 import axios from "axios";
 import { Employee } from "@shared/schema";
 import EmployeeImportPage from "./import";
+import { Loader } from "@/components/ui/loader";
 
 export default function EmployeesPage() {
   const navigate = useNavigate();
@@ -100,11 +101,7 @@ export default function EmployeesPage() {
 
   // Show loading state
   if (isLoading) {
-    return (
-      <div className="flex items-center justify-center h-[200px]">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>ctive
-      </div>
-    );
+    return <Loader text="Loading employees..." />;
   }
 
   // Show error state

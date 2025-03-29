@@ -1,6 +1,6 @@
 import { useParams, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { payrollRecords, formatCurrency, formatDate } from "@/lib/mock-data";
+import { formatCurrency, formatDate } from "@/lib/mock-data"; // Keep utilities but don't use mock data
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
@@ -8,21 +8,73 @@ import { ChevronLeft, Download, Printer, Send } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { User } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
-import type { Payroll as PayrollType } from "@/types/schema";
+import { Loader } from "@/components/ui/loader";
+import { toast } from "@/hooks/use-toast";
+import { Payroll, Employee } from "@/../../shared/schema"; // Correct import for schema types
+import axios from "axios";
+import { useEffect, useState } from "react";
+
+// Extended type to include properties returned by API
+interface PayrollWithDetails extends Payroll {
+  employeeName?: string;
+  hourlyRate?: number;
+  // Payment-related fields
+  paymentMethod?: 'mpesa' | 'bank';
+  mpesaNumber?: string;
+  bankName?: string;
+  accountNumber?: string;
+}
 
 export default function PayrollDetailPage() {
   const params = useParams<{ id: string }>();
-  const payrollId = params.id || "0";
+  const payrollId = params.id || "";
   const navigate = useNavigate();
   
-  const { data: payroll, isLoading } = useQuery<PayrollType>({
-    queryKey: [`/api/payroll/${payrollId}`],
-    enabled: !!payrollId,
-    initialData: payrollRecords.find(p => p.id === payrollId)
-  });
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [payrollData, setPayrollData] = useState<PayrollWithDetails | null>(null);
+  const [paymentDetails, setPaymentDetails] = useState<any | null>(null);
   
-  if (isLoading || !payroll) {
-    return <div className="p-10 text-center">Loading payroll details...</div>;
+  useEffect(() => {
+    const fetchPayrollDetails = async () => {
+      setIsLoading(true);
+      try {
+        // Get payroll data
+        const payrollResponse = await axios.get(`/api/payroll/${payrollId}`);
+        const payrollData = payrollResponse.data;
+        setPayrollData(payrollData);
+
+        // Get payment details
+        if (payrollData && payrollData.employeeId) {
+          const paymentResponse = await axios.get(`/api/employees/${payrollData.employeeId}/payment-details`);
+          const paymentDetails = paymentResponse.data;
+          setPaymentDetails(paymentDetails);
+        }
+
+        setIsLoading(false);
+      } catch (error) {
+        console.error("Error fetching payroll details:", error);
+        setError("Failed to load payroll details. Please try again later.");
+        setIsLoading(false);
+      }
+    };
+
+    if (payrollId) {
+      fetchPayrollDetails();
+    }
+  }, [payrollId]);
+  
+  if (isLoading) {
+    return <Loader text="Loading payroll details..." />;
+  }
+  
+  if (error || !payrollData) {
+    return (
+      <div className="p-10 text-center">
+        <p className="text-destructive mb-4">Error loading payroll details.</p>
+        <Button onClick={() => navigate("/payroll")}>Back to Payroll</Button>
+      </div>
+    );
   }
   
   const getStatusBadge = (status: string) => {
@@ -38,19 +90,34 @@ export default function PayrollDetailPage() {
     }
   };
   
+  // Calculate deduction values based on the structure from the API
+  const taxDeduction = payrollData.taxDeductions || 0;
+  const ewaDeduction = payrollData.ewaDeductions || 0;
+  const otherDeduction = payrollData.otherDeductions || 0;
+  const totalDeductions = taxDeduction + ewaDeduction + otherDeduction;
+  
+  // Build payslip items based on available data
   const payslipItems = [
-    { label: "Basic Salary", amount: payroll.grossPay },
-    { label: "Overtime", amount: 0 },
-    { label: "Bonuses", amount: 0 },
-    { label: "Gross Pay", amount: payroll.grossPay, isBold: true },
-    { label: "EWA Deductions", amount: -payroll.ewaDeductions },
-    { label: "Tax", amount: -payroll.taxDeductions },
-    { label: "Health Insurance", amount: -(payroll.otherDeductions * 0.4) },
-    { label: "Pension", amount: -(payroll.otherDeductions * 0.6) },
-    { label: "Total Deductions", amount: -(payroll.ewaDeductions + payroll.taxDeductions + payroll.otherDeductions), isBold: true },
-    { label: "Net Pay", amount: payroll.netPay, isTotal: true }
+    { label: "Basic Salary", amount: payrollData.grossPay },
+    { label: "Overtime", amount: 0 }, // Assuming overtime is factored into grossPay
+    { label: "Bonuses", amount: 0 }, // Not tracked in the current schema
+    { label: "Gross Pay", amount: payrollData.grossPay, isBold: true },
+    { label: "EWA Deductions", amount: -ewaDeduction },
+    { label: "Tax", amount: -taxDeduction },
+    { label: "Health Insurance", amount: -(otherDeduction * 0.4) }, // Estimate based on otherDeductions
+    { label: "Pension", amount: -(otherDeduction * 0.6) }, // Estimate based on otherDeductions
+    { label: "Total Deductions", amount: -totalDeductions, isBold: true },
+    { label: "Net Pay", amount: payrollData.netPay, isTotal: true }
   ];
 
+  // Get employee name from either nested object or flattened property
+  const employeeName = payrollData.employee 
+    ? `${payrollData.employee.other_names} ${payrollData.employee.surname}` 
+    : payrollData.employeeName || "Employee";
+  
+  // Get employee position
+  const employeePosition = payrollData.employee?.position || "";
+  
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -85,30 +152,37 @@ export default function PayrollDetailPage() {
                 <div>
                   <CardTitle>Payslip</CardTitle>
                   <CardDescription>
-                    {formatDate(payroll.periodStart)} - {formatDate(payroll.periodEnd)}
+                    {formatDate(String(payrollData.periodStart))} - {formatDate(String(payrollData.periodEnd))}
                   </CardDescription>
                 </div>
-                {getStatusBadge(payroll.status)}
+                {getStatusBadge(payrollData.status)}
               </div>
             </CardHeader>
             <CardContent>
               <div className="flex justify-between items-start mb-6">
                 <div className="flex items-center">
                   <Avatar className="h-14 w-14 mr-4">
-                    <AvatarImage alt={payroll.employeeName} />
+                    <AvatarImage 
+                      src={payrollData.employee?.avatar_url} 
+                      alt={employeeName} 
+                    />
                     <AvatarFallback>
                       <User className="h-6 w-6" />
                     </AvatarFallback>
                   </Avatar>
                   <div>
-                    <h3 className="text-lg font-semibold">{payroll.employeeName}</h3>
-                    <p className="text-sm text-muted-foreground">{payroll.department}</p>
-                    <p className="text-sm text-muted-foreground">ID: EMP-{payroll.employeeId.toString().padStart(4, '0')}</p>
+                    <h3 className="text-lg font-semibold">{employeeName}</h3>
+                    <p className="text-sm text-muted-foreground">{employeePosition}</p>
+                    <p className="text-sm text-muted-foreground">
+                      {payrollData.employee?.employeeNumber 
+                        ? `EMP-${payrollData.employee.employeeNumber}`
+                        : `ID: ${payrollData.employeeId}`}
+                    </p>
                   </div>
                 </div>
                 <div className="text-right">
                   <p className="text-sm text-muted-foreground">Payroll ID</p>
-                  <p className="font-medium">PAY-{payroll.id.toString().padStart(5, '0')}</p>
+                  <p className="font-medium">PAY-{payrollData.id}</p>
                 </div>
               </div>
               
@@ -135,18 +209,20 @@ export default function PayrollDetailPage() {
                     <div className="bg-muted p-3 rounded-md">
                       <div className="flex justify-between mb-1">
                         <span className="text-sm">Hours Worked</span>
-                        <span className="text-sm font-medium">{payroll.hoursWorked}</span>
+                        <span className="text-sm font-medium">{payrollData.hoursWorked}</span>
                       </div>
                       <div className="flex justify-between">
                         <span className="text-sm">Hourly Rate</span>
-                        <span className="text-sm font-medium">{formatCurrency(payroll.hourlyRate)}</span>
+                        <span className="text-sm font-medium">
+                          {formatCurrency(payrollData.hourlyRate || payrollData.employee?.hourlyRate || 0)}
+                        </span>
                       </div>
                     </div>
                     
                     <div className="bg-muted p-3 rounded-md">
                       <div className="flex justify-between mb-1">
                         <span className="text-sm">EWA Deductions</span>
-                        <span className="text-sm font-medium">{formatCurrency(payroll.ewaDeductions)}</span>
+                        <span className="text-sm font-medium">{formatCurrency(ewaDeduction)}</span>
                       </div>
                       <div className="flex justify-between">
                         <span className="text-sm">EWA Balance</span>
@@ -157,11 +233,11 @@ export default function PayrollDetailPage() {
                     <div className="bg-muted p-3 rounded-md">
                       <div className="flex justify-between mb-1">
                         <span className="text-sm">Year-to-Date Gross</span>
-                        <span className="text-sm font-medium">{formatCurrency(payroll.grossPay * 7)}</span>
+                        <span className="text-sm font-medium">{formatCurrency(payrollData.grossPay * 3)}</span>
                       </div>
                       <div className="flex justify-between">
                         <span className="text-sm">Year-to-Date Tax</span>
-                        <span className="text-sm font-medium">{formatCurrency(payroll.taxDeductions * 7)}</span>
+                        <span className="text-sm font-medium">{formatCurrency(taxDeduction * 3)}</span>
                       </div>
                     </div>
                   </div>
@@ -170,7 +246,7 @@ export default function PayrollDetailPage() {
             </CardContent>
             <CardFooter className="flex flex-col space-y-4 items-start">
               <div className="text-sm text-muted-foreground">
-                <p>This payslip was processed on {new Date().toLocaleDateString()} and is subject to tax regulations.</p>
+                <p>This payslip was processed on {payrollData.processedAt ? new Date(payrollData.processedAt).toLocaleDateString() : new Date().toLocaleDateString()} and is subject to tax regulations.</p>
                 <p>If you have any questions about this payslip, please contact the HR department.</p>
               </div>
               <div className="flex space-x-4">
@@ -200,27 +276,57 @@ export default function PayrollDetailPage() {
             <CardContent className="space-y-4">
               <div className="space-y-1">
                 <p className="text-sm text-muted-foreground">Payment Method</p>
-                <p className="font-medium">Bank Transfer</p>
+                <p className="font-medium">
+                  {payrollData.paymentMethod === 'mpesa' ? 'M-Pesa' : 
+                   payrollData.paymentMethod === 'bank' ? 'Bank Transfer' : 
+                   'Bank Transfer'}
+                </p>
               </div>
               
-              <div className="space-y-1">
-                <p className="text-sm text-muted-foreground">Bank Name</p>
-                <p className="font-medium">Kenya Commercial Bank</p>
-              </div>
-              
-              <div className="space-y-1">
-                <p className="text-sm text-muted-foreground">Account Number</p>
-                <p className="font-medium">XXXX-XXXX-3456</p>
-              </div>
+              {payrollData.paymentMethod === 'mpesa' ? (
+                <div className="space-y-1">
+                  <p className="text-sm text-muted-foreground">M-Pesa Number</p>
+                  <p className="font-medium">{payrollData.mpesaNumber || 'Not specified'}</p>
+                </div>
+              ) : (
+                <>
+                  <div className="space-y-1">
+                    <p className="text-sm text-muted-foreground">Bank Name</p>
+                    <p className="font-medium">{payrollData.bankName || 'Not specified'}</p>
+                  </div>
+                  
+                  <div className="space-y-1">
+                    <p className="text-sm text-muted-foreground">Account Number</p>
+                    <p className="font-medium">
+                      {payrollData.accountNumber ? 
+                       `XXXX-XXXX-${payrollData.accountNumber.slice(-4)}` : 
+                       'Not specified'}
+                    </p>
+                  </div>
+                </>
+              )}
               
               <div className="space-y-1">
                 <p className="text-sm text-muted-foreground">Payment Date</p>
-                <p className="font-medium">1st August, 2023</p>
+                <p className="font-medium">
+                  {payrollData.processedAt ? 
+                   new Date(payrollData.processedAt).toLocaleDateString('en-US', {
+                      year: 'numeric',
+                      month: 'long',
+                      day: 'numeric'
+                   }) : 
+                   'Pending'}
+                </p>
               </div>
               
               <div className="space-y-1">
                 <p className="text-sm text-muted-foreground">Reference</p>
-                <p className="font-medium">JUL-2023-{payroll.employeeId}</p>
+                <p className="font-medium">
+                  {new Date(payrollData.periodEnd).toLocaleDateString('en-US', {
+                    month: 'short',
+                    year: 'numeric'
+                  }).toUpperCase()}-{payrollData.employeeId}
+                </p>
               </div>
             </CardContent>
           </Card>
@@ -246,16 +352,12 @@ export default function PayrollDetailPage() {
                         </p>
                       </div>
                       <div className="text-right">
-                        <p className="font-medium">{formatCurrency(payroll.netPay * 0.9 + (index * 5000))}</p>
+                        <p className="font-medium">{formatCurrency(payrollData.netPay * 0.9 + (index * 5000))}</p>
                         <Badge variant="outline" className="text-xs">Paid</Badge>
                       </div>
                     </div>
                   );
                 })}
-                
-                <Button variant="outline" size="sm" className="w-full mt-2">
-                  View All History
-                </Button>
               </div>
             </CardContent>
           </Card>

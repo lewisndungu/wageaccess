@@ -79,6 +79,7 @@ import { toast } from "@/hooks/use-toast";
 import { formatDate } from '@/lib/date-utils';
 import { formatTime } from '@/lib/date-utils';
 import { Employee, Attendance } from '../../../../shared/schema';
+import { Loader } from "@/components/ui/loader";
 
 interface AttendanceCorrection {
   id: string;
@@ -1391,8 +1392,7 @@ export function ManagerControls() {
                 {isLoadingCheckedIn ? (
                   <Card className="md:col-span-3 shadow-glass dark:shadow-glass-dark">
                     <CardContent className="flex flex-col items-center justify-center py-10">
-                      <div className="h-10 w-10 animate-spin rounded-full border-4 border-muted-foreground border-t-primary mb-4" />
-                      <h3 className="text-lg font-medium">Loading shift data...</h3>
+                      <Loader size="default" text="Loading shift data..." />
                     </CardContent>
                   </Card>
                 ) : filteredCheckedIn.length > 0 ? (

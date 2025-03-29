@@ -29,6 +29,69 @@ export interface Department {
   description?: string;
 }
 
+// SalaryDeductions model for payroll calculations
+export interface SalaryDeductions {
+  grossPay: number;
+  taxablePay: number;
+  paye: number;
+  nhif: number;
+  nssf: number;
+  housingLevy: number;
+  totalDeductions: number;
+  netPay: number;
+}
+
+// Interface for employee payroll calculation
+export interface EmployeePayrollCalculation {
+  id: string;
+  employeeId: string;
+  employeeNumber: string;
+  name: string;
+  position: string;
+  hoursWorked: number;
+  overtimeHours: number;
+  hourlyRate: number;
+  grossPay: number;
+  taxableIncome: number;
+  paye: number;
+  nhif: number;
+  nssf: number;
+  housingLevy: number;
+  ewaDeductions: number;
+  loanDeductions: number;
+  otherDeductions: number;
+  totalDeductions: number;
+  netPay: number;
+  status: "complete" | "warning" | "error";
+  statusReason?: string;
+  isEdited: boolean;
+  originalNetPay?: number;
+  role?: string;
+  mpesaNumber?: string;
+  bankName?: string;
+  bankAccountNumber?: string;
+  processedId?: string;
+  periodStart?: Date;
+  periodEnd?: Date;
+}
+
+// ServerPayrollResponse interface for API results
+export interface ServerPayrollResponse {
+  'Employee ID': string;
+  'Name': string;
+  'Position': string;
+  'Standard Hours': number;
+  'Worked Hours': number;
+  'Gross Pay': number;
+  'Taxable Pay': number;
+  'Tax (PAYE)': number;
+  'NHIF': number;
+  'NSSF': number;
+  'Housing Levy': number;
+  'Total Deductions': number;
+  'Net Pay': number;
+}
+
 // Employee model
 export interface Employee extends User {
   employeeNumber: string;

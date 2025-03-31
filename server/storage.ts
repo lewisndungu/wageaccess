@@ -33,6 +33,11 @@ import {
 
 import { faker } from "@faker-js/faker";
 
+// Helper function to generate IDs
+export function generateId(): string {
+  return Date.now().toString() + Math.random().toString(36).substring(2, 9);
+}
+
 // Storage interface
 export interface IStorage {
   // User operations
@@ -722,24 +727,24 @@ export class MemStorage implements IStorage {
   async createPayroll(payrollData: InsertPayroll): Promise<Payroll> {
     const id = payrollData.id && typeof payrollData.id === 'string'
         ? payrollData.id
-        : generateId(); // Use helper function for ID
+        : generateId(); // Use generateId directly
 
-    // Assign default values or transform data if needed
     const newPayroll: Payroll = {
-      id: id,
-      employeeId: payrollData.employeeId ?? '', // Default to empty string if undefined
-      periodStart: payrollData.periodStart ?? new Date(), // Default to now if undefined
-      periodEnd: payrollData.periodEnd ?? new Date(), // Default to now if undefined
-      hoursWorked: payrollData.hoursWorked ?? 0,
-      grossPay: payrollData.grossPay ?? 0,
-      netPay: payrollData.netPay ?? 0,
-      ewaDeductions: payrollData.ewaDeductions ?? 0,
-      taxDeductions: payrollData.taxDeductions ?? 0,
-      otherDeductions: payrollData.otherDeductions ?? 0,
-      status: payrollData.status ?? '', // Default to empty string if undefined
-      processedBy: payrollData.processedBy, // Optional, no default needed if undefined
-      processedAt: payrollData.processedAt ?? new Date(),
-      referenceNumber: payrollData.referenceNumber
+        id: id,
+        // ... rest of payroll properties
+         employeeId: payrollData.employeeId ?? '',
+         periodStart: payrollData.periodStart ?? new Date(),
+         periodEnd: payrollData.periodEnd ?? new Date(),
+         hoursWorked: payrollData.hoursWorked ?? 0,
+         grossPay: payrollData.grossPay ?? 0,
+         netPay: payrollData.netPay ?? 0,
+         ewaDeductions: payrollData.ewaDeductions ?? 0,
+         taxDeductions: payrollData.taxDeductions ?? 0,
+         otherDeductions: payrollData.otherDeductions ?? 0,
+         status: payrollData.status ?? '',
+         processedBy: payrollData.processedBy,
+         processedAt: payrollData.processedAt ?? new Date(),
+         referenceNumber: payrollData.referenceNumber
     };
     this.payroll.set(id, newPayroll);
     return newPayroll;
@@ -1608,10 +1613,26 @@ export class MemStorage implements IStorage {
         // Fetch gross pay directly from employee record
         const grossPay = employee.gross_income ?? 0;
 
-        // Generate Random EWA Deduction (0-20% of Gross)
-        const maxEwa = grossPay * 0.20;
-        // Ensure amount is positive and has 2 decimal places
-        const ewaDeductions = grossPay > 0 ? parseFloat((Math.random() * maxEwa).toFixed(2)) : 0;
+        // --- Calculate EWA Deductions based on *disbursed* requests in the period ---
+        const allEwaRequests = await this.getEwaRequestsForEmployee(employee.id);
+        const ewaDeductions = allEwaRequests
+          .filter(req => {
+            if (req.status !== 'disbursed' || !req.disbursedAt) {
+              return false;
+            }
+            const disbursedDate = new Date(req.disbursedAt);
+            // Ensure the disbursed date is valid and falls within the payroll period
+            return !isNaN(disbursedDate.getTime()) && 
+                   disbursedDate >= periodStart && 
+                   disbursedDate <= endDate;
+          })
+          .reduce((sum, req) => {
+            // Ensure amount is a number before adding
+            const amount = typeof req.amount === 'number' ? req.amount : parseFloat(req.amount || '0');
+            return sum + (isNaN(amount) ? 0 : amount);
+          }, 0);
+        // --- End EWA Deduction Calculation ---
+
 
         // Calculate deductions using pre-defined functions
         const ahlDeduction = calculateAffordableHousingLevy(grossPay);
@@ -1624,7 +1645,8 @@ export class MemStorage implements IStorage {
 
         // Total deductions and Net Pay
         const totalStatutory = ahlDeduction + shifDeduction + nssfDeduction + payeDeduction;
-        const totalDeductions = totalStatutory + ewaDeductions;
+        // Use the calculated ewaDeductions from actual requests
+        const totalDeductions = totalStatutory + ewaDeductions; 
         const netPay = grossPay - totalDeductions;
 
         // Create payroll record using calculated values
@@ -1634,20 +1656,24 @@ export class MemStorage implements IStorage {
           periodEnd,
           hoursWorked: standardHoursWorked, // Use pre-calculated standard hours
           grossPay: parseFloat(grossPay.toFixed(2)),
-          ewaDeductions: ewaDeductions,
+          ewaDeductions: parseFloat(ewaDeductions.toFixed(2)), // Store the calculated EWA deduction
           taxDeductions: parseFloat(payeDeduction.toFixed(2)),
-          otherDeductions: parseFloat((shifDeduction + nssfDeduction + ahlDeduction).toFixed(2)),
+          otherDeductions: parseFloat((shifDeduction + nssfDeduction + ahlDeduction).toFixed(2)), // Keep statutory here for now
           netPay: parseFloat(netPay.toFixed(2)),
           status: 'processed',
           processedAt: new Date(),
-          processedBy: faker.string.uuid(),
-          referenceNumber: faker.string.uuid()
+          processedBy: faker.string.uuid(), // Use faker for mock data generation context
+          referenceNumber: faker.string.uuid() // Use faker for mock data generation context
         };
 
         await this.createPayroll(payroll);
         recordsCreated++;
 
         // Update employee's derived values based on calculated results
+        const maxAdvanceLimit = Math.max(0, Math.floor(netPay * 0.5));
+        // Update available limit considering the EWA deductions for this period
+        const availableAdvanceLimit = Math.max(0, maxAdvanceLimit - ewaDeductions); 
+
         await this.updateEmployee(employee.id, {
           net_income: parseFloat(netPay.toFixed(2)),
           total_deductions: parseFloat(totalDeductions.toFixed(2)),
@@ -1657,8 +1683,8 @@ export class MemStorage implements IStorage {
             tax: parseFloat(payeDeduction.toFixed(2)),
             levy: parseFloat(ahlDeduction.toFixed(2)) // Use AHL
           },
-          max_salary_advance_limit: Math.max(0, Math.floor(netPay * 0.5)),
-          available_salary_advance_limit: Math.max(0, Math.floor(netPay * 0.5) - ewaDeductions)
+          max_salary_advance_limit: maxAdvanceLimit,
+          available_salary_advance_limit: availableAdvanceLimit // Use updated calculation
         });
 
         // Optional: Keep minimal logging inside the loop if needed
@@ -1685,6 +1711,8 @@ export class MemStorage implements IStorage {
     
     let recordsCreated = 0;
     const today = new Date();
+    // Keep track of employees who already got a pending request in this run
+    const employeesWithPendingRequest = new Set<string>(); 
     
     // Reasons for EWA requests
     const ewaReasons = [
@@ -1763,7 +1791,18 @@ export class MemStorage implements IStorage {
           const processingFee = amount * faker.number.float({ min: 0.01, max: 0.03 });
           
           // Random status with weighted probabilities
-          const status = getWeightedRandomStatus();
+          let status = getWeightedRandomStatus(); // Use let to allow modification
+          
+          // Ensure only one pending request per employee in this run
+          if (status === 'pending') {
+            if (employeesWithPendingRequest.has(employee.id)) {
+              // Already has a pending request, change this one to approved
+              status = 'approved'; 
+            } else {
+              // First pending request for this employee, track it
+              employeesWithPendingRequest.add(employee.id);
+            }
+          }
           
           // Request date (within last 30 days)
           const requestDate = getRandomPastDate();
@@ -1943,14 +1982,14 @@ export class MemStorage implements IStorage {
     this.otpCodes.clear();
   }
 }
+
+// Export the main storage instance
 export const storage = new MemStorage();
 
-// Helper function to generate IDs
-export function generateId(): string {
-  return Date.now().toString() + Math.random().toString(36).substring(2, 9);
-}
+// --- Chat History Related Code ---
 
-export class MemCollection<T extends Record<string, any>> {
+// MemCollection now requires T to have a string id
+export class MemCollection<T extends { id: string }> {
   private data: T[] = [];
   private collectionName: string;
 
@@ -1959,44 +1998,60 @@ export class MemCollection<T extends Record<string, any>> {
   }
 
   async find(query: Partial<T> = {}): Promise<T[]> {
-    return this.data.filter((item) => {
+     return this.data.filter((item) => {
       for (const [key, value] of Object.entries(query)) {
-        if (item[key] !== value) return false;
+        // Use type assertion since query keys might not be in T initially
+        if (item[key as keyof T] !== value) return false;
       }
       return true;
     });
   }
 
   async findOne(query: Partial<T>): Promise<T | null> {
-    const results = await this.find(query);
+     const results = await this.find(query);
     return results.length > 0 ? results[0] : null;
   }
 
-  async insertOne(document: T): Promise<void> {
-    this.data.push(document);
+  // Accept a document that might be missing an ID initially
+  async insertOne(document: Omit<T, 'id'> & { id?: string }): Promise<T> {
+    const docToInsert = {
+        ...document,
+        id: document.id || generateId(), // Generate ID if missing
+    } as T; // Assert back to type T after adding id
+    this.data.push(docToInsert);
+    return docToInsert; // Return the full document with ID
   }
 
-  async updateOne(query: Partial<T>, update: T): Promise<void> {
+  async updateOne(query: Partial<T>, update: Partial<Omit<T, 'id'>>): Promise<boolean> { // Update excludes 'id'
     const item = await this.findOne(query);
     if (item) {
-      const index = this.data.indexOf(item);
-      this.data[index] = update;
+        const index = this.data.findIndex(d => d === item);
+        if (index !== -1) {
+            // Ensure ID is not overwritten by the partial update
+            const currentId = this.data[index].id;
+            this.data[index] = { ...this.data[index], ...update, id: currentId };
+            return true;
+        }
     }
+    return false;
   }
 
   async deleteOne(query: Partial<T>): Promise<boolean> {
     const item = await this.findOne(query);
     if (item) {
-      const index = this.data.indexOf(item);
-      this.data.splice(index, 1);
-      return true;
+        const index = this.data.findIndex(d => d === item);
+        if (index !== -1) {
+            this.data.splice(index, 1);
+            return true;
+        }
     }
     return false;
   }
 }
 
+// Chat interfaces require id
 interface ChatMessage {
-  id: string;
+  id: string; // Required now
   userId: string;
   type: string;
   content: string;
@@ -2005,66 +2060,100 @@ interface ChatMessage {
 }
 
 interface ChatHistory {
+  id: string; // Required now
   userId: string;
   messages: ChatMessage[];
   commands: string[];
   searches: string[];
 }
 
-// Chat messages collection - use the storage instance instead of direct db reference
+// Chat messages collection
 const chatMessages = new MemCollection<ChatMessage>("chat_messages");
 const chatHistories = new MemCollection<ChatHistory>("chat_history");
 
 // Chat storage functions
-export async function saveMessage(message: ChatMessage): Promise<ChatMessage> {
-  message.id = message.id || generateId();
-  await chatMessages.insertOne(message);
-  return message;
-}
+// Input message type allows id to be optional
+export const saveMessage = async (message: Omit<ChatMessage, 'id' | 'timestamp'> & { id?: string, timestamp?: Date }): Promise<ChatMessage> => {
+  // MemCollection will add ID if missing, ensure timestamp
+  // id: message.id removed as insertOne handles it
+  const fullMessage: Omit<ChatMessage, 'id'> & { id?: string } = {
+      ...message,
+      timestamp: message.timestamp || new Date(),
+  };
+  const insertedMessage = await chatMessages.insertOne(fullMessage); // insertOne returns the object with the ID
 
-export async function getMessagesByUser(
+  // Provide a default history structure that matches ChatHistory (without id initially)
+  const defaultHistory: Omit<ChatHistory, 'id'> = { userId: message.userId, messages: [], commands: [], searches: [] };
+  const history = await getUserChatHistory(message.userId) || defaultHistory;
+
+  // Ensure history.messages is treated as ChatMessage[]
+  const messages = (history.messages || []) as ChatMessage[];
+  messages.push(insertedMessage); // Push the message with the definite ID
+  history.messages = messages.slice(-100); // Assign back the sliced array
+
+  await saveUserChatHistory(message.userId, history);
+  return insertedMessage; // Return the message with potentially generated ID
+};
+
+export const getMessagesByUser = async (
   userId: string,
   limit = 50
-): Promise<ChatMessage[]> {
+): Promise<ChatMessage[]> => {
+  // Get messages directly from the user's history for efficiency
+  const history = await getUserChatHistory(userId);
+  if (history && history.messages) {
+      return history.messages.slice(-limit); // Return last N messages
+  }
+  // Fallback to querying collection if history is missing (should ideally not happen)
   const messages = await chatMessages.find({ userId });
   return messages
     .sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime())
     .slice(0, limit);
-}
+};
 
-export async function saveUserChatHistory(
+export const saveUserChatHistory = async (
   userId: string,
-  history: Partial<ChatHistory>
-): Promise<void> {
+  historyData: Partial<ChatHistory> 
+): Promise<void> => {
   const existingHistory = await chatHistories.findOne({ userId });
 
   if (existingHistory) {
-    await chatHistories.updateOne(
-      { userId },
-      { ...existingHistory, ...history }
-    );
+    const updatedHistory: ChatHistory = {
+        // Ensure id is preserved if it exists
+        id: existingHistory.id,
+        userId: existingHistory.userId,
+        messages: historyData.messages || existingHistory.messages,
+        commands: historyData.commands || existingHistory.commands,
+        searches: historyData.searches || existingHistory.searches,
+        // Merge other potential partial updates
+        ...(historyData as Omit<Partial<ChatHistory>, 'messages' | 'commands' | 'searches'>)
+    };
+    await chatHistories.updateOne({ userId }, updatedHistory);
   } else {
-    await chatHistories.insertOne({
-      userId,
-      messages: [],
-      commands: [],
-      searches: [],
-      ...history,
-    });
+    const newHistory: Omit<ChatHistory, 'id'> = { // Ensure ID is not required here
+        userId,
+        messages: historyData.messages || [],
+        commands: historyData.commands || [],
+        searches: historyData.searches || [],
+        // Merge other potential partial updates, excluding id
+        ...(historyData as Omit<Partial<ChatHistory>, 'id' | 'messages' | 'commands' | 'searches'>)
+    };
+    // insertOne will generate ID if needed
+    await chatHistories.insertOne(newHistory); 
   }
-}
+};
 
-export async function getUserChatHistory(
+export const getUserChatHistory = async (
   userId: string
-): Promise<ChatHistory | null> {
+): Promise<ChatHistory | null> => {
   return await chatHistories.findOne({ userId });
-}
+};
 
-export async function saveCommand(
+export const saveCommand = async (
   userId: string,
   command: string
-): Promise<void> {
-  const history = (await getUserChatHistory(userId)) || {
+): Promise<void> => {
+  const history = await getUserChatHistory(userId) || {
     userId,
     messages: [],
     commands: [],
@@ -2081,14 +2170,14 @@ export async function saveCommand(
 
   const updatedCommands = [...history.commands, command].slice(-20); // Keep last 20 commands
 
-  await saveUserChatHistory(userId, { commands: updatedCommands });
-}
+  await saveUserChatHistory(userId, { commands: updatedCommands }); // Corrected function call
+};
 
-export async function saveSearch(
+export const saveSearch = async (
   userId: string,
   search: string
-): Promise<void> {
-  const history = (await getUserChatHistory(userId)) || {
+): Promise<void> => {
+  const history = await getUserChatHistory(userId) || {
     userId,
     messages: [],
     commands: [],
@@ -2106,4 +2195,4 @@ export async function saveSearch(
   const updatedSearches = [search, ...history.searches].slice(0, 10); // Keep last 10 searches
 
   await saveUserChatHistory(userId, { searches: updatedSearches });
-}
+};

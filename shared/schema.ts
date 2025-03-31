@@ -204,6 +204,11 @@ export interface WalletTransaction {
   status: string;
 }
 
+// Wallet API Response including calculated total balance
+export interface WalletApiResponse extends Wallet {
+  totalBalance: number;
+}
+
 // OTP codes for self-log
 export interface OtpCode {
   id: string;

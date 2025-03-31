@@ -224,8 +224,8 @@ async function transformEmployeeData(employee: any): Promise<Employee> {
     statutory_deductions: employee.statutory_deductions || {
       nhif: 0,
       nssf: 0,
-      paye: 0,
-      levies: 0,
+      tax: 0,
+      levy: 0,
     },
     max_salary_advance_limit: toNumber(employee.max_salary_advance_limit),
     available_salary_advance_limit: toNumber(
@@ -2036,127 +2036,147 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
 
     try {
-      // Get employee details with user information
-      const employeeWithDetails = await storage.getEmployeeWithDetails(
-        employeeId
-      );
-      if (!employeeWithDetails) {
-        return res.status(404).json({ message: "Employee not found" });
+      // Get employee details
+      const employee = await storage.getEmployeeWithDetails(employeeId);
+      if (!employee || !employee.hourlyRate) {
+        return res.status(404).json({ message: "Employee not found or hourly rate not set" });
       }
 
-      // 1. Validate attendance records exist for this employee
+      // 1. Determine current monthly pay period
       const now = new Date();
-      const startOfCurrentMonth = startOfMonth(now);
-      const attendanceRecords = await storage.getAttendanceForEmployee(
-        employeeId
+      const periodStart = startOfMonth(now);
+      const periodEnd = endOfMonth(now);
+
+      // 2. Get attendance records for the current pay period
+      const attendanceRecords = await storage.getAttendanceByEmployeeAndDateRange(
+        employeeId,
+        periodStart,
+        periodEnd
       );
 
-      // Filter for this month's records
-      const thisMonthAttendance = attendanceRecords.filter((record) => {
-        // Safely handle date - ensure it's not null
-        if (record.date) {
-          const recordDate = new Date(record.date);
-          return recordDate >= startOfCurrentMonth && recordDate <= now;
+      // 3. Calculate total hours worked in the period so far
+      const totalHoursWorked = attendanceRecords.reduce((sum, record) => {
+        // Ensure hoursWorked is treated as a number
+        const hours = typeof record.hoursWorked === 'number' ? record.hoursWorked : parseFloat(record.hoursWorked || '0');
+        // Only count hours for 'present' or 'late' status, and if clockInTime exists
+        if ((record.status === 'present' || record.status === 'late') && record.clockInTime && hours > 0) {
+           // Optional: Cap hours at a reasonable daily max (e.g., 12 hours)
+           // sum += Math.min(hours, 12);
+           sum += hours;
         }
-        return false;
-      });
+        return sum;
+      }, 0);
 
-      if (thisMonthAttendance.length === 0) {
+      if (totalHoursWorked <= 0) {
         return res.status(400).json({
           message:
-            "No attendance records found for this month. Cannot process EWA request without attendance data.",
+            "No confirmed hours worked in the current pay period. Cannot calculate earned wage.",
         });
       }
 
-      // 2. Calculate earned wage based on attendance (simplified calculation)
-      const daysWorked = thisMonthAttendance.length;
-      const totalWorkingDays = 22; // Average working days in a month
+      // 4. Calculate earned wage based on hours worked and hourly rate
+      const calculatedEarnedWage = totalHoursWorked * employee.hourlyRate;
 
-      // Calculate monthly salary from hourly rate (assuming 8-hour workday)
-      const hourlyRate = employeeWithDetails.hourlyRate || 0;
-      const monthlySalary = hourlyRate * 8 * totalWorkingDays; // 8 hours/day, 22 days/month
-
-      const calculatedEarnedWage =
-        monthlySalary * (daysWorked / totalWorkingDays);
-
-      // 3. Validate that requested amount doesn't exceed the allowed percentage
+      // 5. Validate that requested amount doesn't exceed the allowed percentage
       const maxAllowedPercentage = 0.5; // 50% of earned wage
       const maxAllowedAmount = calculatedEarnedWage * maxAllowedPercentage;
 
       const requestAmount =
         typeof amount === "string" ? parseFloat(amount) : amount;
 
+      if (isNaN(requestAmount) || requestAmount <= 0) {
+        return res.status(400).json({ message: "Invalid request amount" });
+      }
+
       if (requestAmount > maxAllowedAmount) {
         return res.status(400).json({
-          message: `Requested amount exceeds maximum allowed EWA (${maxAllowedAmount.toFixed(
-            2
-          )})`,
+          message: `Requested amount (KES ${requestAmount.toFixed(2)}) exceeds the maximum allowed EWA for this period (KES ${maxAllowedAmount.toFixed(2)} based on ${totalHoursWorked.toFixed(2)} hours worked).`,
+          maxAllowedAmount: maxAllowedAmount.toFixed(2),
+          calculatedEarnedWage: calculatedEarnedWage.toFixed(2),
+          totalHoursWorked: totalHoursWorked.toFixed(2),
         });
       }
 
-      // 4. Create the EWA request
-      const processingFee = requestAmount * 0.05; // 5% processing fee
+      // 6. Create the EWA request
       const ewaRequest = await storage.createEwaRequest({
         employeeId,
-        requestDate: new Date(),
         amount: requestAmount,
-        processingFee: processingFee,
-        reason: reason || "Emergency funds needed",
+        reason,
         status: "pending",
       });
 
-      // 5. Transform to ensure schema compliance
-      const transformedRequest = transformEwaRequest(
-        ewaRequest,
-        employeeWithDetails
-      );
+      // Transform to ensure schema compliance
+      const transformedRequest = transformEwaRequest(ewaRequest);
 
-      // 6. Return comprehensive response with all related data
-      return res.status(201).json({
-        success: true,
-        ewaRequest: transformedRequest,
-        maxAllowedAmount,
-        calculatedEarnedWage,
-        daysWorked,
-        totalWorkingDays,
+      return res.status(201).json(transformedRequest);
+    } catch (error: any) {
+      // Correct the console error message
+      console.error(
+        `Error processing integrated EWA request for employee ${req.body?.employeeId}:`,
+        error
+      );
+      return res.status(500).json({
+        message: "Failed to process integrated EWA request", // Corrected message
+        error: error.message || "Unknown error",
       });
-    } catch (error) {
-      console.error("Error in integrated EWA request:", error);
-      return res
-        .status(500)
-        .json({ message: "Failed to process integrated EWA request" });
     }
   });
 
-  app.put("/api/ewa/:id", async (req, res) => {
+  // EWA Update Route (changed from PUT /api/ewa/:id to PATCH /api/ewa/requests/:id)
+  app.patch("/api/ewa/requests/:id", async (req, res) => {
     try {
       const id = ensureStringId(req.params.id);
+      console.log(`PATCH /api/ewa/requests/${id} - Received update request`);
+      console.log(`Request body:`, req.body);
 
-      // Handle numeric fields conversion (string to number)
-      let ewaData = { ...req.body };
-      if (typeof ewaData.amount === "string") {
+      // Handle numeric fields conversion (string to number) if necessary
+      let ewaData = { ...req.body }; // Use let for potential modification
+      if (ewaData.amount && typeof ewaData.amount === "string") {
         ewaData.amount = parseFloat(ewaData.amount);
       }
-      if (typeof ewaData.processingFee === "string") {
+      if (ewaData.processingFee && typeof ewaData.processingFee === "string") {
         ewaData.processingFee = parseFloat(ewaData.processingFee);
       }
+      // Add approvedBy conversion if needed
+      if (ewaData.approvedBy && typeof ewaData.approvedBy === 'string') {
+        ewaData.approvedBy = parseInt(ewaData.approvedBy, 10); // Or keep as string if that's the expected type
+      }
 
-      // Special handling for status changes
-      if (ewaData.status === "approved" && !ewaData.approvedAt) {
-        ewaData.approvedAt = new Date();
+      // Special handling for status changes and timestamps
+      if (ewaData.status) {
+        const currentTimestamp = new Date().toISOString();
+        // Use the same timestamp logic as the frontend for consistency
+        if (ewaData.status === "approved" && !ewaData.approvedAt) {
+          // Set approvedAt only if changing status to approved
+          ewaData.approvedAt = currentTimestamp;
+          // Explicitly nullify rejectionReason if approving
+          ewaData.rejectionReason = null;
+        }
+        if (ewaData.status === "rejected" && !ewaData.approvedAt) {
+          // Set approvedAt for rejection as well (acts as reviewedAt)
+          // This matches the frontend logic where approvedAt is set for both approve/reject
+          ewaData.approvedAt = currentTimestamp;
+        }
+        if (ewaData.status === "disbursed" && !ewaData.disbursedAt) {
+          // Set disbursedAt only if changing status to disbursed
+          ewaData.disbursedAt = currentTimestamp;
+        }
       }
-      if (ewaData.status === "disbursed" && !ewaData.disbursedAt) {
-        ewaData.disbursedAt = new Date();
-      }
+      
+      console.log(`Updating EWA request ${id} with data:`, ewaData);
 
       const ewaRequest = await storage.updateEwaRequest(id, ewaData);
 
       if (!ewaRequest) {
+        console.error(`EWA request with ID ${id} not found for update.`);
         return res.status(404).json({ message: "EWA request not found" });
       }
 
-      // Transform to ensure schema compliance
-      const transformedRequest = transformEwaRequest(ewaRequest);
+      // Transform to ensure schema compliance before sending response
+      const employee = await storage.getEmployeeWithDetails(ewaRequest.employeeId);
+      const transformedRequest = transformEwaRequest(ewaRequest, employee);
+      
+      console.log(`Successfully updated EWA request ${id}. Returning:`, transformedRequest);
 
       return res.status(200).json(transformedRequest);
     } catch (error) {
@@ -2670,6 +2690,164 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Manual clock-out endpoint for attendance
+  app.post("/api/attendance/:id/clock-out", async (req, res) => {
+    try {
+      const id = ensureStringId(req.params.id);
+      const clockOutTime = req.body.clockOutTime || new Date();
+
+      // Get the attendance record
+      const attendanceRecord = await storage.getAttendance(id);
+
+      if (!attendanceRecord) {
+        return res.status(404).json({ message: "Attendance record not found" });
+      }
+
+      if (!attendanceRecord.clockInTime) {
+        return res
+          .status(400)
+          .json({ message: "Cannot clock out without clocking in first" });
+      }
+
+      if (attendanceRecord.clockOutTime) {
+        return res
+          .status(400)
+          .json({ message: "Employee has already clocked out" });
+      }
+
+      // Calculate hours worked
+      const clockIn = new Date(attendanceRecord.clockInTime);
+      const clockOut = new Date(clockOutTime);
+      const hoursWorked =
+        differenceInHours(clockOut, clockIn) +
+        (differenceInMinutes(clockOut, clockIn) % 60) / 60;
+
+      // Update attendance record with clock out time and hours worked
+      const updatedRecord = await storage.updateAttendance(id, {
+        clockOutTime: clockOut,
+        hoursWorked: hoursWorked,
+        notes: attendanceRecord.notes
+          ? `${attendanceRecord.notes}; Manually clocked out by manager`
+          : "Manually clocked out by manager",
+      });
+
+      // Transform the updated record to match the schema
+      const employee = await storage.getEmployeeWithDetails(
+        updatedRecord.employeeId
+      );
+      const transformedRecord = transformAttendanceRecord(
+        updatedRecord,
+        employee
+      );
+
+      return res.status(200).json({
+        success: true,
+        message: "Employee successfully clocked out",
+        attendance: transformedRecord,
+      });
+    } catch (error) {
+      console.error("Error manually clocking out employee:", error);
+      return res.status(500).json({
+        success: false,
+        message: "Failed to clock out employee",
+        error: error instanceof Error ? error.message : "Unknown error",
+      });
+    }
+  });
+
+  // Get EWA deductions for an employee within a date range (optional)
+  app.get("/api/employees/:id/ewa-deductions", async (req, res) => {
+    try {
+      const employeeId = ensureStringId(req.params.id);
+      const { startDate, endDate } = req.query;
+
+      let filterByDate = false;
+      let parsedStartDate: Date | undefined;
+      let parsedEndDate: Date | undefined;
+
+      // Check if dates are provided and valid
+      if (
+        startDate &&
+        endDate &&
+        typeof startDate === "string" &&
+        typeof endDate === "string"
+      ) {
+        parsedStartDate = new Date(startDate);
+        parsedEndDate = new Date(endDate);
+        // Set end date to the very end of the day for inclusive comparison
+        parsedEndDate.setHours(23, 59, 59, 999);
+
+        if (
+          !isNaN(parsedStartDate.getTime()) &&
+          !isNaN(parsedEndDate.getTime())
+        ) {
+          filterByDate = true;
+          console.log(
+            `Filtering EWA deductions for employee ${employeeId} by date: ${startDate} to ${endDate}`
+          );
+        } else {
+          console.log(
+            `Invalid date format provided for employee ${employeeId}, fetching all disbursed EWA.`
+          );
+          // Optionally return a 400 error if dates are provided but invalid
+          // return res.status(400).json({ message: "Invalid date format for startDate or endDate." });
+        }
+      } else {
+        console.log(
+          `No date range provided for employee ${employeeId}, fetching all disbursed EWA.`
+        );
+      }
+
+      // Fetch all EWA requests for the employee
+      const allEwaRequests = await storage.getEwaRequestsForEmployee(
+        employeeId
+      );
+
+      // Filter requests
+      const relevantRequests = allEwaRequests.filter((req) => {
+        // Must be disbursed
+        if (req.status !== "disbursed" || !req.disbursedAt) {
+          return false;
+        }
+        const disbursedDate = new Date(req.disbursedAt);
+        if (isNaN(disbursedDate.getTime())) {
+          return false; // Ignore requests with invalid disbursement dates
+        }
+
+        // Apply date filter only if valid dates were provided
+        if (filterByDate && parsedStartDate && parsedEndDate) {
+          return (
+            disbursedDate >= parsedStartDate && disbursedDate <= parsedEndDate
+          );
+        }
+
+        // If not filtering by date, include all disbursed requests
+        return true;
+      });
+
+      // Sum the amounts of the relevant requests
+      const totalEwaDeductions = relevantRequests.reduce((sum, req) => {
+        const amount = Number(req.amount);
+        return sum + (isNaN(amount) ? 0 : amount);
+      }, 0);
+
+      console.log(
+        `Calculated total EWA deductions for employee ${employeeId}: ${totalEwaDeductions}`
+      );
+
+      return res.status(200).json({ totalEwaDeductions });
+    } catch (error: any) {
+      console.error(
+        `Error fetching EWA deductions for employee ${req.params.id}:`,
+        error
+      );
+      return res.status(500).json({
+        message: "Failed to fetch EWA deductions",
+        error: error.message || "Unknown error",
+      });
+    }
+  });
+
   // Chat API Endpoints
   app.post("/api/chat/message", async (req, res) => {
     try {
@@ -2831,7 +3009,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       console.log(`Extracted ${jsonData.length} rows from uploaded file`);
 
-      // Transform data to match expected MongoDB format
       const formattedData: Employee[] = jsonData.map((row: any) => {
         // Extract name parts
         const fullName =
@@ -2910,10 +3087,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
           // Statutory deductions
           statutory_deductions: {
-            nhif: nhif,
-            nssf: nssf,
-            tax: paye,
-            levy: levies,
+            nssf: parseFloat(nssf.toString()),
+            nhif: parseFloat(nhif.toString()),
+            tax: parseFloat(paye.toString()),
+            levy: parseFloat(levies.toString())
           },
 
           // EWA information
@@ -3053,164 +3230,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Manual clock-out endpoint for attendance
-  app.post("/api/attendance/:id/clock-out", async (req, res) => {
-    try {
-      const id = ensureStringId(req.params.id);
-      const clockOutTime = req.body.clockOutTime || new Date();
-
-      // Get the attendance record
-      const attendanceRecord = await storage.getAttendance(id);
-
-      if (!attendanceRecord) {
-        return res.status(404).json({ message: "Attendance record not found" });
-      }
-
-      if (!attendanceRecord.clockInTime) {
-        return res
-          .status(400)
-          .json({ message: "Cannot clock out without clocking in first" });
-      }
-
-      if (attendanceRecord.clockOutTime) {
-        return res
-          .status(400)
-          .json({ message: "Employee has already clocked out" });
-      }
-
-      // Calculate hours worked
-      const clockIn = new Date(attendanceRecord.clockInTime);
-      const clockOut = new Date(clockOutTime);
-      const hoursWorked =
-        differenceInHours(clockOut, clockIn) +
-        (differenceInMinutes(clockOut, clockIn) % 60) / 60;
-
-      // Update attendance record with clock out time and hours worked
-      const updatedRecord = await storage.updateAttendance(id, {
-        clockOutTime: clockOut,
-        hoursWorked: hoursWorked,
-        notes: attendanceRecord.notes
-          ? `${attendanceRecord.notes}; Manually clocked out by manager`
-          : "Manually clocked out by manager",
-      });
-
-      // Transform the updated record to match the schema
-      const employee = await storage.getEmployeeWithDetails(
-        updatedRecord.employeeId
-      );
-      const transformedRecord = transformAttendanceRecord(
-        updatedRecord,
-        employee
-      );
-
-      return res.status(200).json({
-        success: true,
-        message: "Employee successfully clocked out",
-        attendance: transformedRecord,
-      });
-    } catch (error) {
-      console.error("Error manually clocking out employee:", error);
-      return res.status(500).json({
-        success: false,
-        message: "Failed to clock out employee",
-        error: error instanceof Error ? error.message : "Unknown error",
-      });
-    }
-  });
-
-  // Get EWA deductions for an employee within a date range (optional)
-  app.get("/api/employees/:id/ewa-deductions", async (req, res) => {
-    try {
-      const employeeId = ensureStringId(req.params.id);
-      const { startDate, endDate } = req.query;
-
-      let filterByDate = false;
-      let parsedStartDate: Date | undefined;
-      let parsedEndDate: Date | undefined;
-
-      // Check if dates are provided and valid
-      if (
-        startDate &&
-        endDate &&
-        typeof startDate === "string" &&
-        typeof endDate === "string"
-      ) {
-        parsedStartDate = new Date(startDate);
-        parsedEndDate = new Date(endDate);
-        // Set end date to the very end of the day for inclusive comparison
-        parsedEndDate.setHours(23, 59, 59, 999);
-
-        if (
-          !isNaN(parsedStartDate.getTime()) &&
-          !isNaN(parsedEndDate.getTime())
-        ) {
-          filterByDate = true;
-          console.log(
-            `Filtering EWA deductions for employee ${employeeId} by date: ${startDate} to ${endDate}`
-          );
-        } else {
-          console.log(
-            `Invalid date format provided for employee ${employeeId}, fetching all disbursed EWA.`
-          );
-          // Optionally return a 400 error if dates are provided but invalid
-          // return res.status(400).json({ message: "Invalid date format for startDate or endDate." });
-        }
-      } else {
-        console.log(
-          `No date range provided for employee ${employeeId}, fetching all disbursed EWA.`
-        );
-      }
-
-      // Fetch all EWA requests for the employee
-      const allEwaRequests = await storage.getEwaRequestsForEmployee(
-        employeeId
-      );
-
-      // Filter requests
-      const relevantRequests = allEwaRequests.filter((req) => {
-        // Must be disbursed
-        if (req.status !== "disbursed" || !req.disbursedAt) {
-          return false;
-        }
-        const disbursedDate = new Date(req.disbursedAt);
-        if (isNaN(disbursedDate.getTime())) {
-          return false; // Ignore requests with invalid disbursement dates
-        }
-
-        // Apply date filter only if valid dates were provided
-        if (filterByDate && parsedStartDate && parsedEndDate) {
-          return (
-            disbursedDate >= parsedStartDate && disbursedDate <= parsedEndDate
-          );
-        }
-
-        // If not filtering by date, include all disbursed requests
-        return true;
-      });
-
-      // Sum the amounts of the relevant requests
-      const totalEwaDeductions = relevantRequests.reduce((sum, req) => {
-        const amount = Number(req.amount);
-        return sum + (isNaN(amount) ? 0 : amount);
-      }, 0);
-
-      console.log(
-        `Calculated total EWA deductions for employee ${employeeId}: ${totalEwaDeductions}`
-      );
-
-      return res.status(200).json({ totalEwaDeductions });
-    } catch (error: any) {
-      console.error(
-        `Error fetching EWA deductions for employee ${req.params.id}:`,
-        error
-      );
-      return res.status(500).json({
-        message: "Failed to fetch EWA deductions",
-        error: error.message || "Unknown error",
-      });
-    }
-  });
-
   // Temporary endpoint to generate mock payroll data
   app.get("/api/debug/generate-payroll", async (req, res) => {
     try {
@@ -3229,74 +3248,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       return res.status(200).json({
         message: `Successfully generated ${recordsCreated} payroll records`,
         recordsCreated,
-      });
-    } catch (error) {
-      console.error("Error generating mock payroll data:", error);
-      return res.status(500).json({
-        message: "Failed to generate mock payroll data",
-        error: error instanceof Error ? error.message : "Unknown error",
-      });
-    }
-  });
-
-  // Debugging endpoint to generate payroll records
-  app.get("/api/debug/generate-payroll", async (req, res) => {
-    try {
-      console.log("Generating mock payroll data");
-
-      // Get all active employees
-      const employees = await storage.getAllActiveEmployees();
-      console.log(`Found ${employees.length} active employees`);
-
-      if (employees.length === 0) {
-        return res.status(400).json({ message: "No active employees found" });
-      }
-
-      // Generate reference number
-      const referenceNumber = `PR-MOCK-${Date.now()}`;
-
-      // Generate payroll for each employee
-      const payrolls = [];
-      for (const employee of employees.slice(0, 5)) {
-        // Limit to first 5 employees for testing
-        const startDate = new Date();
-        startDate.setDate(1); // First day of current month
-
-        const endDate = new Date();
-        endDate.setMonth(endDate.getMonth() + 1, 0); // Last day of current month
-
-        const hoursWorked = 160; // Standard 160 hours per month
-        const hourlyRate = employee.hourlyRate || 500; // Default to 500 if not set
-        const grossPay = hoursWorked * hourlyRate;
-        const taxRate = 0.2; // 20% tax rate
-        const taxDeductions = grossPay * taxRate;
-        const netPay = grossPay - taxDeductions;
-
-        const payroll = await storage.createPayroll({
-          employeeId: employee.id,
-          periodStart: startDate,
-          periodEnd: endDate,
-          hoursWorked,
-          grossPay,
-          netPay,
-          taxDeductions,
-          ewaDeductions: 0,
-          otherDeductions: 0,
-          status: "processed",
-          processedBy: "system",
-          processedAt: new Date(),
-          referenceNumber,
-        });
-
-        payrolls.push(payroll);
-      }
-
-      // Clear cache
-      (global as any).payrollCache = {};
-
-      return res.status(200).json({
-        message: `Successfully generated ${payrolls.length} payroll records`,
-        payrolls,
       });
     } catch (error) {
       console.error("Error generating mock payroll data:", error);

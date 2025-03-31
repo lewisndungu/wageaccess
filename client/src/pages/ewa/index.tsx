@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
+import axios from 'axios';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -9,36 +10,47 @@ import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger, DialogClose } from "@/components/ui/dialog";
 import { ColumnDef } from "@tanstack/react-table";
+import { Skeleton } from "@/components/ui/skeleton";
 import { EWARequestCard } from "@/components/ewa/EWARequestCard";
 import { EWARequestForm } from "@/components/ewa/EWARequestForm";
+import { RequestActions } from "@/components/ewa/RequestActions";
 import { ewaRequests, formatCurrency, formatDateTime } from "@/lib/mock-data";
 import { BarChart2, CreditCard, Download, FileText, Plus, User, Wallet } from "lucide-react";
 import { EwaRequest } from "@shared/schema";
+import { WalletApiResponse } from "@shared/schema";
 
 export default function EWAPage() {
   const [activeTab, setActiveTab] = useState("pending");
   
-  const { data, refetch } = useQuery<EwaRequest[]>({
+  const ewaDataQuery = useQuery<EwaRequest[]>({
     queryKey: ['/api/ewa/requests', { status: activeTab }],
-    initialData: ewaRequests as unknown as EwaRequest[],
+    queryFn: async () => {
+      const response = await axios.get('/api/ewa/requests', { 
+        params: { status: activeTab === 'all' ? undefined : activeTab }
+      });
+      return response.data;
+    },
   });
   
-  // Create a typed reference to EWA data
-  const requests = data as EwaRequest[];
+  const requests = ewaDataQuery.data ?? [];
   
-  const { data: walletData } = useQuery({
+  const walletDataQuery = useQuery<WalletApiResponse>({
     queryKey: ['/api/wallet'],
-    initialData: { balance: 350000 },
+    queryFn: async () => {
+      const response = await axios.get('/api/wallet');
+      return response.data;
+    },
   });
   
-  // Use type guards for filtering
+  const walletBalance = walletDataQuery.data?.totalBalance ?? 0;
+  
   const filteredRequests = requests.filter((req): req is EwaRequest => {
     if (activeTab === "all") return true;
     return req.status === activeTab;
   });
   
   const handleStatusChange = () => {
-    refetch();
+    ewaDataQuery.refetch();
   };
   
   const columns: ColumnDef<EwaRequest>[] = [
@@ -57,7 +69,6 @@ export default function EWAPage() {
             </Avatar>
             <div>
               <p className="font-medium text-sm">{request.employee?.other_names}</p>
-              <p className="text-xs text-muted-foreground">{request.employee?.departmentName}</p>
             </div>
           </div>
         );
@@ -102,6 +113,22 @@ export default function EWAPage() {
       header: "Reason",
       cell: ({ row }) => <span className="text-sm">{row.original.reason || "-"}</span>,
     },
+    {
+      id: "actions",
+      header: "Actions",
+      cell: ({ row }) => {
+        const request = row.original;
+        if (request.status === 'pending' || request.status === 'approved') {
+          return (
+            <RequestActions 
+              request={request} 
+              onActionComplete={handleStatusChange}
+            />
+          );
+        }
+        return null; 
+      },
+    },
   ];
 
   return (
@@ -127,7 +154,11 @@ export default function EWAPage() {
           <Link to="/ewa/wallet">
             <Button variant="outline" size="sm" className="flex items-center h-9">
               <Wallet className="mr-1.5 h-4 w-4" />
-              <span className="whitespace-nowrap">Wallet: {formatCurrency(walletData.balance)}</span>
+              {walletDataQuery.isLoading ? (
+                <Skeleton className="h-4 w-24" /> 
+              ) : (
+                <span className="whitespace-nowrap">Wallet: {formatCurrency(walletBalance)}</span>
+              )}
             </Button>
           </Link>
           <Dialog>
@@ -147,7 +178,7 @@ export default function EWAPage() {
               
               <div className="py-4">
                 <EWARequestForm onSuccess={() => {
-                  refetch();
+                  ewaDataQuery.refetch();
                   setActiveTab('pending');
                 }} />
               </div>
@@ -168,17 +199,25 @@ export default function EWAPage() {
             <CardTitle className="text-sm font-medium text-muted-foreground">Pending Requests</CardTitle>
           </CardHeader>
           <CardContent>
-            {/* Use the filter with explicit type guard */}
-            <div className="text-2xl font-bold">
-              {requests.filter((r): r is EwaRequest => r.status === "pending").length}
-            </div>
-            <div className="text-sm text-muted-foreground mt-1">
-              {formatCurrency(
-                requests
-                  .filter((r): r is EwaRequest => r.status === "pending")
-                  .reduce((sum, r) => sum + r.amount, 0)
-              )} pending approval
-            </div>
+            {ewaDataQuery.isLoading ? (
+              <div className="space-y-2">
+                <Skeleton className="h-8 w-1/2" />
+                <Skeleton className="h-4 w-3/4" />
+              </div>
+            ) : (
+              <>
+                <div className="text-2xl font-bold">
+                  {requests.filter((r): r is EwaRequest => r.status === "pending").length}
+                </div>
+                <div className="text-sm text-muted-foreground mt-1">
+                  {formatCurrency(
+                    requests
+                      .filter((r): r is EwaRequest => r.status === "pending")
+                      .reduce((sum, r) => sum + (r.amount || 0), 0)
+                  )} pending approval
+                </div>
+              </>
+            )}
           </CardContent>
         </Card>
         
@@ -187,16 +226,25 @@ export default function EWAPage() {
             <CardTitle className="text-sm font-medium text-muted-foreground">Disbursed This Month</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">
-              {formatCurrency(
-                requests
-                  .filter((r): r is EwaRequest => r.status === "disbursed")
-                  .reduce((sum, r) => sum + r.amount, 0)
-              )}
-            </div>
-            <div className="text-sm text-muted-foreground mt-1">
-              {requests.filter((r): r is EwaRequest => r.status === "disbursed").length} transactions
-            </div>
+             {ewaDataQuery.isLoading ? (
+              <div className="space-y-2">
+                <Skeleton className="h-8 w-1/2" />
+                <Skeleton className="h-4 w-3/4" />
+              </div>
+            ) : (
+              <>
+                <div className="text-2xl font-bold">
+                  {formatCurrency(
+                    requests
+                      .filter((r): r is EwaRequest => r.status === "disbursed")
+                      .reduce((sum, r) => sum + (r.amount || 0), 0)
+                  )}
+                </div>
+                <div className="text-sm text-muted-foreground mt-1">
+                  {requests.filter((r): r is EwaRequest => r.status === "disbursed").length} transactions
+                </div>
+              </>
+            )}
           </CardContent>
         </Card>
         
@@ -205,12 +253,21 @@ export default function EWAPage() {
             <CardTitle className="text-sm font-medium text-muted-foreground">Wallet Balance</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{formatCurrency(walletData.balance)}</div>
-            <div className="text-sm text-muted-foreground mt-1">
-              <Link to="/ewa/wallet">
-                <span className="text-primary hover:underline cursor-pointer">Top up wallet</span>
-              </Link>
-            </div>
+             {walletDataQuery.isLoading ? (
+              <div className="space-y-2">
+                <Skeleton className="h-8 w-1/2" />
+                <Skeleton className="h-4 w-1/4" />
+              </div>
+            ) : (
+              <>
+                <div className="text-2xl font-bold">{formatCurrency(walletBalance)}</div>
+                <div className="text-sm text-muted-foreground mt-1">
+                  <Link to="/ewa/wallet">
+                    <span className="text-primary hover:underline cursor-pointer">Top up wallet</span>
+                  </Link>
+                </div>
+              </>
+            )}
           </CardContent>
         </Card>
       </div>
@@ -229,66 +286,106 @@ export default function EWAPage() {
           </div>
         </CardHeader>
         <CardContent>
-          <Tabs defaultValue={activeTab} onValueChange={setActiveTab}>
-            <TabsList className="mb-6">
-              <TabsTrigger value="all">All Requests</TabsTrigger>
-              <TabsTrigger value="pending">Pending</TabsTrigger>
-              <TabsTrigger value="approved">Approved</TabsTrigger>
-              <TabsTrigger value="disbursed">Disbursed</TabsTrigger>
-            </TabsList>
-            
-            <TabsContent value="all" className="mt-0">
-              <DataTable columns={columns} data={filteredRequests} searchColumn="employeeId" />
-            </TabsContent>
-            
-            <TabsContent value="pending" className="mt-0">
-              {filteredRequests.length > 0 ? (
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-                  {filteredRequests.map((request: EwaRequest) => (
-                    <EWARequestCard 
-                      key={request.id} 
-                      request={request} 
-                      onStatusChange={handleStatusChange}
-                    />
-                  ))}
+          {ewaDataQuery.isLoading ? (
+            <div className="space-y-4">
+              <div className="flex space-x-2">
+                 <Skeleton className="h-10 w-28" />
+                 <Skeleton className="h-10 w-24" />
+                 <Skeleton className="h-10 w-24" />
+                 <Skeleton className="h-10 w-24" />
+                 <Skeleton className="h-10 w-24" />
+              </div>
+              <div className="space-y-3 rounded-md border p-4">
+                <div className="flex items-center space-x-4">
+                  <Skeleton className="h-10 w-10 rounded-full" />
+                  <Skeleton className="h-4 w-32" />
+                  <Skeleton className="h-4 w-24" />
+                  <Skeleton className="h-4 w-16" />
+                  <Skeleton className="h-4 w-20" />
+                  <Skeleton className="h-4 w-40 flex-1" />
+                  <Skeleton className="h-8 w-28" />
                 </div>
-              ) : (
-                <div className="text-center py-16 px-4">
-                  <CreditCard className="mx-auto h-12 w-12 text-muted-foreground opacity-20" />
-                  <h3 className="mt-4 text-lg font-medium">No pending requests</h3>
-                  <p className="mt-2 text-sm text-muted-foreground max-w-md mx-auto">
-                    There are no pending EWA requests at this time. New requests will appear here for your approval.
-                  </p>
+                 <div className="flex items-center space-x-4">
+                  <Skeleton className="h-10 w-10 rounded-full" />
+                  <Skeleton className="h-4 w-32" />
+                  <Skeleton className="h-4 w-24" />
+                  <Skeleton className="h-4 w-16" />
+                  <Skeleton className="h-4 w-20" />
+                  <Skeleton className="h-4 w-40 flex-1" />
+                  <Skeleton className="h-8 w-28" />
                 </div>
-              )}
-            </TabsContent>
-            
-            <TabsContent value="approved" className="mt-0">
-              {filteredRequests.length > 0 ? (
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-                  {filteredRequests.map((request: EwaRequest) => (
-                    <EWARequestCard 
-                      key={request.id} 
-                      request={request}
-                      onStatusChange={handleStatusChange}
-                    />
-                  ))}
+                 <div className="flex items-center space-x-4">
+                  <Skeleton className="h-10 w-10 rounded-full" />
+                  <Skeleton className="h-4 w-32" />
+                  <Skeleton className="h-4 w-24" />
+                  <Skeleton className="h-4 w-16" />
+                  <Skeleton className="h-4 w-20" />
+                  <Skeleton className="h-4 w-40 flex-1" />
+                  <Skeleton className="h-8 w-28" />
                 </div>
-              ) : (
-                <div className="text-center py-16 px-4">
-                  <CreditCard className="mx-auto h-12 w-12 text-muted-foreground opacity-20" />
-                  <h3 className="mt-4 text-lg font-medium">No approved requests</h3>
-                  <p className="mt-2 text-sm text-muted-foreground max-w-md mx-auto">
-                    There are no approved EWA requests waiting for disbursement. Approved requests that haven't been paid yet will appear here.
-                  </p>
-                </div>
-              )}
-            </TabsContent>
-            
-            <TabsContent value="disbursed" className="mt-0">
-              <DataTable columns={columns} data={filteredRequests} searchColumn="employeeId" />
-            </TabsContent>
-          </Tabs>
+              </div>
+            </div>
+          ) : (
+            <Tabs defaultValue={activeTab} onValueChange={setActiveTab}>
+              <TabsList className="mb-6">
+                <TabsTrigger value="all">All Requests</TabsTrigger>
+                <TabsTrigger value="pending">Pending</TabsTrigger>
+                <TabsTrigger value="approved">Approved</TabsTrigger>
+                <TabsTrigger value="disbursed">Disbursed</TabsTrigger>
+                <TabsTrigger value="rejected">Rejected</TabsTrigger>
+              </TabsList>
+              
+              <TabsContent value="all" className="mt-0">
+                <DataTable columns={columns} data={filteredRequests} searchColumn="employeeId" />
+              </TabsContent>
+              
+              <TabsContent value="pending" className="mt-0">
+                {filteredRequests.length > 0 ? (
+                  <DataTable columns={columns} data={filteredRequests} searchColumn="employeeId" />
+                ) : (
+                  <div className="text-center py-16 px-4">
+                    <CreditCard className="mx-auto h-12 w-12 text-muted-foreground opacity-20" />
+                    <h3 className="mt-4 text-lg font-medium">No pending requests</h3>
+                    <p className="mt-2 text-sm text-muted-foreground max-w-md mx-auto">
+                      There are no pending EWA requests at this time. New requests will appear here for your approval.
+                    </p>
+                  </div>
+                )}
+              </TabsContent>
+              
+              <TabsContent value="approved" className="mt-0">
+                {filteredRequests.length > 0 ? (
+                  <DataTable columns={columns} data={filteredRequests} searchColumn="employeeId" />
+                ) : (
+                  <div className="text-center py-16 px-4">
+                    <CreditCard className="mx-auto h-12 w-12 text-muted-foreground opacity-20" />
+                    <h3 className="mt-4 text-lg font-medium">No approved requests</h3>
+                    <p className="mt-2 text-sm text-muted-foreground max-w-md mx-auto">
+                      There are no approved EWA requests waiting for disbursement. Approved requests that haven't been paid yet will appear here.
+                    </p>
+                  </div>
+                )}
+              </TabsContent>
+              
+              <TabsContent value="disbursed" className="mt-0">
+                <DataTable columns={columns} data={filteredRequests} searchColumn="employeeId" />
+              </TabsContent>
+              
+              <TabsContent value="rejected" className="mt-0">
+                {filteredRequests.length > 0 ? (
+                  <DataTable columns={columns} data={filteredRequests} searchColumn="employeeId" />
+                ) : (
+                  <div className="text-center py-16 px-4">
+                    <CreditCard className="mx-auto h-12 w-12 text-muted-foreground opacity-20" />
+                    <h3 className="mt-4 text-lg font-medium">No rejected requests</h3>
+                    <p className="mt-2 text-sm text-muted-foreground max-w-md mx-auto">
+                      There are no rejected EWA requests to display at this time.
+                    </p>
+                  </div>
+                )}
+              </TabsContent>
+            </Tabs>
+          )}
         </CardContent>
       </Card>
     </div>

@@ -151,7 +151,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
-import { format, startOfMonth, endOfMonth, subMonths } from "date-fns";
+import { format, startOfMonth, endOfMonth, subMonths, getDate, getDaysInMonth } from "date-fns";
 import { cn } from "@/lib/utils";
 import { DateRange } from "react-day-picker";
 import {
@@ -232,14 +232,22 @@ export default function ProcessPayrollPage() {
     startDate: string;
     endDate: string;
   }>(() => {
-    // Auto-select current month by default
+    // Auto-select appropriate month based on current date
     const today = new Date();
-    const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
-    const lastDay = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+    const daysInMonth = getDaysInMonth(today);
+    const currentDay = getDate(today);
+    
+    // If we're in the last week of the month (within last 7 days), use current month
+    // Otherwise, use previous month
+    const isLastWeek = currentDay > daysInMonth - 7;
+    
+    const targetMonth = isLastWeek ? today : subMonths(today, 1);
+    const firstDay = startOfMonth(targetMonth);
+    const lastDay = endOfMonth(targetMonth);
 
     return {
-      startDate: firstDay.toISOString().split("T")[0],
-      endDate: lastDay.toISOString().split("T")[0],
+      startDate: format(firstDay, 'yyyy-MM-dd'),
+      endDate: format(lastDay, 'yyyy-MM-dd'),
     };
   });
   const [excludedEmployees, setExcludedEmployees] = useState<string[]>([]);
@@ -298,9 +306,21 @@ export default function ProcessPayrollPage() {
   const [date, setDate] = useState<{
     from: Date | undefined;
     to: Date | undefined;
-  }>({
-    from: payPeriod.startDate ? new Date(payPeriod.startDate) : undefined,
-    to: payPeriod.endDate ? new Date(payPeriod.endDate) : undefined,
+  }>(() => {
+    // Initialize date range picker to match payPeriod
+    const today = new Date();
+    const daysInMonth = getDaysInMonth(today);
+    const currentDay = getDate(today);
+    const isLastWeek = currentDay > daysInMonth - 7;
+    
+    const targetMonth = isLastWeek ? today : subMonths(today, 1);
+    const firstDay = startOfMonth(targetMonth);
+    const lastDay = endOfMonth(targetMonth);
+
+    return {
+      from: firstDay,
+      to: lastDay,
+    };
   });
 
   // Fetch department data
@@ -355,6 +375,11 @@ export default function ProcessPayrollPage() {
             )}
           </div>
         ),
+      },
+      {
+        header: "Hourly Rate",
+        accessorKey: "hourlyRate",
+        cell: ({ row }) => formatKES(row.getValue("hourlyRate")),
       },
       {
         accessorKey: "grossPay",

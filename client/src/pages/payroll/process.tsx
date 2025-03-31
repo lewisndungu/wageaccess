@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import axios from "axios";
 import {
   Card,
@@ -151,7 +151,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
-import { format } from "date-fns";
+import { format, startOfMonth, endOfMonth, subMonths } from "date-fns";
 import { cn } from "@/lib/utils";
 import { DateRange } from "react-day-picker";
 import {
@@ -160,6 +160,32 @@ import {
   HoverCardTrigger,
 } from "@/components/ui/hover-card";
 import { useNavigate, Link } from "react-router-dom";
+
+// --- Types for Worker Communication (Must match worker file) ---
+interface CalculationPayload {
+  employees: Employee[];
+  period: {
+    startDate: string;
+    endDate: string;
+  };
+}
+
+interface ProgressMessage {
+  type: "PROGRESS";
+  payload: number; // Percentage complete (0-100)
+}
+
+interface ResultMessage {
+  type: "RESULT";
+  payload: EmployeePayrollCalculation[];
+}
+
+interface ErrorMessage {
+  type: "ERROR";
+  payload: string; // Error message
+}
+
+type OutgoingWorkerMessage = ProgressMessage | ResultMessage | ErrorMessage;
 
 // Workflow stages
 const STAGES = {
@@ -394,12 +420,12 @@ export default function ProcessPayrollPage() {
     const today = new Date();
 
     if (periodType === "current") {
-      const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
-      const lastDay = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+      const firstDay = startOfMonth(today);
+      const lastDay = endOfMonth(today);
 
       setPayPeriod({
-        startDate: firstDay.toISOString().split("T")[0],
-        endDate: lastDay.toISOString().split("T")[0],
+        startDate: format(firstDay, 'yyyy-MM-dd'),
+        endDate: format(lastDay, 'yyyy-MM-dd'),
       });
 
       // Update date range picker state
@@ -408,12 +434,13 @@ export default function ProcessPayrollPage() {
         to: lastDay,
       });
     } else if (periodType === "previous") {
-      const firstDay = new Date(today.getFullYear(), today.getMonth() - 1, 1);
-      const lastDay = new Date(today.getFullYear(), today.getMonth(), 0);
+      const previousMonth = subMonths(today, 1);
+      const firstDay = startOfMonth(previousMonth);
+      const lastDay = endOfMonth(previousMonth);
 
       setPayPeriod({
-        startDate: firstDay.toISOString().split("T")[0],
-        endDate: lastDay.toISOString().split("T")[0],
+        startDate: format(firstDay, 'yyyy-MM-dd'),
+        endDate: format(lastDay, 'yyyy-MM-dd'),
       });
 
       // Update date range picker state
@@ -424,6 +451,7 @@ export default function ProcessPayrollPage() {
     } else if (periodType === "custom") {
       // For custom type, we'll show the date range picker
       // The actual date setting will happen in handleDateRangeChange
+      setPeriodType("custom");
     }
   };
 
@@ -453,112 +481,152 @@ export default function ProcessPayrollPage() {
     }
   };
 
-  // Calculate payroll for all eligible employees
-  const calculatePayroll = async (): Promise<EmployeePayrollCalculation[]> => {
-    // Validate first
-    if (eligibleEmployeeCount === 0) {
-      toast({
-        title: "No Employees Selected",
-        description: "Please select at least one employee to process.",
-        variant: "destructive",
-      });
-      return [];
-    }
+  const payrollWorkerRef = useRef<Worker | null>(null);
 
-    try {
-      // Get eligible employees
-      const eligibleEmployees =
-        excludedEmployees.length > 0
-          ? employeeData.filter(
-              (emp) => !excludedEmployees.includes(String(emp.id))
-            )
-          : employeeData;
+  // Effect to initialize and terminate the worker
+  useEffect(() => {
+    // Initialize the worker
+    console.log("Initializing payroll worker...");
+    payrollWorkerRef.current = new Worker(
+      new URL("@/workers/payroll.worker.ts", import.meta.url),
+      { type: "module" }
+    );
 
-      // Check if there are any eligible employees after filtering
-      if (eligibleEmployees.length === 0) {
+    // Generic error handler for the worker instance
+    const genericWorkerError = (error: ErrorEvent) => {
+        console.error("Generic unhandled error from payroll worker:", error);
         toast({
-          title: "No Eligible Employees",
-          description:
-            "No employees are eligible for payroll calculation based on the current selection and filters.",
+            title: "Worker Error",
+            description: `A background calculation error occurred: ${error.message}`,
+            variant: "destructive",
+          });
+        // Reset loading states if a calculation was in progress
+        setIsCalculating(false);
+        setIsRecalculating(false);
+    }
+    payrollWorkerRef.current.addEventListener("error", genericWorkerError)
+
+    // Cleanup function to terminate the worker when the component unmounts
+    return () => {
+      if (payrollWorkerRef.current) {
+        console.log("Terminating payroll worker...");
+        payrollWorkerRef.current.removeEventListener("error", genericWorkerError);
+        payrollWorkerRef.current.terminate();
+        payrollWorkerRef.current = null;
+      }
+    };
+  }, []); // Empty dependency array ensures this runs only on mount and unmount
+
+  // Calculate payroll using the Web Worker
+  const calculatePayroll = async (): Promise<EmployeePayrollCalculation[]> => {
+    return new Promise((resolve, reject) => {
+      // Validate first
+      if (eligibleEmployeeCount === 0) {
+        toast({
+          title: "No Employees Selected",
+          description: "Please select at least one employee to process.",
           variant: "destructive",
         });
-
-        // Keep this to ensure we reset the state if no employees
-        setIsCalculating(false);
-        return [];
+        return reject(new Error("No employees selected"));
       }
 
-      // Initialize calculations array
-      const calculations: EmployeePayrollCalculation[] = [];
+      const worker = payrollWorkerRef.current;
+      if (!worker) {
+        console.error("Payroll worker is not initialized!");
+        toast({
+          title: "Worker Error",
+          description: "Payroll calculation worker failed to initialize.",
+          variant: "destructive",
+        });
+        return reject(new Error("Worker not initialized"));
+      }
 
-      // Process employees in batches to avoid UI freezing
-      return new Promise((resolve) => {
-        // Number of employees to process in each batch
-        const BATCH_SIZE = 5;
-        let currentIndex = 0;
+      try {
+        // Get eligible employees
+        const eligibleEmployees =
+          excludedEmployees.length > 0
+            ? employeeData.filter(
+                (emp) => !excludedEmployees.includes(String(emp.id))
+              )
+            : employeeData;
 
-        const processBatch = async () => {
-          const endIndex = Math.min(
-            currentIndex + BATCH_SIZE,
-            eligibleEmployees.length
-          );
-
-          // Get the current batch of employees
-          const batchEmployees = eligibleEmployees.slice(currentIndex, endIndex);
-          
-          // Process the batch asynchronously
-          const batchCalculations = batchEmployees.map(employee => 
-            calculateEmployeePayroll(employee)
-          );
-          
-          // Add all batch calculations to the main array
-          calculations.push(...batchCalculations);
-
-          // Update progress
-          setCalculationProgress(prevProgress => {
-            const newProgress = (endIndex / eligibleEmployees.length) * 100;
-            return Math.min(newProgress, 99); // Cap at 99% until fully complete
+        if (eligibleEmployees.length === 0) {
+          toast({
+            title: "No Eligible Employees",
+            description:
+              "No employees are eligible for payroll calculation.",
+            variant: "destructive",
           });
+          return reject(new Error("No eligible employees"));
+        }
 
-          currentIndex = endIndex;
+        // Setup message handler for this specific calculation run
+        const handleWorkerMessage = (event: MessageEvent<OutgoingWorkerMessage>) => {
+          const { type, payload } = event.data;
 
-          // If there are more employees to process, schedule next batch
-          if (currentIndex < eligibleEmployees.length) {
-            // Use setTimeout to yield to the browser's event loop
-            setTimeout(processBatch, 0);
-          } else {
-            // All employees processed
-            // Calculate summary statistics
-            calculatePayrollSummary(calculations);
-
-            // Set calculations in state
-            setPayrollCalculations(calculations);
-
-            // Complete progress
-            setCalculationProgress(100);
-
+          if (type === "PROGRESS") {
+            // Ensure progress doesn't exceed 99 until final result
+            setCalculationProgress(Math.min(payload, 99));
+          } else if (type === "RESULT") {
+            console.log("Worker finished calculation with results:", payload);
+            calculatePayrollSummary(payload); // Calculate summary based on worker results
+            setPayrollCalculations(payload); // Set the final calculations
+            setCalculationProgress(100); // Mark as 100% complete
+            // Clean up listeners for this run
+            worker.removeEventListener("message", handleWorkerMessage);
+            worker.removeEventListener("error", handleSpecificWorkerError);
+            resolve(payload); // Resolve the promise with the results
+          } else if (type === "ERROR") {
+            console.error("Error message from payroll worker:", payload);
             toast({
-              title: "Calculation Complete",
-              description: `Successfully calculated payroll for ${calculations.length} employees.`,
+              title: "Calculation Error",
+              description:
+                payload || "An error occurred in the calculation worker.",
+              variant: "destructive",
             });
-
-            resolve(calculations);
+             // Clean up listeners for this run
+            worker.removeEventListener("message", handleWorkerMessage);
+            worker.removeEventListener("error", handleSpecificWorkerError);
+            reject(new Error(payload)); // Reject the promise
           }
         };
 
-        // Start processing the first batch with setTimeout
-        setTimeout(processBatch, 0);
-      });
-    } catch (error) {
-      console.error("Payroll calculation error:", error);
-      toast({
-        title: "Calculation Error",
-        description: "An error occurred during calculation. Please try again.",
-        variant: "destructive",
-      });
+        // Setup specific error handler for this run
+         const handleSpecificWorkerError = (error: ErrorEvent) => {
+            console.error("Specific error caught during payroll calculation worker run:", error);
+            toast({
+                title: "Worker Calculation Error",
+                description: `Calculation failed: ${error.message}`,
+                variant: "destructive",
+            });
+            // Clean up listeners for this run
+            worker.removeEventListener("message", handleWorkerMessage);
+            worker.removeEventListener("error", handleSpecificWorkerError);
+            reject(error.error || new Error("Unhandled worker error during calculation")); // Reject the promise
+        };
 
-      return [];
-    }
+        // Add new listeners for this specific run
+        worker.addEventListener("message", handleWorkerMessage);
+        worker.addEventListener("error", handleSpecificWorkerError);
+
+        // Send data to the worker
+        const payload: CalculationPayload = {
+          employees: eligibleEmployees,
+          period: payPeriod,
+        };
+        console.log(`Sending CALCULATION job to worker for ${eligibleEmployees.length} employees.`);
+        worker.postMessage({ type: "CALCULATE", payload });
+
+      } catch (error) {
+        console.error("Error initiating payroll calculation:", error);
+        toast({
+          title: "Setup Error",
+          description: "Failed to start payroll calculation. Please try again.",
+          variant: "destructive",
+        });
+        reject(error);
+      }
+    });
   };
 
   // Validate employee data before calculation
@@ -602,93 +670,6 @@ export default function ProcessPayrollPage() {
     return Math.round(hours * 2) / 2;
   };
 
-  // Calculate payroll for a single employee
-  const calculateEmployeePayroll = (
-    employee: any
-  ): EmployeePayrollCalculation => {
-    // Ensure hourly rate is a number
-    const hourlyRate = Number(employee.hourlyRate) || 0;
-
-    // Get actual attendance records for the pay period
-    const startDate = new Date(payPeriod.startDate);
-    const endDate = new Date(payPeriod.endDate);
-
-    // Initialize variables with safe defaults
-    let hoursWorked = 0;
-    let overtimeHours = 0;
-
-    // Calculate working days and attendance rate
-    const workingDays = getWorkingDaysInPeriod(startDate, endDate);
-    const attendanceRate = 0.9; // Assume 90% attendance as fallback
-    hoursWorked = Math.round(workingDays * 8 * attendanceRate);
-    overtimeHours = 0;
-
-    // Calculate gross pay
-    const grossPay =
-      hoursWorked * hourlyRate + overtimeHours * hourlyRate * 1.5;
-
-    // Randomly generate EWA and loan deductions from the gross pay,
-    // but ensure they don't exceed 50% of the gross pay
-    let ewaDeductions = Math.floor(Math.random() * (grossPay * 0.5));
-    let loanDeductions = Math.floor(Math.random() * (grossPay * 0.5));
-
-    // Calculate other deductions (PAYE, NHIF, NSSF, etc.)
-    const deductions = calculateKenyanDeductions(grossPay);
-
-    // Calculate total deductions
-    const totalDeductions =
-      deductions.totalDeductions + ewaDeductions + loanDeductions;
-
-    // Calculate net pay
-    const netPay = grossPay - totalDeductions;
-
-    // Determine status
-    let status: "complete" | "warning" | "error" = "complete";
-    let statusReason = "";
-
-    if (netPay < 0) {
-      status = "error";
-      statusReason = "Net pay is negative";
-    } else if (totalDeductions > grossPay * 0.7) {
-      status = "warning";
-      statusReason = "Deductions exceed 70% of gross pay";
-    }
-
-    // Create the calculation result
-    const calculationResult: EmployeePayrollCalculation = {
-      id: employee.id,
-      employeeId: employee.id,
-      employeeNumber: employee.employeeNumber || "",
-      name: `${employee.other_names || ""} ${employee.surname || ""}`.trim(),
-      role: employee.department?.name || "",
-      position: employee.position || "",
-      hoursWorked,
-      overtimeHours,
-      hourlyRate,
-      grossPay,
-      taxableIncome: grossPay, // Use grossPay instead of deductions.taxablePay
-      paye: deductions.paye,
-      nhif: deductions.nhif,
-      nssf: deductions.nssf,
-      housingLevy: deductions.housingLevy,
-      ewaDeductions,
-      loanDeductions,
-      otherDeductions: 0,
-      totalDeductions,
-      netPay,
-      status,
-      statusReason,
-      isEdited: false,
-      mpesaNumber: employee.contact?.phoneNumber,
-      bankName: employee.bank_info?.bankName,
-      bankAccountNumber: employee.bank_info?.accountNumber,
-      periodStart: startDate,
-      periodEnd: endDate,
-    };
-
-    return calculationResult;
-  };
-
   // Handle calculation and navigation to next step
   const handleCalculateAndReview = async () => {
     if (eligibleEmployeeCount === 0) {
@@ -700,28 +681,27 @@ export default function ProcessPayrollPage() {
       return;
     }
 
-    // Set loading state immediately
     setIsCalculating(true);
     setCalculationProgress(0);
+    setPayrollCalculations([]); // Clear previous results
 
-    calculatePayroll()
+    calculatePayroll() // Call the worker-based function
       .then((calculations) => {
+        // Worker handles setting state via messages, just need to move stage
         if (calculations && calculations.length > 0) {
-          setPayrollCalculations(calculations);
           setCurrentStage(STAGES.FINALIZE);
         }
-      })
-      .catch((error) => {
-        console.error("Error calculating payroll:", error);
         toast({
-          title: "Calculation Error",
-          description:
-            "An error occurred during calculation. Please try again.",
-          variant: "destructive",
+          title: "Calculation Complete",
+          description: `Successfully calculated payroll for ${calculations.length} employees.`,
         });
       })
+      .catch((error) => {
+        // Error handling is mostly done via worker message/error listeners
+        console.error("Payroll calculation promise rejected:", error);
+      })
       .finally(() => {
-        setIsCalculating(false);
+        setIsCalculating(false); // Ensure loading state is turned off
       });
   };
 
@@ -733,128 +713,43 @@ export default function ProcessPayrollPage() {
     }
   };
 
-  // Fallback calculation when API calls fail
-  const fallbackCalculateEmployeePayroll = (
-    employee: any
-  ): EmployeePayrollCalculation => {
-    try {
-      // Get the start and end dates of the pay period
-      const startDate = new Date(payPeriod.startDate);
-      const endDate = new Date(payPeriod.endDate);
-
-      // Standard working days in the period
-      const workingDays = getWorkingDaysInPeriod(startDate, endDate);
-
-      // Assume hourly rate from employee data or fallback to 10 units
-      const hourlyRate = Number(employee.hourlyRate) || 10;
-
-      // Assume 90% attendance as fallback
-      const attendanceRate = 0.9;
-      const hoursWorked = Math.round(workingDays * 8 * attendanceRate);
-      const overtimeHours = 0; // No overtime in fallback
-
-      // Calculate gross pay
-      const grossPay = hoursWorked * hourlyRate;
-
-      // Use simple rules for deductions in fallback
-      const taxRate = 0.15; // Simple 15% tax rate
-      const nhifRate = 0.03; // Simple 3% NHIF
-      const nssfRate = 0.06; // Simple 6% NSSF
-      const housingLevyRate = 0.015; // 1.5% housing levy
-
-      // Calculate deductions
-      const paye = grossPay * taxRate;
-      const nhif = grossPay * nhifRate;
-      const nssf = grossPay * nssfRate;
-      const housingLevy = grossPay * housingLevyRate;
-
-      // Assume no EWA or loan deductions in fallback
-      const ewaDeductions = 0;
-      const loanDeductions = 0;
-
-      // Calculate total deductions
-      const totalDeductions = paye + nhif + nssf + housingLevy;
-
-      // Calculate net pay
-      const netPay = grossPay - totalDeductions;
-
-      // Create the calculation result - ensure we match the schema interface
-      return {
-        id: employee.id, // Changed from number to string
-        employeeId: employee.id, // Add required employeeId field
-        employeeNumber: employee.employeeNumber || "",
-        name: `${employee.other_names || ""} ${employee.surname || ""}`.trim(),
-        role: employee.department?.name || "", // Use role instead of department
-        position: employee.position || "",
-        hoursWorked,
-        overtimeHours,
-        hourlyRate,
-        grossPay,
-        taxableIncome: grossPay,
-        paye,
-        nhif,
-        nssf,
-        housingLevy,
-        ewaDeductions,
-        loanDeductions,
-        otherDeductions: 0,
-        totalDeductions,
-        netPay,
-        status: "complete",
-        statusReason: "Calculated with fallback method",
-        isEdited: false,
-        mpesaNumber: employee.contact?.phoneNumber,
-        bankName: employee.bank_info?.bankName,
-        bankAccountNumber: employee.bank_info?.accountNumber,
-        periodStart: startDate, // Add period information
-        periodEnd: endDate,
-      };
-    } catch (error) {
-      console.error("Error in fallback calculation:", error);
-      // Return a minimal valid object in case of errors
-      return {
-        id: String(employee.id || Date.now()), // Ensure it's a string
-        employeeId: String(employee.id || Date.now()),
-        employeeNumber: employee.employeeNumber || "",
-        name:
-          `${employee.other_names || ""} ${employee.surname || ""}`.trim() ||
-          "Unknown Employee",
-        position: employee.position || "Unknown",
-        role: "", // Use role instead of department
-        hoursWorked: 0,
-        overtimeHours: 0,
-        hourlyRate: 0,
-        grossPay: 0,
-        taxableIncome: 0,
-        paye: 0,
-        nhif: 0,
-        nssf: 0,
-        housingLevy: 0,
-        ewaDeductions: 0,
-        loanDeductions: 0,
-        otherDeductions: 0,
-        totalDeductions: 0,
-        netPay: 0,
-        status: "error",
-        statusReason: "Calculation failed",
-        isEdited: false,
-      };
-    }
+  // Handle recalculation of payroll
+  const handleRecalculate = async () => {
+    // Reset existing calculation first
+    setPayrollCalculations([]);
+    setPayrollSummary({
+      totalGrossPay: 0, totalDeductions: 0, totalNetPay: 0,
+      totalEwaDeductions: 0, employeeCount: 0, departmentSummary: [],
+      previousPeriodComparison: 0,
+    });
+  
+    setIsCalculating(true);
+    setIsRecalculating(true);
+    setCalculationProgress(0);
+  
+    calculatePayroll() // Call the worker-based function
+      .then((calculations) => {
+        if (calculations && calculations.length > 0) {
+          setCurrentStage(STAGES.FINALIZE); // Ensure we stay/go to finalize stage
+        }
+        toast({
+          title: "Recalculation Complete",
+          description: `Successfully recalculated payroll for ${calculations.length} employees.`,
+        });
+      })
+      .catch((error) => {
+        console.error("Payroll recalculation promise rejected:", error);
+        // Error handled by worker listeners
+      })
+      .finally(() => {
+        setIsCalculating(false);
+        setIsRecalculating(false);
+      });
   };
 
-  // Helper function to calculate working days in a period
-  const getWorkingDaysInPeriod = (startDate: Date, endDate: Date): number => {
-    let workingDays = 0;
-    let currentDate = new Date(startDate);
-
-    while (currentDate <= endDate) {
-      // 0 = Sunday, 6 = Saturday
-      const dayOfWeek = currentDate.getDay();
-      if (dayOfWeek !== 0 && dayOfWeek !== 6) workingDays++;
-      currentDate.setDate(currentDate.getDate() + 1);
-    }
-
-    return workingDays;
+  const formatHoursToHalfHour = (hours: number): string => {
+    const roundedHours = Math.round(hours * 2) / 2;
+    return numeral(roundedHours).format("0,0.0");
   };
 
   // Handle stage transitions
@@ -1484,14 +1379,6 @@ export default function ProcessPayrollPage() {
     ];
   };
 
-  // Helper function to format hours to nearest half hour - add this after other helper functions
-  const formatHoursToHalfHour = (hours: number): string => {
-    // Round to nearest half hour first
-    const roundedHours = Math.round(hours * 2) / 2;
-    // Format using Numeral.js
-    return numeral(roundedHours).format("0,0.0");
-  };
-
   // Define columns for the employee DataTable
   const employeeColumns = useMemo<ColumnDef<Employee>[]>(
     () => [
@@ -1603,46 +1490,6 @@ export default function ProcessPayrollPage() {
       });
     }
   }, []); // Empty dependency array since we only want this to run once
-
-  // Handle recalculation of payroll
-  const handleRecalculate = async () => {
-    // Reset any existing calculation first
-    setPayrollCalculations([]);
-    setPayrollSummary({
-      totalGrossPay: 0,
-      totalDeductions: 0,
-      totalNetPay: 0,
-      totalEwaDeductions: 0,
-      employeeCount: 0,
-      departmentSummary: [],
-      previousPeriodComparison: 0,
-    });
-
-    // Set loading state immediately 
-    setIsCalculating(true);
-    setIsRecalculating(true);
-    setCalculationProgress(0);
-
-    try {
-      // Run the calculation again
-      const calculations = await calculatePayroll();
-      if (calculations && calculations.length > 0) {
-        setPayrollCalculations(calculations);
-        setCurrentStage(STAGES.FINALIZE);
-      }
-    } catch (error) {
-      console.error("Error recalculating payroll:", error);
-      toast({
-        title: "Recalculation Error",
-        description:
-          "An error occurred during recalculation. Please try again.",
-        variant: "destructive",
-      });
-    } finally {
-      setIsCalculating(false);
-      setIsRecalculating(false);
-    }
-  };
 
   // Update Stepper component in the render function to match the updated workflow
   return (

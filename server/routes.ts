@@ -1565,33 +1565,113 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Types for payroll processing
+  type PayrollError = {
+    success: false;
+    employeeId: string;
+    error: string;
+  };
+
+  type PayrollResult = Payroll | PayrollError;
+
+  // Batch size for processing payroll records
+  const BATCH_SIZE = 100;
+
+  // Helper function to convert numeric fields to numbers efficiently
+  const convertNumericFields = (data: Record<string, any>) => {
+    const numericFields = ['hoursWorked', 'grossPay', 'netPay', 'overtimeHours', 'hourlyRate'];
+    for (const field of numericFields) {
+      if (typeof data[field] === 'string') {
+        data[field] = Number(data[field]);
+      }
+    }
+    return data;
+  };
+
   app.post(
     "/api/payroll",
     validateBody(insertPayrollSchema),
     async (req, res) => {
       try {
-        // Handle numeric fields conversion (string to number)
-        let payrollData = { ...req.body };
-        if (typeof payrollData.hoursWorked === "string") {
-          payrollData.hoursWorked = parseFloat(payrollData.hoursWorked);
-        }
-        if (typeof payrollData.grossPay === "string") {
-          payrollData.grossPay = parseFloat(payrollData.grossPay);
-        }
-        if (typeof payrollData.netPay === "string") {
-          payrollData.netPay = parseFloat(payrollData.netPay);
+        const startTime = performance.now();
+        const payrollRecords = Array.isArray(req.body) ? req.body : [req.body];
+        
+        // Early validation of data structure
+        if (payrollRecords.length === 0) {
+          return res.status(400).json({ 
+            message: "No payroll records provided" 
+          });
         }
 
-        const payroll = await storage.createPayroll(payrollData);
+        // Convert all numeric fields in parallel using a worker pool if available
+        const convertedRecords = payrollRecords.map(convertNumericFields);
 
-        // Transform to ensure schema compliance
-        const transformedPayroll = await transformPayrollRecord(payroll);
+        // Process records in batches
+        const results: PayrollResult[] = [];
+        for (let i = 0; i < convertedRecords.length; i += BATCH_SIZE) {
+          const batch = convertedRecords.slice(i, i + BATCH_SIZE);
+          
+          // Process batch in parallel using Promise.all
+          const batchPromises = batch.map(async (record) => {
+            try {
+              const payroll = await storage.createPayroll(record);
+              return await transformPayrollRecord(payroll);
+            } catch (err) {
+              // Include record identifier in error for debugging
+              const error = err as Error;
+              console.error(`Error processing record ${record.employeeId || 'unknown'}:`, error);
+              return {
+                success: false,
+                employeeId: record.employeeId || 'unknown',
+                error: error.message || 'Processing failed'
+              } as PayrollError;
+            }
+          });
 
-        return res.status(201).json(transformedPayroll);
-      } catch (error) {
-        return res
-          .status(500)
-          .json({ message: "Failed to create payroll record" });
+          const batchResults = await Promise.all(batchPromises);
+          results.push(...batchResults);
+
+          // Optional: Send progress updates for large batches
+          if (convertedRecords.length > BATCH_SIZE) {
+            const progress = Math.round((i + batch.length) / convertedRecords.length * 100);
+            res.write(`data: {"progress": ${progress}}\n\n`);
+          }
+        }
+
+        // Calculate processing statistics
+        const endTime = performance.now();
+        const processingTime = endTime - startTime;
+        const successCount = results.filter((r): r is Payroll => !('error' in r)).length;
+        const failureCount = results.length - successCount;
+
+        // Send final response
+        return res.status(201).json({
+          success: true,
+          message: `Processed ${results.length} payroll records`,
+          statistics: {
+            total: results.length,
+            successful: successCount,
+            failed: failureCount,
+            processingTimeMs: Math.round(processingTime)
+          },
+          results: results
+        });
+
+      } catch (err) {
+        const error = err as Error;
+        console.error('Payroll processing error:', error);
+        
+        // Determine appropriate error status and message
+        const statusCode = error.name === 'ValidationError' ? 400 : 500;
+        const errorMessage = error.name === 'ValidationError' 
+          ? 'Invalid payroll data provided'
+          : 'Internal server error while processing payroll';
+
+        return res.status(statusCode).json({ 
+          success: false,
+          message: errorMessage,
+          error: process.env.NODE_ENV === 'development' ? error.message : undefined
+        });
       }
     }
   );

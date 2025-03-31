@@ -409,15 +409,12 @@ export class MemStorage implements IStorage {
   }
 
   async getEmployeeWithDetails(id: string): Promise<Employee | undefined> {
-    console.log(`Getting employee with details for ID: ${id}`);
     const employee = await this.getEmployee(id);
 
     if (!employee) {
       console.log(`No employee found with ID: ${id}`);
       return undefined;
     }
-
-    console.log(`Successfully retrieved employee details for ID: ${id}`);
     return employee;
   }
 
@@ -1940,8 +1937,8 @@ export class MemStorage implements IStorage {
     const periodEnd = new Date(); // Use today as end date
     periodEnd.setHours(23, 59, 59, 999);
 
-    const payrollRecords = await this.generateMockPayrollForEmployees(periodStart, periodEnd);
-    console.log(`Step 4/5 completed: ${payrollRecords} payroll records generated`);
+    // const payrollRecords = await this.generateMockPayrollForEmployees(periodStart, periodEnd);
+    // console.log(`Step 4/5 completed: ${payrollRecords} payroll records generated`);
 
     // --- Generate wallet and transactions ---
     // Create initial wallet if it doesn't exist
@@ -2052,7 +2049,7 @@ export class MemStorage implements IStorage {
 
     return {
       attendanceRecords,
-      payrollRecords,
+      payrollRecords: 0,
       ewaRequests,
       todayRecords: 0, // todayRecords is generated later now, adjust step numbering if needed or remove variable if unused.
       walletTransactions: transactions.length

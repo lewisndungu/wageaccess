@@ -1,5 +1,6 @@
 import { type Employee, type EmployeePayrollCalculation } from "shared/schema";
 import { calculateKenyanDeductions } from "@/lib/tax-utils"; // Assuming this is accessible or can be bundled
+import { eachDayOfInterval, isWeekend, endOfDay, startOfDay } from "date-fns"; // Add date-fns imports
 
 // --- Types for Worker Communication ---
 
@@ -36,22 +37,15 @@ type OutgoingMessage = ProgressMessage | ResultMessage | ErrorMessage;
 // --- Helper Functions (Copied from process.tsx) ---
 
 const getWorkingDaysInPeriod = (startDate: Date, endDate: Date): number => {
-  let workingDays = 0;
-  let currentDate = new Date(startDate);
+  // Ensure we have clean start and end dates
+  const start = startOfDay(startDate);
+  const end = endOfDay(endDate);
 
-  // Ensure the loop includes the endDate
-  const finalDate = new Date(endDate);
-  finalDate.setHours(23, 59, 59, 999); // Set time to end of day
+  // Get all days in the interval
+  const days = eachDayOfInterval({ start, end });
 
-  while (currentDate <= finalDate) {
-    // 0 = Sunday, 6 = Saturday
-    const dayOfWeek = currentDate.getDay();
-    if (dayOfWeek !== 0 && dayOfWeek !== 6) {
-      workingDays++;
-    }
-    currentDate.setDate(currentDate.getDate() + 1);
-  }
-  return workingDays;
+  // Count days that are not weekends
+  return days.filter(day => !isWeekend(day)).length;
 };
 
 // Calculate payroll for a single employee (Copied from process.tsx)

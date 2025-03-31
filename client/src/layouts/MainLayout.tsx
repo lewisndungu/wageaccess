@@ -188,18 +188,18 @@ export default function MainLayout({ children }: MainLayoutProps) {
             </li>
             <li>
               <SidebarLink
-                to="/payroll"
-                icon={<DollarSign size={18} />}
-                label="Payroll"
-                active={location.pathname.startsWith("/payroll")}
-              />
-            </li>
-            <li>
-              <SidebarLink
                 to="/ewa"
                 icon={<CreditCard size={18} />}
                 label="Earned Wage Access"
                 active={location.pathname.startsWith("/ewa")}
+              />
+            </li>
+            <li>
+              <SidebarLink
+                to="/payroll"
+                icon={<DollarSign size={18} />}
+                label="Payroll"
+                active={location.pathname.startsWith("/payroll")}
               />
             </li>
             <li>

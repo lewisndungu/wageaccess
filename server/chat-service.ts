@@ -440,22 +440,49 @@ Salary: ${formatKESCurrency(employee.gross_income)}
   };
 }
 
-// Improved function to find the closest matching column
+// Define types for special cases
+type SpecialCaseStructured = {
+  exact: string[];
+  variations: string[];
+  exclude: string[];
+};
+
+type SpecialCaseValue = SpecialCaseStructured | string[];
+
+// Improved function to find the closest matching column with context awareness
 function findBestMatch(targetColumn: string, availableColumns: string[]): string | null {
-  // Maps master template names (and variations) to themselves for matching logic
-  const specialCases: Record<string, string[]> = {
-    // Master Template Keys & Variations
+  // Special cases for NSSF and NHIF to distinguish between number and deduction
+  const specialCases: Record<string, SpecialCaseValue> = {
+    'NSSF No': {
+      exact: ['NSSF NO', 'NSSF NUMBER', 'NSSF NO.'],
+      variations: ['NSSF MEMBERSHIP', 'SOCIAL SECURITY NO', 'NSSF ID'],
+      exclude: ['NSSF DEDUCTION', 'NSSF AMOUNT', 'NSSF CONTRIBUTION', 'NSSF']
+    },
+    'NSSF': {
+      exact: ['NSSF', 'NSSF DEDUCTION', 'NSSF AMOUNT', 'NSSF CONTRIBUTION'],
+      variations: ['SOCIAL SECURITY DEDUCTION', 'NSSF DED'],
+      exclude: ['NSSF NO', 'NSSF NUMBER', 'NSSF MEMBERSHIP']
+    },
+    'NHIF No': {
+      exact: ['NHIF NO', 'NHIF NUMBER', 'NHIF NO.'],
+      variations: ['NHIF MEMBERSHIP', 'HEALTH INSURANCE NO', 'NHIF ID'],
+      exclude: ['NHIF DEDUCTION', 'NHIF AMOUNT', 'NHIF CONTRIBUTION', 'NHIF']
+    },
+    'NHIF': {
+      exact: ['NHIF', 'NHIF DEDUCTION', 'NHIF AMOUNT', 'NHIF CONTRIBUTION', 'SHIF', 'SHIF DEDUCTION', 'SHIF AMOUNT', 'SHIF CONTRIBUTION'
+      ],
+      variations: ['HEALTH INSURANCE DEDUCTION', 'NHIF DED', 'SHIF DED', 'SHIF AMOUNT', 'SHIF CONTRIBUTION'],
+      exclude: ['NHIF NO', 'NHIF NUMBER', 'NHIF MEMBERSHIP', 'SHIF NO', 'SHIF NUMBER', 'SHIF MEMBERSHIP']
+    },
+    // Simple array format for other cases
     'Emp No': ['EMPLO NO.', 'EMPLOYEE NO', 'EMPLOYEE NUMBER', 'EMP NUMBER', 'STAFF NO', 'PAYROLL NO', 'ID'],
     'Employee Name': ['EMPLOYEES\' FULL NAMES', 'FULL NAME', 'NAME', 'EMPLOYEE NAMES', 'STAFF NAME', 'EMPLOYEE FULL NAME', 'SURNAME', 'OTHER NAMES'],
     'Probation Period': ['PROBATION', 'ON PROBATION'],
     'ID Number': ['ID NO', 'NATIONAL ID', 'IDENTITY NUMBER', 'ID', 'IDENTIFICATION'],
     'KRA Pin': ['KRA PIN NO.', 'KRA', 'PIN NO', 'PIN NUMBER', 'TAX PIN'],
-    'NSSF No': ['NSSF NUMBER', 'NSSF', 'SOCIAL SECURITY NO'], // Membership Number
     'Position': ['JOB TITTLE', 'TITLE', 'JOB TITLE', 'DESIGNATION', 'ROLE'],
     'Gross Pay': ['BASIC SALARY', 'SALARY', 'GROSS SALARY', 'GROSS', 'MONTHLY SALARY', 'GROSS INCOME', 'NET INCOME', 'BASIC PAY'],
     'PAYE': ['TAX', 'INCOME TAX'],
-    'NSSF': ['NSSF', 'NSSF DEDUCTION', 'NSSF CONTRIBUTION'], // Deduction Amount
-    'NHIF': ['NHIF NO', 'NHIF DEDUCTION', 'NHIF CONTRIBUTION', 'HEALTH INSURANCE', 'HEALTH INSURANCE NO', 'SHIF'], // Deduction Amount
     'Levy': ['H-LEVY', 'HOUSING LEVY', 'HOUSE LEVY', 'HOUSING', 'LEVIES'],
     'Loan Deduction': ['LOANS', 'LOAN', 'LOAN REPAYMENT', 'DEBT REPAYMENT', 'TOTAL LOAN DEDUCTIONS'],
     'Employer Advance': ['ADVANCE', 'SALARY ADVANCE', 'ADVANCE SALARY', 'ADVANCE PAYMENT', 'EMPLOYER ADVANCES'],
@@ -477,31 +504,68 @@ function findBestMatch(targetColumn: string, availableColumns: string[]): string
     return col;
   }).filter(Boolean) as string[];
 
-  const exactMatch = cleanedAvailableColumns.find(col => 
-    col && col.toLowerCase() === targetColumn.toLowerCase());
-  if (exactMatch) return exactMatch;
-  
-  if (specialCases[targetColumn]) {
-    for (const variation of specialCases[targetColumn]) {
-      const specialMatch = cleanedAvailableColumns.find(col => 
-        col && col.toLowerCase() === variation.toLowerCase());
-      if (specialMatch) return specialMatch;
+  // For NSSF and NHIF special handling
+  const specialCase = specialCases[targetColumn];
+  if (specialCase && !Array.isArray(specialCase)) {
+    // First check exact matches
+    for (const col of cleanedAvailableColumns) {
+      if (!col) continue;
+      const upperCol = col.toUpperCase();
+      
+      // Check if this column should be excluded
+      if (specialCase.exclude.some(excl => upperCol === excl.toUpperCase())) {
+        continue;
+      }
+      
+      // Check exact matches first
+      if (specialCase.exact.some(exact => upperCol === exact.toUpperCase())) {
+        return col;
+      }
     }
-  }
-  
-  for (const col of cleanedAvailableColumns) {
-    if (col && (col.toLowerCase().includes(targetColumn.toLowerCase()) || 
-        targetColumn.toLowerCase().includes(col.toLowerCase()))) {
-      return col;
+    
+    // Then check variations
+    for (const col of cleanedAvailableColumns) {
+      if (!col) continue;
+      const upperCol = col.toUpperCase();
+      
+      // Skip if in exclude list
+      if (specialCase.exclude.some(excl => upperCol.includes(excl.toUpperCase()))) {
+        continue;
+      }
+      
+      // Check variations
+      if (specialCase.variations.some(variation => upperCol.includes(variation.toUpperCase()))) {
+        return col;
+      }
     }
-  }
-  
-  const targetWords = targetColumn.toLowerCase().split(/[\s.,\-_]+/).filter(word => word.length > 2);
-  for (const col of cleanedAvailableColumns) {
-    if (!col) continue;
-    const colWords = col.toLowerCase().split(/[\s.,\-_]+/).filter(word => word.length > 2);
-    const hasCommonWords = targetWords.some(word => colWords.includes(word));
-    if (hasCommonWords) return col;
+  } else {
+    // Original matching logic for other columns
+    const exactMatch = cleanedAvailableColumns.find(col => 
+      col && col.toLowerCase() === targetColumn.toLowerCase());
+    if (exactMatch) return exactMatch;
+    
+    if (specialCase && Array.isArray(specialCase)) {
+      for (const variation of specialCase) {
+        const specialMatch = cleanedAvailableColumns.find(col => 
+          col && col.toLowerCase() === variation.toLowerCase());
+        if (specialMatch) return specialMatch;
+      }
+    }
+    
+    for (const col of cleanedAvailableColumns) {
+      if (col && (col.toLowerCase().includes(targetColumn.toLowerCase()) || 
+          targetColumn.toLowerCase().includes(col.toLowerCase()))) {
+        return col;
+      }
+    }
+    
+    const targetWords = targetColumn.toLowerCase().split(/[\s.,\-_]+/).filter(word => word.length > 2);
+    for (const col of cleanedAvailableColumns) {
+      if (!col) continue;
+      const colWords = col.toLowerCase().split(/[\s.,\-_]+/).filter(word => word.length > 2);
+      const hasCommonWords = targetWords.some(word => colWords.includes(word));
+      if (hasCommonWords) return col;
+    }
   }
   
   return null;

@@ -572,6 +572,36 @@ function parseNumber(value: any, defaultValue = 0): number {
   return num;
 }
 
+// Function to find the header row and return its index
+function findHeaderRow(data: Array<Record<string, any>>, maxRowsToCheck = 10): number {
+  let bestMatchCount = 0;
+  let bestMatchIndex = -1;
+
+  // Check first N rows
+  for (let i = 0; i < Math.min(maxRowsToCheck, data.length); i++) {
+    const row = data[i];
+    let currentMatchCount = 0;
+    
+    // Get all values from the current row, including those in __EMPTY_X columns
+    const rowValues = Object.values(row).map(val => String(val || '').trim());
+    
+    // For each master template column, try to find a match in this row
+    for (const masterKey of Object.keys(columnMappings)) {
+      const bestMatch = findBestMatch(masterKey, rowValues);
+      if (bestMatch) {
+        currentMatchCount++;
+      }
+    }
+
+    // Update best match if this row has more matches
+    if (currentMatchCount > bestMatchCount) {
+      bestMatchCount = currentMatchCount;
+      bestMatchIndex = i;
+    }
+  }
+
+  return bestMatchIndex;
+}
 
 // Transform data function
 function transformData(data: Array<Record<string, any>>): {
@@ -581,64 +611,66 @@ function transformData(data: Array<Record<string, any>>): {
   if (!data || data.length === 0) {
     return { transformedData: [], failedRows: [] };
   }
-  
-  const originalHeaders = Object.keys(data[0]);
+
+  // Find the header row
+  const headerRowIndex = findHeaderRow(data);
+  if (headerRowIndex === -1) {
+    return {
+      transformedData: [],
+      failedRows: data.map((row, index) => ({ 
+        row, 
+        reason: `Row ${index + 1}: Could not find a valid header row in the first few rows.` 
+      }))
+    };
+  }
+
+  // Get the header row and create mapping
+  const headerRow = data[headerRowIndex];
   const headerMapping: Record<string, string> = {};
-  const failedRows: Array<{row: Record<string, any>, reason: string}> = [];
   
-  Object.entries(columnMappings).forEach(([original, target]) => {
-    const bestMatch = findBestMatch(original, originalHeaders);
-    if (bestMatch) {
-      headerMapping[bestMatch] = target;
+  // Get all values from header row, including __EMPTY_X columns
+  const headerEntries = Object.entries(headerRow);
+  
+  // For each master template column, find the best matching header
+  Object.entries(columnMappings).forEach(([masterKey, targetField]) => {
+    // Create array of header values for matching
+    const headerValues = headerEntries.map(([key, value]) => ({
+      key,
+      value: String(value || '').trim()
+    })).filter(h => h.value); // Filter out empty values
+
+    // Find best match among header values for this master key
+    for (const header of headerValues) {
+      if (findBestMatch(masterKey, [header.value])) {
+        headerMapping[header.key] = targetField;
+        break; // Stop after finding first match for this master key
+      }
     }
   });
 
-  console.log(`headerMapping: ${JSON.stringify(headerMapping)}`);
-  console.log(`columnMappings: ${JSON.stringify(columnMappings)}`);
-  console.log(`originalHeaders: ${JSON.stringify(originalHeaders)}`);
+  console.log('Detected header mapping:', headerMapping);
 
   if (Object.keys(headerMapping).length === 0) {
-    for (let i = 0; i < Math.min(10, data.length); i++) {
-      const row = data[i];
-      for (const [key, value] of Object.entries(row)) {
-        const valueStr = String(value).trim().toLowerCase();
-        if (!valueStr) continue;
-        
-        for (const [original, target] of Object.entries(columnMappings)) {
-          const originalLower = original.toLowerCase();
-          if (valueStr.includes(originalLower) || 
-              originalLower.includes(valueStr)) {
-            const rowIndex = i;
-            
-            if (rowIndex < data.length - 1) {
-              // Call extractDataWithDetectedHeaders but return its result directly
-              return extractDataWithDetectedHeaders(data.slice(rowIndex), data.slice(rowIndex + 1));
-            }
-          }
-        }
-      }
-    }
-    // If no mapping found after checking initial rows, mark all as failed
     return {
       transformedData: [],
-      failedRows: data.map((row, index) => ({ row, reason: `Row ${index + 1}: Could not detect headers or map data.` }))
+      failedRows: data.map((row, index) => ({ 
+        row, 
+        reason: `Row ${index + 1}: Could not map any headers to expected columns.` 
+      }))
     };
   }
+
+  // Process data rows (skip header row)
+  const dataRows = data.slice(headerRowIndex + 1);
+  const failedRows: Array<{row: Record<string, any>, reason: string}> = [];
   
-  const transformedData = data.map((row, rowIndex) => {
-    // Skip rows that look like headers or are empty
+  const transformedData = dataRows.map((row, rowIndex) => {
+    // Skip empty rows
     const isEmpty = Object.values(row).every(val => 
       val === "" || val === null || val === undefined
     );
     if (isEmpty) return null;
 
-    // Basic header row check (might need refinement)
-    const isPossiblyHeader = Object.values(row).some(val => 
-        typeof val === 'string' && 
-        Object.keys(columnMappings).some(colKey => val.toLowerCase().includes(colKey.toLowerCase()))
-    );
-    if (rowIndex === 0 && isPossiblyHeader && data.length > 1) return null; // Skip first row if it looks like a header
-    
     // Initialize with Employee interface structure and defaults
     const transformedRow: Employee & { extractionErrors?: string[] } = {
       id: `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
@@ -664,10 +696,10 @@ function transformData(data: Array<Record<string, any>>): {
       tax_pin: '',
       sex: '',
       nssf_no: '',
-      nhif_no: '', // Ensure nhif_no is initialized
+      nhif_no: '',
       employeeNumber: '',
       position: '',
-      extractionErrors: [], // Initialize error array
+      extractionErrors: [],
       total_loan_deductions: 0,
       id_confirmed: false,
       mobile_confirmed: false,
@@ -687,6 +719,7 @@ function transformData(data: Array<Record<string, any>>): {
 
     let mappedFields = 0;
 
+    // Process each field according to the header mapping
     Object.entries(row).forEach(([key, value]) => {
       if (headerMapping[key] && value !== null && value !== undefined && String(value).trim() !== '') {
         const targetField = headerMapping[key];
@@ -700,7 +733,6 @@ function transformData(data: Array<Record<string, any>>): {
               transformedRow.other_names = nameParts.slice(0, -1).join(' ');
             } else {
               transformedRow.other_names = processedValue;
-              // Keep surname empty if only one part
             }
           } else if (targetField === 'is_on_probation' || targetField === 'terms_accepted') {
             setNestedValue(transformedRow, targetField, parseBoolean(processedValue));
@@ -711,11 +743,10 @@ function transformData(data: Array<Record<string, any>>): {
             targetField === 'loan_deductions' ||
             targetField === 'employer_advances' ||
             targetField === 'jahazii_advances' ||
-            targetField === 'house_allowance' // Include house_allowance for parsing
+            targetField === 'house_allowance'
           ) {
             setNestedValue(transformedRow, targetField, parseNumber(processedValue));
           } else {
-            // Default case: set the value directly
             setNestedValue(transformedRow, targetField, processedValue);
           }
           mappedFields++;
@@ -726,11 +757,8 @@ function transformData(data: Array<Record<string, any>>): {
       }
     });
 
-    console.log(`transformedRow after processing: ${transformedRow.surname} -> ${JSON.stringify(transformedRow.statutory_deductions)}`);
-    
-    // Post-processing and calculations
-    // Calculate total deductions (including potential house_allowance if parsed)
-    const houseAllowance = (transformedRow as any).house_allowance ?? 0; // Get house allowance if it exists
+    // Post-processing calculations
+    const houseAllowance = transformedRow.house_allowance ?? 0;
     transformedRow.total_deductions =
       (transformedRow.statutory_deductions?.tax ?? 0) +
       (transformedRow.statutory_deductions?.nssf ?? 0) +
@@ -738,61 +766,55 @@ function transformData(data: Array<Record<string, any>>): {
       (transformedRow.statutory_deductions?.levy ?? 0) +
       (transformedRow.loan_deductions ?? 0) +
       (transformedRow.employer_advances ?? 0) +
-      houseAllowance; // Add house allowance to total deductions
+      houseAllowance;
 
-    // Calculate net income if not directly mapped and gross income is present
     if (transformedRow.gross_income && !Object.values(headerMapping).includes('net_income')) {
       transformedRow.net_income = (transformedRow.gross_income ?? 0) - (transformedRow.total_deductions ?? 0);
     }
-    
-    // Calculate EWA limits based on net income
+
     const netIncomeForLimit = transformedRow.net_income ?? 0;
-    if (netIncomeForLimit > 0 && !transformedRow.max_salary_advance_limit) { // Only calculate if not explicitly provided
+    if (netIncomeForLimit > 0 && !transformedRow.max_salary_advance_limit) {
       transformedRow.max_salary_advance_limit = Math.floor(netIncomeForLimit * 0.5);
-      transformedRow.available_salary_advance_limit = transformedRow.max_salary_advance_limit; // Set available initially
+      transformedRow.available_salary_advance_limit = transformedRow.max_salary_advance_limit;
     }
 
-    // --- ADD SANITY CHECKS ---
+    // Sanity checks
     const gross = transformedRow.gross_income ?? 0;
     const nhif = transformedRow.statutory_deductions?.nhif ?? 0;
     const nssf = transformedRow.statutory_deductions?.nssf ?? 0;
     const levy = transformedRow.statutory_deductions?.levy ?? 0;
     const totalDed = transformedRow.total_deductions ?? 0;
 
-    // Check statutory deductions against known caps/reasonableness
-    if (nhif > 1700) { // NHIF cap is 1700
-        transformedRow.extractionErrors?.push(`Warning: NHIF (${nhif}) exceeds the KES 1700 cap.`);
+    if (nhif > 1700) {
+      transformedRow.extractionErrors?.push(`Warning: NHIF (${nhif}) exceeds the KES 1700 cap.`);
     }
-    if (nssf > 2160) { // NSSF Tier II cap is 1080, Tier I+II is 2160. Check against higher cap.
-        transformedRow.extractionErrors?.push(`Warning: NSSF (${nssf}) exceeds the KES 2160 cap.`);
+    if (nssf > 2160) {
+      transformedRow.extractionErrors?.push(`Warning: NSSF (${nssf}) exceeds the KES 2160 cap.`);
     }
-     if (levy > 2500) { // Housing Levy cap is 2500
-        transformedRow.extractionErrors?.push(`Warning: Housing Levy (${levy}) exceeds the KES 2500 cap.`);
+    if (levy > 2500) {
+      transformedRow.extractionErrors?.push(`Warning: Housing Levy (${levy}) exceeds the KES 2500 cap.`);
     }
-     // Check if total deductions exceed gross income (only if gross > 0)
-     if (gross > 0 && totalDed > gross) {
-         transformedRow.extractionErrors?.push(`Warning: Total Deductions (${totalDed}) exceed Gross Income (${gross}).`);
-     }
-    // --- END SANITY CHECKS ---
+    if (gross > 0 && totalDed > gross) {
+      transformedRow.extractionErrors?.push(`Warning: Total Deductions (${totalDed}) exceed Gross Income (${gross}).`);
+    }
 
-    // Final validation (mapped fields, identifier)
+    // Final validation
     const hasIdentifier = transformedRow.employeeNumber || transformedRow.other_names || transformedRow.surname;
     
     if (mappedFields < 3 || !hasIdentifier) {
       failedRows.push({
         row,
-        reason: `Row ${rowIndex + 1}: Only ${mappedFields} fields mapped or no clear identifier (Name/Emp No).`
+        reason: `Row ${rowIndex + headerRowIndex + 2}: Only ${mappedFields} fields mapped or no clear identifier (Name/Emp No).`
       });
-      return null; // Mark row as failed
+      return null;
     }
-    
 
-    return transformedRow; // Return the processed row
+    return transformedRow;
   })
   .filter((row): row is Employee & { extractionErrors?: string[] } => {
     return row !== null && typeof row === 'object';
-  }); // Filter out null rows and ensure type safety
-  
+  });
+
   return { transformedData, failedRows };
 }
 

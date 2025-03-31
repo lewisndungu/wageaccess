@@ -22,6 +22,7 @@ import {
   MessageCircle,
 } from "lucide-react";
 import JahaziiIcon from "@/assets/JahaziiIcon.svg";
+import { Switch } from "@/components/ui/switch";
 
 // Error boundary component
 export class AppErrorBoundary extends React.Component<{
@@ -124,7 +125,9 @@ export default function MainLayout({ children }: MainLayoutProps) {
             <div className="h-8 w-8 flex items-center justify-center text-white">
               <img src={JahaziiIcon} alt="Jahazii" className="h-8 w-8" />
             </div>
-            <span className="text-xl font-semibold text-black">Jahazii</span>
+            <span className="text-xl font-semibold text-black dark:text-white">
+              Jahazii
+            </span>
           </div>
         </div>
 
@@ -133,15 +136,13 @@ export default function MainLayout({ children }: MainLayoutProps) {
           <div className="flex items-center">
             <div className="relative">
               <Avatar>
-                <AvatarImage
-                  src={
-                    user?.profileImage ||
-                    "https://ui-avatars.com/api/?name=User"
-                  }
-                  alt={user?.username || "User"}
-                />
                 <AvatarFallback>
-                  <User className="h-4 w-4" />
+                  <div className="relative inline-flex items-center justify-center w-10 h-10 overflow-hidden bg-blue-50 rounded-full dark:bg-gray-600">
+                    <span className="font-semibold text-blue-600 dark:text-gray-300">
+                      {user?.other_names?.[0]?.toUpperCase()}
+                      {user?.surname?.[0]?.toUpperCase()}
+                    </span>
+                  </div>
                 </AvatarFallback>
               </Avatar>
               <span className="absolute bottom-0 right-0 h-3 w-3 rounded-full bg-green-500 border-2 border-white dark:border-gray-900"></span>
@@ -303,42 +304,23 @@ export default function MainLayout({ children }: MainLayoutProps) {
               </div>
 
               {/* Dark mode toggle */}
-              <div className="relative inline-block w-10 mr-2 align-middle select-none">
-                <input
-                  type="checkbox"
-                  id="themeToggle"
-                  checked={theme === "dark"}
-                  onChange={toggleTheme}
-                  className="toggle-checkbox absolute block w-5 h-5 rounded-full bg-white border-2 border-gray-300 appearance-none cursor-pointer transition-transform duration-200 ease-in-out right-0"
-                  style={{
-                    transform:
-                      theme === "dark" ? "translateX(100%)" : "translateX(0)",
-                    borderColor:
-                      theme === "dark" ? "hsl(var(--primary))" : undefined,
-                  }}
-                />
-                <label
-                  htmlFor="themeToggle"
-                  className="toggle-label block overflow-hidden h-5 rounded-full bg-gray-300 dark:bg-gray-700 cursor-pointer"
-                  style={{
-                    backgroundColor:
-                      theme === "dark" ? "hsl(var(--primary))" : undefined,
-                  }}
-                ></label>
-              </div>
+              <Switch
+                id="theme-toggle"
+                checked={theme === "dark"}
+                onCheckedChange={toggleTheme}
+                className="mr-2"
+              />
 
               {/* Profile  */}
               <div className="relative hidden sm:block">
-                <Avatar className="h-8 w-8 cursor-pointer">
-                  <AvatarImage
-                    src={
-                      user?.profileImage ||
-                      "https://ui-avatars.com/api/?name=User"
-                    }
-                    alt={user?.username || "User"}
-                  />
+                <Avatar>
                   <AvatarFallback>
-                    <User className="h-4 w-4" />
+                    <div className="relative inline-flex items-center justify-center w-10 h-10 overflow-hidden bg-blue-50 rounded-full dark:bg-gray-600">
+                      <span className="font-semibold text-blue-600 dark:text-gray-300">
+                        {user?.other_names?.[0]?.toUpperCase()}
+                        {user?.surname?.[0]?.toUpperCase()}
+                      </span>
+                    </div>
                   </AvatarFallback>
                 </Avatar>
               </div>

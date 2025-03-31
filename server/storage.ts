@@ -473,12 +473,15 @@ export class MemStorage implements IStorage {
       loan_deductions: Number(employeeData.loan_deductions || 0), // Ensure number
       employer_advances: Number(employeeData.employer_advances || 0), // Ensure number
       total_loan_deductions: Number(employeeData.total_loan_deductions || 0), // Ensure number
-      statutory_deductions: employeeData.statutory_deductions || {
+      statutory_deductions: {
+        // Default values
         nssf: 0,
         nhif: 0,
         tax: 0,
         levy: 0,
-      }, // any type
+        // Merge incoming values, overwriting defaults if present
+        ...(employeeData.statutory_deductions || {}),
+      },
       max_salary_advance_limit: Number(
         employeeData.max_salary_advance_limit || 0
       ), // Ensure number
@@ -1200,11 +1203,10 @@ export class MemStorage implements IStorage {
           loan_deductions: empData.loan_deductions || 0,
           employer_advances: empData.employer_advances || 0,
           total_loan_deductions: empData.total_loan_deductions || 0,
-          statutory_deductions: empData.statutory_deductions || {
-            nssf: 0,
-            nhif: 0,
-            tax: 0,
-            levy: 0,
+          statutory_deductions: {
+            // Merge incoming values with default zero values
+            ...{ nssf: 0, nhif: 0, tax: 0, levy: 0 },
+            ...(empData.statutory_deductions || {}),
           },
           max_salary_advance_limit: empData.max_salary_advance_limit || 0,
           available_salary_advance_limit: empData.available_salary_advance_limit || 0,
@@ -1357,7 +1359,10 @@ export class MemStorage implements IStorage {
       if (!clockIn || !clockOut) return 0;
       
       const diffMs = clockOut.getTime() - clockIn.getTime();
-      return parseFloat((diffMs / (1000 * 60 * 60)).toFixed(2));
+      const hoursWorked = diffMs / (1000 * 60 * 60);
+      
+      // Round to 2 decimal places for more realistic time tracking
+      return parseFloat(hoursWorked.toFixed(2));
     };
     
     // Prepare batch of days for processing
@@ -1620,16 +1625,45 @@ export class MemStorage implements IStorage {
     endDate.setHours(23, 59, 59, 999); // End at the end of the day
     console.log(`Processing payroll period: ${periodStart.toISOString().split('T')[0]} to ${endDate.toISOString().split('T')[0]}`);
 
+    // --- OPTIMIZATION: Pre-fetch and group data ---
+
+    // 1. Fetch all attendance records for the period ONCE
+    const allAttendanceInPeriod = await this.getAllAttendanceByDateRange(periodStart, endDate);
+    const attendanceByEmployee = new Map<string, Attendance[]>();
+    for (const record of allAttendanceInPeriod) {
+        if (!attendanceByEmployee.has(record.employeeId)) {
+            attendanceByEmployee.set(record.employeeId, []);
+        }
+        attendanceByEmployee.get(record.employeeId)?.push(record);
+    }
+    console.log(`DEBUG: Pre-fetched ${allAttendanceInPeriod.length} attendance records for the period, grouped for ${attendanceByEmployee.size} employees.`);
+
+    // 2. Fetch all EWA requests ONCE and filter/group disbursed ones for the period
+    const allEwaRequests = Array.from(this.ewaRequests.values());
+    const disbursedEwaByEmployee = new Map<string, EwaRequest[]>();
+    for (const req of allEwaRequests) {
+        if (req.status !== 'disbursed' || !req.disbursedAt) {
+            continue;
+        }
+        const disbursedDate = new Date(req.disbursedAt);
+        if (!isNaN(disbursedDate.getTime()) && disbursedDate >= periodStart && disbursedDate <= endDate) {
+            if (!disbursedEwaByEmployee.has(req.employeeId)) {
+                disbursedEwaByEmployee.set(req.employeeId, []);
+            }
+            disbursedEwaByEmployee.get(req.employeeId)?.push(req);
+        }
+    }
+     console.log(`DEBUG: Pre-fetched and filtered ${disbursedEwaByEmployee.size} employees with disbursed EWA requests in the period.`);
+
+    // --- End OPTIMIZATION ---
+
 
     // --- Process Each Employee ---
     for (const employee of employees) {
       try {
         // --- Fetch Attendance and Calculate Actual Hours Worked ---
-        const attendanceRecords = await this.getAttendanceByEmployeeAndDateRange(
-          employee.id,
-          periodStart,
-          periodEnd
-        );
+        // OPTIMIZED: Use pre-fetched map
+        const attendanceRecords = attendanceByEmployee.get(employee.id) || [];
 
         const summedHoursWorked = attendanceRecords.reduce((sum, record) => {
           // Only include hours for 'present' or 'late' status
@@ -1641,10 +1675,17 @@ export class MemStorage implements IStorage {
           return sum;
         }, 0);
 
-        console.log(`DEBUG: Employee ${employee.id} worked ${summedHoursWorked.toFixed(2)} hours in period.`);
+        // console.log(`DEBUG: Employee ${employee.id} worked ${summedHoursWorked.toFixed(2)} hours in period.`); // Keep this if needed
 
         // --- Get Hourly Rate and Calculate Gross Pay ---
         const hourlyRate = employee.hourlyRate;
+        
+        // ---> ADDED LOGGING START <---
+        // console.log( // Keep this if needed for detailed debugging
+        //   `DEBUG Payroll Calc: Emp ${employee.id} | Period: ${periodStart.toISOString().split('T')[0]} to ${endDate.toISOString().split('T')[0]} | Attendance Records Found: ${attendanceRecords.length} | Summed Hours: ${summedHoursWorked.toFixed(2)} | Hourly Rate: ${hourlyRate}`
+        // );
+        // ---> ADDED LOGGING END <---
+        
         if (!hourlyRate || hourlyRate <= 0) {
           console.warn(`Employee ${employee.id} (${employee.other_names} ${employee.surname}) has no valid hourly rate (${hourlyRate}). Skipping payroll calculation.`);
           continue; // Skip this employee if no rate is available
@@ -1654,19 +1695,9 @@ export class MemStorage implements IStorage {
 
 
         // --- Calculate EWA Deductions based on *disbursed* requests in the period ---
-        const allEwaRequests = await this.getEwaRequestsForEmployee(employee.id);
-        const ewaDeductions = allEwaRequests
-          .filter(req => {
-            if (req.status !== 'disbursed' || !req.disbursedAt) {
-              return false;
-            }
-            const disbursedDate = new Date(req.disbursedAt);
-            // Ensure the disbursed date is valid and falls within the payroll period
-            return !isNaN(disbursedDate.getTime()) &&
-                   disbursedDate >= periodStart &&
-                   disbursedDate <= endDate; // Use adjusted endDate
-          })
-          .reduce((sum, req) => {
+        // OPTIMIZED: Use pre-filtered and grouped map
+        const relevantEwaRequests = disbursedEwaByEmployee.get(employee.id) || [];
+        const ewaDeductions = relevantEwaRequests.reduce((sum, req) => {
             // Ensure amount is a number before adding
             const amount = typeof req.amount === 'number' ? req.amount : parseFloat(req.amount || '0');
             return sum + (isNaN(amount) ? 0 : amount);

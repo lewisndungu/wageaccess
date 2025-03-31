@@ -71,6 +71,14 @@ export function EmployeeTable({ data = [], isLoading }: EmployeeTableProps) {
       },
     },
     {
+      accessorKey: "id_no",
+      header: "ID Number",
+    },
+    {
+      accessorKey: "contact.phoneNumber",
+      header: "Contact",
+    },
+    {
       accessorKey: "position",
       header: "Position",
     },
@@ -79,7 +87,7 @@ export function EmployeeTable({ data = [], isLoading }: EmployeeTableProps) {
       cell: ({ row }: { row: any }) => {
         const employee = row.original as Employee;
         return (
-          <div className="flex gap-x-4">
+          <div className="flex gap-x-4 justify-end">
             <Button size="sm" onClick={() => handleViewProfile(employee)}>
               <Eye className="mr-1 h-4 w-4" />
               View

@@ -115,7 +115,7 @@ export const employees: Employee[] = Array.from({ length: 15 }).map(() => {
     },
 
     // Employee specific fields
-    employeeNumber: `EMP-${faker.string.numeric(4)}`,
+    employeeNumber: faker.string.numeric(4),
     departmentId: department.id,
     position: faker.person.jobTitle(),
     status: faker.helpers.arrayElement(["active", "active", "active", "on-leave", "terminated"]), // Weighted towards active

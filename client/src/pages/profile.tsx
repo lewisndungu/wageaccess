@@ -7,18 +7,49 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Badge } from "@/components/ui/badge";
 import { userProfile, formatDate } from "@/lib/mock-data";
 import { AlertCircle, BadgeCheck, Calendar, Edit, Key, Mail, MapPin, Phone, Save, Shield, User } from "lucide-react";
+import { Employee } from "../../../shared/schema";
+
+// Helper function to fetch user profile data
+const fetchUserProfile = async (): Promise<Employee> => {
+  const response = await fetch('/api/users/current'); // Use the correct endpoint
+  if (!response.ok) {
+    // Consider more specific error handling based on response status
+    const errorData = await response.json().catch(() => ({})); // Try to get error details
+    console.error("API Error:", response.status, errorData);
+    throw new Error(errorData.message || 'Failed to fetch user profile');
+  }
+  const data = await response.json();
+  // You might need to transform the raw API response here if it doesn't match Employee perfectly
+  // For now, assume it matches or handle potential discrepancies
+  return data as Employee; // Assert the type
+};
 
 export default function ProfilePage() {
   const { user } = useUser();
   const [isEditing, setIsEditing] = useState(false);
   
-  const { data: profile } = useQuery({
-    queryKey: ['/api/users/current/profile'],
-    initialData: userProfile,
+  const { data: profile, isLoading, error } = useQuery<Employee, Error>({
+    queryKey: ['/api/users/current'],
+    queryFn: fetchUserProfile,
   });
   
+  if (isLoading) {
+    return <div>Loading profile...</div>;
+  }
+
+  if (error) {
+    return <div>Error loading profile: {error.message}</div>;
+  }
+
+  const fullName = profile ? `${profile.other_names || ''} ${profile.surname || ''}`.trim() : 'User';
+
+  if (!profile) {
+    return <div>No profile data available.</div>;
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
@@ -42,36 +73,36 @@ export default function ProfilePage() {
             <div className="h-24 bg-gradient-to-r from-primary to-primary/70"></div>
             <div className="px-6 pb-6 -mt-12">
               <Avatar className="h-24 w-24 border-4 border-background">
-                <AvatarImage src={profile.profileImage} alt={profile.name} />
+                <AvatarImage src={profile?.profileImage} alt={fullName} />
                 <AvatarFallback>
                   <User className="h-12 w-12" />
                 </AvatarFallback>
               </Avatar>
               <div className="mt-4 space-y-2">
                 <div className="flex items-center justify-between">
-                  <h2 className="text-xl font-bold">{profile.name}</h2>
+                  <h2 className="text-xl font-bold">{fullName}</h2>
                   <Badge className="bg-primary/10 text-primary hover:bg-primary/20 flex items-center gap-1 px-2 py-1 rounded-full">
                     <BadgeCheck className="h-3 w-3" />
-                    <span className="text-xs capitalize">{profile.role}</span>
+                    <span className="text-xs capitalize">{profile?.role}</span>
                   </Badge>
                 </div>
-                <p className="text-sm text-muted-foreground">{profile.position}</p>
+                <p className="text-sm text-muted-foreground">{profile?.position}</p>
                 <div className="pt-4 space-y-3">
                   <div className="flex items-center text-sm">
                     <Mail className="h-4 w-4 mr-2 text-muted-foreground" />
-                    <span>{profile.email}</span>
+                    <span>{profile?.contact?.email}</span>
                   </div>
                   <div className="flex items-center text-sm">
                     <Phone className="h-4 w-4 mr-2 text-muted-foreground" />
-                    <span>{profile.contact}</span>
+                    <span>{profile?.contact?.phoneNumber}</span>
                   </div>
                   <div className="flex items-center text-sm">
                     <MapPin className="h-4 w-4 mr-2 text-muted-foreground" />
-                    <span>{profile.address}</span>
+                    <span>{profile?.address}</span>
                   </div>
                   <div className="flex items-center text-sm">
                     <Calendar className="h-4 w-4 mr-2 text-muted-foreground" />
-                    <span>Joined {formatDate(profile.joinDate)}</span>
+                    <span>Joined {formatDate(profile?.startDate?.toISOString() || new Date().toISOString())}</span>
                   </div>
                 </div>
               </div>
@@ -146,45 +177,36 @@ export default function ProfilePage() {
                     <div className="space-y-2">
                       <Label htmlFor="fullName">Full Name</Label>
                       {isEditing ? (
-                        <Input id="fullName" defaultValue={profile.name} />
+                        <Input id="fullName" defaultValue={fullName} />
                       ) : (
-                        <div className="p-2 border rounded-md bg-muted/40">{profile.name}</div>
+                        <div className="p-2 border rounded-md bg-muted/40">{fullName}</div>
                       )}
                     </div>
                     
                     <div className="space-y-2">
                       <Label htmlFor="email">Email Address</Label>
                       {isEditing ? (
-                        <Input id="email" type="email" defaultValue={profile.email} />
+                        <Input id="email" type="email" defaultValue={profile?.contact?.email || ''} />
                       ) : (
-                        <div className="p-2 border rounded-md bg-muted/40">{profile.email}</div>
+                        <div className="p-2 border rounded-md bg-muted/40">{profile?.contact?.email}</div>
                       )}
                     </div>
                     
                     <div className="space-y-2">
                       <Label htmlFor="phone">Phone Number</Label>
                       {isEditing ? (
-                        <Input id="phone" defaultValue={profile.contact} />
+                        <Input id="phone" defaultValue={profile?.contact?.phoneNumber || ''} />
                       ) : (
-                        <div className="p-2 border rounded-md bg-muted/40">{profile.contact}</div>
-                      )}
-                    </div>
-                    
-                    <div className="space-y-2">
-                      <Label htmlFor="emergency">Emergency Contact</Label>
-                      {isEditing ? (
-                        <Input id="emergency" defaultValue={profile.emergencyContact} />
-                      ) : (
-                        <div className="p-2 border rounded-md bg-muted/40">{profile.emergencyContact}</div>
+                        <div className="p-2 border rounded-md bg-muted/40">{profile?.contact?.phoneNumber}</div>
                       )}
                     </div>
                     
                     <div className="space-y-2 md:col-span-2">
                       <Label htmlFor="address">Home Address</Label>
                       {isEditing ? (
-                        <Input id="address" defaultValue={profile.address} />
+                        <Input id="address" defaultValue={profile?.address || ''} />
                       ) : (
-                        <div className="p-2 border rounded-md bg-muted/40">{profile.address}</div>
+                        <div className="p-2 border rounded-md bg-muted/40">{profile?.address}</div>
                       )}
                     </div>
                   </div>
@@ -214,20 +236,20 @@ export default function ProfilePage() {
                     <div className="space-y-2">
                       <Label htmlFor="position">Position</Label>
                       {isEditing ? (
-                        <Input id="position" defaultValue={profile.position} />
+                        <Input id="position" defaultValue={profile?.position || ''} />
                       ) : (
-                        <div className="p-2 border rounded-md bg-muted/40">{profile.position}</div>
+                        <div className="p-2 border rounded-md bg-muted/40">{profile?.position}</div>
                       )}
                     </div>
                     
                     <div className="space-y-2">
                       <Label htmlFor="employeeId">Employee ID</Label>
-                      <div className="p-2 border rounded-md bg-muted/40">EMP-00{profile.id}</div>
+                      <div className="p-2 border rounded-md bg-muted/40">EMP-00{profile?.id}</div>
                     </div>
                     
                     <div className="space-y-2">
                       <Label htmlFor="joinDate">Join Date</Label>
-                      <div className="p-2 border rounded-md bg-muted/40">{formatDate(profile.joinDate)}</div>
+                      <div className="p-2 border rounded-md bg-muted/40">{formatDate(profile?.startDate?.toISOString() || new Date().toISOString())}</div>
                     </div>
                     
                     <div className="space-y-2">
@@ -248,7 +270,7 @@ export default function ProfilePage() {
                     
                     <div className="space-y-2">
                       <Label htmlFor="role">System Role</Label>
-                      <div className="p-2 border rounded-md bg-muted/40 capitalize">{profile.role}</div>
+                      <div className="p-2 border rounded-md bg-muted/40 capitalize">{profile?.role}</div>
                     </div>
                   </div>
                 </TabsContent>
@@ -367,15 +389,6 @@ export default function ProfilePage() {
           </Card>
         </div>
       </div>
-    </div>
-  );
-}
-
-// Define Badge component for JSX compatibility
-function Badge({ children, className }: { children: React.ReactNode, className?: string }) {
-  return (
-    <div className={className}>
-      {children}
     </div>
   );
 }

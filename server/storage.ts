@@ -1564,7 +1564,8 @@ export class MemStorage implements IStorage {
     periodStart: Date,
     periodEnd: Date,
     // hourlyRateCalculator parameter is kept for signature compatibility but not used
-    hourlyRateCalculator: (employee: Employee) => number 
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    hourlyRateCalculator: (employee: Employee) => number
   ): Promise<number> {
     let recordsCreated = 0;
 
@@ -1590,14 +1591,14 @@ export class MemStorage implements IStorage {
       // Example Tier 1 NSSF (if applicable, adjust based on exact rules)
       // const tier1Limit = 7000; // Example limit
       // const tier1Contribution = Math.min(gp, tier1Limit) * NSSF_RATE;
-      
+
       // Example Tier 2 NSSF (if applicable)
       // const tier2Limit = 36000; // Example limit
       // let tier2Contribution = 0;
       // if (gp > tier1Limit) {
       //    tier2Contribution = Math.min(gp - tier1Limit, tier2Limit - tier1Limit) * NSSF_RATE;
       // }
-      
+
       // Use client calculator's simpler tiered approach if the above is too complex or inaccurate:
       // Fallback to the simpler structure from client calc if unsure about exact tiers:
        if (gp <= 8000) return 480; // Min contribution override? Check client logic source
@@ -1605,7 +1606,7 @@ export class MemStorage implements IStorage {
        return 4320; // Example max contribution
 
       // Or return combined tier1 + tier2 if that's the correct logic:
-      // return Math.round(tier1Contribution + tier2Contribution); 
+      // return Math.round(tier1Contribution + tier2Contribution);
     };
 
     const calculatePAYE = (taxableIncome: number): number => {
@@ -1624,34 +1625,44 @@ export class MemStorage implements IStorage {
     };
     // --- End Define Constants and Helpers ---
 
-
-    // --- Pre-calculate Standard Work Hours for the Period ---
-    let standardWorkDays = 0;
-    const workDayHours = 8; // Assuming 8 hours per workday
-    let currentDate = new Date(periodStart);
-    currentDate.setHours(0, 0, 0, 0); // Start at the beginning of the day
+    // --- Removed Standard Work Hours Calculation ---
+    // We now calculate based on actual attendance hours per employee.
     const endDate = new Date(periodEnd);
     endDate.setHours(23, 59, 59, 999); // End at the end of the day
-
-    // Use a temporary date for iteration to avoid modifying currentDate
-    let loopDate = new Date(currentDate); 
-    while (loopDate <= endDate) {
-      const dayOfWeek = loopDate.getDay(); // 0 = Sunday, 6 = Saturday
-      if (dayOfWeek > 0 && dayOfWeek < 6) { // Monday to Friday
-        standardWorkDays++;
-      }
-      loopDate.setDate(loopDate.getDate() + 1); // Move to the next day
-    }
-    const standardHoursWorked = standardWorkDays * workDayHours;
-    console.log(`DEBUG: Calculated ${standardWorkDays} standard work days (${standardHoursWorked} hours) for period ${periodStart.toISOString().split('T')[0]} to ${periodEnd.toISOString().split('T')[0]}`);
-    // --- End Pre-calculate Standard Work Hours ---
+    console.log(`Processing payroll period: ${periodStart.toISOString().split('T')[0]} to ${endDate.toISOString().split('T')[0]}`);
 
 
     // --- Process Each Employee ---
     for (const employee of employees) {
       try {
-        // Fetch gross pay directly from employee record
-        const grossPay = employee.gross_income ?? 0;
+        // --- Fetch Attendance and Calculate Actual Hours Worked ---
+        const attendanceRecords = await this.getAttendanceByEmployeeAndDateRange(
+          employee.id,
+          periodStart,
+          periodEnd
+        );
+
+        const summedHoursWorked = attendanceRecords.reduce((sum, record) => {
+          // Only include hours for 'present' or 'late' status
+          if (record.status === 'present' || record.status === 'late') {
+            // Ensure hoursWorked is a valid number
+            const hours = typeof record.hoursWorked === 'number' ? record.hoursWorked : parseFloat(record.hoursWorked || '0');
+            return sum + (isNaN(hours) ? 0 : hours);
+          }
+          return sum;
+        }, 0);
+
+        console.log(`DEBUG: Employee ${employee.id} worked ${summedHoursWorked.toFixed(2)} hours in period.`);
+
+        // --- Get Hourly Rate and Calculate Gross Pay ---
+        const hourlyRate = employee.hourlyRate;
+        if (!hourlyRate || hourlyRate <= 0) {
+          console.warn(`Employee ${employee.id} (${employee.other_names} ${employee.surname}) has no valid hourly rate (${hourlyRate}). Skipping payroll calculation.`);
+          continue; // Skip this employee if no rate is available
+        }
+        const grossPay = summedHoursWorked * hourlyRate;
+        // --- End Gross Pay Calculation ---
+
 
         // --- Calculate EWA Deductions based on *disbursed* requests in the period ---
         const allEwaRequests = await this.getEwaRequestsForEmployee(employee.id);
@@ -1662,9 +1673,9 @@ export class MemStorage implements IStorage {
             }
             const disbursedDate = new Date(req.disbursedAt);
             // Ensure the disbursed date is valid and falls within the payroll period
-            return !isNaN(disbursedDate.getTime()) && 
-                   disbursedDate >= periodStart && 
-                   disbursedDate <= endDate;
+            return !isNaN(disbursedDate.getTime()) &&
+                   disbursedDate >= periodStart &&
+                   disbursedDate <= endDate; // Use adjusted endDate
           })
           .reduce((sum, req) => {
             // Ensure amount is a number before adding
@@ -1674,7 +1685,7 @@ export class MemStorage implements IStorage {
         // --- End EWA Deduction Calculation ---
 
 
-        // Calculate deductions using pre-defined functions
+        // Calculate deductions using pre-defined functions based on the calculated grossPay
         const ahlDeduction = calculateAffordableHousingLevy(grossPay);
         const shifDeduction = calculateSHIF(grossPay);
         const nssfDeduction = calculateNSSF(grossPay);
@@ -1686,7 +1697,8 @@ export class MemStorage implements IStorage {
         // Total deductions and Net Pay
         const totalStatutory = ahlDeduction + shifDeduction + nssfDeduction + payeDeduction;
         // Use the calculated ewaDeductions from actual requests
-        const totalDeductions = totalStatutory + ewaDeductions; 
+        // TODO: Incorporate other loan/advance deductions if necessary from employee record
+        const totalDeductions = totalStatutory + ewaDeductions + (employee.loan_deductions || 0) + (employee.employer_advances || 0);
         const netPay = grossPay - totalDeductions;
 
         // Create payroll record using calculated values
@@ -1694,11 +1706,11 @@ export class MemStorage implements IStorage {
           employeeId: employee.id,
           periodStart,
           periodEnd,
-          hoursWorked: standardHoursWorked, // Use pre-calculated standard hours
-          grossPay: parseFloat(grossPay.toFixed(2)),
+          hoursWorked: parseFloat(summedHoursWorked.toFixed(2)), // Use calculated actual hours
+          grossPay: parseFloat(grossPay.toFixed(2)), // Use calculated gross pay
           ewaDeductions: parseFloat(ewaDeductions.toFixed(2)), // Store the calculated EWA deduction
           taxDeductions: parseFloat(payeDeduction.toFixed(2)),
-          otherDeductions: parseFloat((shifDeduction + nssfDeduction + ahlDeduction).toFixed(2)), // Keep statutory here for now
+          otherDeductions: parseFloat((shifDeduction + nssfDeduction + ahlDeduction + (employee.loan_deductions || 0) + (employee.employer_advances || 0)).toFixed(2)), // Group statutory and other non-EWA deductions
           netPay: parseFloat(netPay.toFixed(2)),
           status: 'processed',
           processedAt: new Date(),
@@ -1709,13 +1721,14 @@ export class MemStorage implements IStorage {
         await this.createPayroll(payroll);
         recordsCreated++;
 
-        // Update employee's derived values based on calculated results
+        // Update employee's derived financial values based on calculated results for this period
         const maxAdvanceLimit = Math.max(0, Math.floor(netPay * 0.5));
         // Update available limit considering the EWA deductions for this period
-        const availableAdvanceLimit = Math.max(0, maxAdvanceLimit - ewaDeductions); 
+        const availableAdvanceLimit = Math.max(0, maxAdvanceLimit - ewaDeductions);
 
         await this.updateEmployee(employee.id, {
-          net_income: parseFloat(netPay.toFixed(2)),
+          // We don't update gross_income or net_income here, as they are calculated per period.
+          // Store the LATEST calculated deduction breakdown
           total_deductions: parseFloat(totalDeductions.toFixed(2)),
           statutory_deductions: {
             nhif: parseFloat(shifDeduction.toFixed(2)), // Use SHIF
@@ -1723,12 +1736,16 @@ export class MemStorage implements IStorage {
             tax: parseFloat(payeDeduction.toFixed(2)),
             levy: parseFloat(ahlDeduction.toFixed(2)) // Use AHL
           },
+          // Update EWA limits based on this payroll run's net pay
           max_salary_advance_limit: maxAdvanceLimit,
-          available_salary_advance_limit: availableAdvanceLimit // Use updated calculation
+          available_salary_advance_limit: availableAdvanceLimit,
+          // We might want to keep loan_deductions and employer_advances as they are,
+          // unless the payroll process explicitly clears them. For mock data, let's assume they persist
+          // or are managed elsewhere.
         });
 
         // Optional: Keep minimal logging inside the loop if needed
-        // console.log(`Created payroll record for employee ${employee.id}: ${grossPay.toFixed(2)} KES gross, ${netPay.toFixed(2)} KES net (calculated)`);
+        // console.log(`Created payroll record for employee ${employee.id}: ${grossPay.toFixed(2)} KES gross, ${netPay.toFixed(2)} KES net (calculated based on ${summedHoursWorked.toFixed(2)} hours)`);
 
       } catch (error: any) {
         console.error(`Error processing payroll for employee ${employee.id}: ${error.message}`);

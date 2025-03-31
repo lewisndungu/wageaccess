@@ -252,33 +252,66 @@ export const walletData: Wallet & {
   transactions: WalletTransaction[] 
 } = {
   id: faker.string.uuid(),
-  employerBalance: faker.number.int({ min: 200000, max: 300000 }),
-  jahaziiBalance: faker.number.int({ min: 80000, max: 120000 }),
-  perEmployeeCap: faker.number.int({ min: 2000, max: 4000 }),
-  updatedAt: new Date(),
-  // Additional frontend-specific fields
-  totalBalance: faker.number.int({ min: 280000, max: 420000 }),
-  activeEmployees: faker.number.int({ min: 40, max: 50 }),
-  pendingRequests: faker.number.int({ min: 2, max: 6 }),
-  pendingAmount: faker.number.int({ min: 10000, max: 30000 }),
-  employerFundsUtilization: faker.number.int({ min: 60, max: 80 }),
-  transactions: Array.from({ length: 5 }).map(() => ({
-    id: faker.string.uuid(),
-    walletId: faker.string.uuid(),
-    amount: faker.number.int({ min: 1000, max: 100000 }),
-    transactionType: faker.helpers.arrayElement([
+  employerBalance: faker.number.int({ min: 100000, max: 1000000 }),
+  jahaziiBalance: faker.number.int({ min: 50000, max: 500000 }), // Used credit amount
+  perEmployeeCap: 50000,
+  updatedAt: faker.date.recent(),
+  totalBalance: 0, // Will be calculated
+  activeEmployees: faker.number.int({ min: 10, max: 50 }),
+  pendingRequests: faker.number.int({ min: 0, max: 10 }),
+  pendingAmount: 0, // Will be calculated
+  employerFundsUtilization: faker.number.int({ min: 30, max: 90 }),
+  employeeAllocations: {},
+  transactions: Array.from({ length: 10 }).map(() => {
+    const transactionType = faker.helpers.arrayElement([
       "employer_topup",
       "employer_disbursement",
-      "jahazii_topup",
       "jahazii_disbursement",
-    ]),
-    fundingSource: faker.helpers.arrayElement(["employer", "jahazii"]),
-    description: faker.lorem.sentence(),
-    status: faker.helpers.arrayElement(["completed", "pending"]),
-    transactionDate: faker.date.recent(),
-    referenceId: faker.string.uuid(),
-  })),
+      "jahazii_fee"
+    ]) as WalletTransaction["transactionType"];
+    
+    let amount: number;
+    if (transactionType === "jahazii_fee") {
+      amount = -faker.number.int({ min: 100, max: 1000 }); // Processing fees
+    } else if (transactionType.includes("disbursement")) {
+      amount = -faker.number.int({ min: 1000, max: 10000 }); // Disbursements are negative
+    } else {
+      amount = faker.number.int({ min: 10000, max: 100000 }); // Top-ups are positive
+    }
+
+    const description = (() => {
+      switch (transactionType) {
+        case "employer_topup":
+          return `Employer wallet top-up via ${faker.helpers.arrayElement(["bank transfer", "M-Pesa", "card"])}`;
+        case "jahazii_fee":
+          return `Processing fee for EWA disbursement (${faker.person.fullName()})`;
+        default:
+          return `EWA disbursement for ${faker.person.fullName()}`;
+      }
+    })();
+
+    return {
+      id: faker.string.uuid(),
+      walletId: faker.string.uuid(),
+      amount,
+      transactionType,
+      description,
+      transactionDate: faker.date.recent(),
+      referenceId: `TXN-${faker.string.alphanumeric(8).toUpperCase()}`,
+      fundingSource: transactionType.includes("employer") ? "employer" : "jahazii",
+      status: faker.helpers.arrayElement(["pending", "completed", "failed"]),
+      employeeId: transactionType.includes("disbursement") || transactionType === "jahazii_fee" ? faker.string.uuid() : undefined,
+      ewaRequestId: transactionType.includes("disbursement") || transactionType === "jahazii_fee" ? faker.string.uuid() : undefined
+    };
+  })
 };
+
+// Calculate derived values
+walletData.pendingAmount = walletData.transactions
+  .filter(t => t.status === "pending" && t.amount < 0)
+  .reduce((sum, t) => sum + Math.abs(t.amount), 0);
+
+walletData.totalBalance = walletData.employerBalance;
 
 // User profile
 export const userProfile: User = {
@@ -337,9 +370,9 @@ export const formatDate = (dateString: string) => {
   });
 };
 
-export const formatDateTime = (dateString: string) => {
+export const formatDateTime = (dateString: string | Date) => {
   if (!dateString) return '-';
-  const date = new Date(dateString);
+  const date = typeof dateString === 'string' ? new Date(dateString) : dateString;
   return date.toLocaleDateString('en-US', {
     year: 'numeric',
     month: 'short',

@@ -2192,31 +2192,89 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Wallet routes
   app.get("/api/wallet", async (_req, res) => {
+    let wallet = await storage.getWallet();
+
+    // Create default wallet if none exists
+    if (!wallet) {
+      wallet = await storage.createWallet({
+        employerBalance: 0,
+        jahaziiBalance: 0,
+        perEmployeeCap: 3000, // Default 3000 KES per employee
+        updatedAt: new Date()
+      });
+    }
+
+    // Calculate total balance for response
+    const totalBalance = wallet.employerBalance + wallet.jahaziiBalance;
+
+    // Get active employees count
+    const activeEmployees = await storage.getAllActiveEmployees();
+    const pendingRequests = await storage.getPendingEwaRequests();
+    const pendingAmount = pendingRequests.reduce((sum, req) => sum + req.amount, 0);
+
+    // Calculate employer funds utilization
+    const totalEmployerFundsUsed = Object.values(wallet.employeeAllocations || {})
+      .reduce((sum, allocation) => sum + allocation.used, 0);
+    const employerFundsUtilization = wallet.employerBalance > 0 
+      ? (totalEmployerFundsUsed / wallet.employerBalance) * 100 
+      : 0;
+
+    return res.status(200).json({
+      ...wallet,
+      totalBalance,
+      activeEmployees: activeEmployees.length,
+      pendingRequests: pendingRequests.length,
+      pendingAmount,
+      employerFundsUtilization: Math.min(100, employerFundsUtilization)
+    });
+  });
+
+  // Add transactions route
+  app.get("/api/wallet/transactions", async (_req, res) => {
+    const wallet = await storage.getWallet();
+    if (!wallet) {
+      return res.status(404).json({ message: "Wallet not found" });
+    }
+
+    const transactions = await storage.getWalletTransactions();
+    
+    // Sort transactions by date descending (most recent first)
+    const sortedTransactions = transactions.sort((a, b) => {
+      const dateA = new Date(a.transactionDate).getTime();
+      const dateB = new Date(b.transactionDate).getTime();
+      return dateB - dateA;
+    });
+
+    return res.status(200).json(sortedTransactions);
+  });
+
+  app.get("/api/wallet/employee/:employeeId", async (req, res) => {
+    const { employeeId } = req.params;
     const wallet = await storage.getWallet();
 
     if (!wallet) {
       return res.status(404).json({ message: "Wallet not found" });
     }
 
-    // Calculate total balance for response
-    const totalBalance = (
-      parseFloat(wallet.employerBalance.toString() || "0") +
-      parseFloat(wallet.jahaziiBalance.toString() || "0")
-    ).toString();
+    const allocation = wallet.employeeAllocations?.[employeeId] || {
+      allocated: 0,
+      used: 0,
+      lastUpdated: new Date()
+    };
+
+    const available = Math.max(0, wallet.perEmployeeCap - allocation.used);
 
     return res.status(200).json({
-      ...wallet,
-      totalBalance,
+      employeeId,
+      perEmployeeCap: wallet.perEmployeeCap,
+      allocated: allocation.allocated,
+      used: allocation.used,
+      available,
+      lastUpdated: allocation.lastUpdated
     });
   });
 
-  app.get("/api/wallet/transactions", async (_req, res) => {
-    const transactions = await storage.getWalletTransactions();
-    return res.status(200).json(transactions);
-  });
-
   app.post("/api/wallet/topup", async (req, res) => {
-    // We only allow employer funding - ignore any other funding source that might be sent
     const { amount } = req.body;
     const fundingSource = "employer"; // Force employer funding source
 
@@ -2224,26 +2282,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
       return res.status(400).json({ message: "Valid amount is required" });
     }
 
-    // Get the wallet
     const wallet = await storage.getWallet();
-
     if (!wallet) {
       return res.status(404).json({ message: "Wallet not found" });
     }
 
     const parsedAmount = parseFloat(amount);
 
-    // Always update employer balance
-    const currentEmployerBalance = parseFloat(
-      wallet.employerBalance.toString() || "0"
-    );
+    // Update employer balance
     const updatedWallet = await storage.updateWallet(
       ensureStringId(wallet.id),
       {
-        employerBalance: currentEmployerBalance + parsedAmount, // Removed .toString()
+        employerBalance: wallet.employerBalance + parsedAmount,
+        updatedAt: new Date()
       }
     );
 
+    // Create transaction record
     await storage.createWalletTransaction({
       amount: parsedAmount,
       walletId: wallet.id,
@@ -2252,58 +2307,121 @@ export async function registerRoutes(app: Express): Promise<Server> {
       referenceId: `TOP-${Date.now()}`,
       fundingSource,
       status: "completed",
+      transactionDate: new Date()
     });
 
-    // Calculate total balance for response only (not stored in DB)
+    // Calculate total balance for response
     const totalBalance = updatedWallet
-      ? (
-          parseFloat(updatedWallet.employerBalance.toString() || "0") +
-          parseFloat(updatedWallet.jahaziiBalance.toString() || "0")
-        ).toString()
-      : "0";
+      ? updatedWallet.employerBalance + updatedWallet.jahaziiBalance
+      : 0;
 
-    // Add totalBalance to the response
     return res.status(200).json({
       ...updatedWallet,
-      totalBalance,
+      totalBalance
     });
   });
 
-  app.put("/api/wallet/:id", async (req, res) => {
-    try {
-      const id = ensureStringId(req.params.id);
-      const wallet = await storage.getWallet();
+  // Update per-employee cap
+  app.patch("/api/wallet/settings", async (req, res) => {
+    const { perEmployeeCap } = req.body;
 
-      if (!wallet) {
-        return res.status(404).json({ message: "Wallet not found" });
+    if (!perEmployeeCap || isNaN(parseFloat(perEmployeeCap))) {
+      return res.status(400).json({ message: "Valid per-employee cap is required" });
+    }
+
+    const wallet = await storage.getWallet();
+    if (!wallet) {
+      return res.status(404).json({ message: "Wallet not found" });
+    }
+
+    const updatedWallet = await storage.updateWallet(
+      ensureStringId(wallet.id),
+      {
+        perEmployeeCap: parseFloat(perEmployeeCap),
+        updatedAt: new Date()
       }
+    );
 
-      const { amount } = req.body;
-      const parsedAmount = parseFloat(amount);
+    return res.status(200).json(updatedWallet);
+  });
 
-      if (isNaN(parsedAmount)) {
-        return res.status(400).json({ message: "Invalid amount" });
-      }
+  // Process EWA disbursement
+  app.post("/api/wallet/disburse", async (req, res) => {
+    const { employeeId, amount, ewaRequestId } = req.body;
 
-      // Always update employer balance
-      const currentEmployerBalance = parseFloat(
-        wallet.employerBalance?.toString() || "0"
-      );
-      const updatedWallet = await storage.updateWallet(
-        ensureStringId(wallet.id),
-        {
-          employerBalance: currentEmployerBalance + parsedAmount, // Removed .toString()
-        }
-      );
+    if (!employeeId || !amount || !ewaRequestId || isNaN(parseFloat(amount))) {
+      return res.status(400).json({ message: "Valid employee ID, amount, and EWA request ID are required" });
+    }
 
-      return res.status(200).json(updatedWallet);
-    } catch (error) {
-      console.error("Error updating wallet:", error);
-      return res.status(500).json({
-        message: "Failed to update wallet",
-        error: error instanceof Error ? error.message : "Unknown error",
+    const wallet = await storage.getWallet();
+    if (!wallet) {
+      return res.status(404).json({ message: "Wallet not found" });
+    }
+
+    const parsedAmount = parseFloat(amount);
+    const allocation = wallet.employeeAllocations?.[employeeId] || {
+      allocated: 0,
+      used: 0,
+      lastUpdated: new Date()
+    };
+
+    // Check if amount exceeds per-employee cap
+    const remainingCap = wallet.perEmployeeCap - allocation.used;
+    if (parsedAmount > remainingCap) {
+      return res.status(400).json({ 
+        message: "Amount exceeds employee cap",
+        remainingCap
       });
     }
+
+    // Determine funding source based on employer balance
+    const useEmployerFunds = parsedAmount <= wallet.employerBalance;
+    const fundingSource = useEmployerFunds ? "employer" : "jahazii";
+
+    // Update wallet balances
+    const updates: Partial<Wallet> = {
+      updatedAt: new Date(),
+      employeeAllocations: {
+        ...wallet.employeeAllocations,
+        [employeeId]: {
+          ...allocation,
+          used: allocation.used + parsedAmount,
+          lastUpdated: new Date()
+        }
+      }
+    };
+
+    if (useEmployerFunds) {
+      updates.employerBalance = wallet.employerBalance - parsedAmount;
+    } else {
+      updates.jahaziiBalance = wallet.jahaziiBalance - parsedAmount;
+    }
+
+    const updatedWallet = await storage.updateWallet(
+      ensureStringId(wallet.id),
+      updates
+    );
+
+    // Create transaction record
+    await storage.createWalletTransaction({
+      amount: parsedAmount,
+      walletId: wallet.id,
+      transactionType: useEmployerFunds ? "employer_disbursement" : "jahazii_disbursement",
+      description: `EWA disbursement for employee ${employeeId}`,
+      referenceId: `EWA-${Date.now()}`,
+      fundingSource,
+      status: "completed",
+      employeeId,
+      ewaRequestId,
+      transactionDate: new Date()
+    });
+
+    return res.status(200).json({
+      success: true,
+      fundingSource,
+      amount: parsedAmount,
+      wallet: updatedWallet
+    });
   });
 
   // Statistics for dashboard

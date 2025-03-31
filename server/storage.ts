@@ -806,7 +806,7 @@ export class MemStorage implements IStorage {
       approvedBy: ewaRequestData.approvedBy,
       requestDate: new Date(),
       amount: Number(ewaRequestData.amount || 0),
-      processingFee: ewaRequestData.processingFee,
+      processingFee: ewaRequestData.processingFee || 0,
       approvedAt: new Date(),
       disbursedAt: new Date(),
       reason: ewaRequestData.reason,
@@ -843,8 +843,13 @@ export class MemStorage implements IStorage {
       id,
       employerBalance: Number(walletData.employerBalance || 0),
       jahaziiBalance: Number(walletData.jahaziiBalance || 0),
-      perEmployeeCap: Number(walletData.perEmployeeCap || 0),
+      perEmployeeCap: Number(walletData.perEmployeeCap || 3000), // Default 3000 KES
       updatedAt: new Date(),
+      employerFundsUtilization: 0,
+      activeEmployees: 0,
+      pendingRequests: 0,
+      pendingAmount: 0,
+      employeeAllocations: {}
     };
     this.wallets.set(id, wallet);
     return wallet;
@@ -857,11 +862,34 @@ export class MemStorage implements IStorage {
     const wallet = await this.getWallet();
     if (!wallet) return undefined;
 
+    // Handle employee allocations update
+    const employeeAllocations = walletData.employeeAllocations 
+      ? { ...wallet.employeeAllocations, ...walletData.employeeAllocations }
+      : wallet.employeeAllocations;
+
+    // Ensure numeric values
+    const employerBalance = typeof walletData.employerBalance === 'number' 
+      ? walletData.employerBalance 
+      : wallet.employerBalance;
+    
+    const jahaziiBalance = typeof walletData.jahaziiBalance === 'number'
+      ? walletData.jahaziiBalance
+      : wallet.jahaziiBalance;
+    
+    const perEmployeeCap = typeof walletData.perEmployeeCap === 'number'
+      ? walletData.perEmployeeCap
+      : wallet.perEmployeeCap;
+
     const updatedWallet = {
       ...wallet,
       ...walletData,
-      modified_at: new Date(),
+      employerBalance,
+      jahaziiBalance,
+      perEmployeeCap,
+      employeeAllocations,
+      updatedAt: new Date()
     };
+
     this.wallets.set(id, updatedWallet);
     return updatedWallet;
   }
@@ -883,17 +911,29 @@ export class MemStorage implements IStorage {
     const id = faker.string.numeric(8).toString();
     const transaction: WalletTransaction = {
       id,
-      status: transactionData.status || "",
+      status: transactionData.status || "pending",
       description: transactionData.description || "",
       amount: Number(transactionData.amount || 0),
       walletId: transactionData.walletId || "",
-      transactionType: transactionData.transactionType || "",
+      transactionType: transactionData.transactionType || "employer_topup",
       transactionDate: new Date(),
-      referenceId: transactionData.referenceId || "",
-      fundingSource: transactionData.fundingSource || "",
+      referenceId: transactionData.referenceId || `TXN-${Date.now()}`,
+      fundingSource: transactionData.fundingSource || "employer",
+      employeeId: transactionData.employeeId,
+      ewaRequestId: transactionData.ewaRequestId
     };
     this.walletTransactions.set(id, transaction);
     return transaction;
+  }
+
+  async getWalletTransactionsByEmployee(employeeId: string): Promise<WalletTransaction[]> {
+    return Array.from(this.walletTransactions.values())
+      .filter(txn => txn.employeeId === employeeId);
+  }
+
+  async getWalletTransactionsByEwaRequest(ewaRequestId: string): Promise<WalletTransaction[]> {
+    return Array.from(this.walletTransactions.values())
+      .filter(txn => txn.ewaRequestId === ewaRequestId);
   }
 
   // OTP operations
@@ -1869,16 +1909,17 @@ export class MemStorage implements IStorage {
     payrollRecords: number;
     ewaRequests: number;
     todayRecords: number;
+    walletTransactions: number;
   }> {
     console.log(`Starting comprehensive mock data generation for imported employees...`);
     
     // Generate attendance data first
     const attendanceRecords = await this.generateMockAttendanceForEmployees(days);
-    console.log(`Step 1/4 completed: ${attendanceRecords} attendance records generated`);
+    console.log(`Step 1/5 completed: ${attendanceRecords} attendance records generated`);
     
     // Generate today's records with employees not clocked in yet
     const todayRecords = await this.generateTodayAttendanceRecords();
-    console.log(`Step 2/4 completed: ${todayRecords} attendance records for today generated`);
+    console.log(`Step 2/5 completed: ${todayRecords} attendance records for today generated`);
     
     // Generate payroll based on the attendance data
     // Use a period from 30 days ago to today for payroll calculation
@@ -1887,19 +1928,115 @@ export class MemStorage implements IStorage {
     const periodEnd = new Date();
     
     const payrollRecords = await this.generateMockPayrollForEmployees(periodStart, periodEnd);
-    console.log(`Step 3/4 completed: ${payrollRecords} payroll records generated`);
+    console.log(`Step 3/5 completed: ${payrollRecords} payroll records generated`);
     
     // Generate EWA requests
     const ewaRequests = await this.generateMockEwaRequestsForEmployees(2);
-    console.log(`Step 4/4 completed: ${ewaRequests} EWA requests generated`);
+    console.log(`Step 4/5 completed: ${ewaRequests} EWA requests generated`);
+
+    // Generate wallet and transactions
+    // Create initial wallet if it doesn't exist
+    let wallet = await this.getWallet();
+    if (!wallet) {
+      wallet = await this.createWallet({
+        employerBalance: 1000000, // 1M KES initial balance
+        jahaziiBalance: 0,       // Start with 0 used credit
+        perEmployeeCap: 50000,   // 50K KES per employee (employer funds only)
+        updatedAt: new Date()
+      });
+    }
+
+    // Generate wallet transactions based on EWA requests and random top-ups
+    const transactions: InsertWalletTransaction[] = [];
     
+    // Add transactions for each EWA request
+    const allEwaRequests = await this.getDisbursedEwaRequests();
+    for (const request of allEwaRequests) {
+      const useJahaziiCredit = request.amount > wallet.perEmployeeCap || 
+        Math.random() > 0.7; // 30% chance to use Jahazii credit even for smaller amounts
+
+      transactions.push({
+        walletId: wallet.id,
+        amount: -request.amount, // Negative amount for disbursements
+        transactionType: useJahaziiCredit ? 'jahazii_disbursement' : 'employer_disbursement',
+        description: `EWA disbursement for ${request.employee?.other_names} ${request.employee?.surname}${
+          useJahaziiCredit ? ' (via Jahazii Credit)' : ''
+        }`,
+        transactionDate: request.disbursedAt || new Date(),
+        referenceId: `EWA-${request.id}`,
+        fundingSource: useJahaziiCredit ? 'jahazii' : 'employer',
+        status: 'completed',
+        employeeId: request.employeeId,
+        ewaRequestId: request.id
+      });
+
+      // If using Jahazii credit, add a processing fee transaction
+      if (useJahaziiCredit) {
+        const processingFee = Math.round(request.amount * 0.02); // 2% processing fee
+        transactions.push({
+          walletId: wallet.id,
+          amount: -processingFee,
+          transactionType: 'jahazii_fee',
+          description: `Processing fee for EWA disbursement (${request.employee?.other_names} ${request.employee?.surname})`,
+          transactionDate: request.disbursedAt || new Date(),
+          referenceId: `FEE-${request.id}`,
+          fundingSource: 'jahazii',
+          status: 'completed',
+          employeeId: request.employeeId,
+          ewaRequestId: request.id
+        });
+      }
+    }
+
+    // Add some random top-ups (only for employer funds)
+    const numTopUps = faker.number.int({ min: 3, max: 8 });
+    for (let i = 0; i < numTopUps; i++) {
+      const amount = faker.number.int({ 
+        min: 100000,  // 100K
+        max: 1000000  // 1M
+      });
+      
+      transactions.push({
+        walletId: wallet.id,
+        amount: amount,
+        transactionType: 'employer_topup',
+        description: `Employer wallet top-up via ${faker.helpers.arrayElement(['bank transfer', 'M-Pesa', 'card'])}`,
+        transactionDate: faker.date.recent({ days: days }),
+        referenceId: `TOP-${faker.string.alphanumeric(8).toUpperCase()}`,
+        fundingSource: 'employer',
+        status: 'completed'
+      });
+    }
+
+    // Calculate total used Jahazii credit (sum of all Jahazii disbursements and fees)
+    const totalJahaziiUsed = transactions
+      .filter(t => t.fundingSource === 'jahazii')
+      .reduce((sum, t) => sum + Math.abs(t.amount || 0), 0);
+
+    // Update wallet balances
+    const totalEmployerTopUps = transactions
+      .filter(t => t.transactionType === 'employer_topup')
+      .reduce((sum, t) => sum + (t.amount || 0), 0);
+    
+    const totalEmployerDisbursements = transactions
+      .filter(t => t.transactionType === 'employer_disbursement')
+      .reduce((sum, t) => sum + (t.amount || 0), 0);
+
+    await this.updateWallet(wallet.id, {
+      employerBalance: wallet.employerBalance + totalEmployerTopUps + totalEmployerDisbursements,
+      jahaziiBalance: totalJahaziiUsed,
+      updatedAt: new Date()
+    });
+
+    console.log(`Step 5/5 completed: ${transactions.length} wallet transactions generated`);
     console.log(`Mock data generation completed successfully!`);
     
     return {
       attendanceRecords,
       payrollRecords,
       ewaRequests,
-      todayRecords
+      todayRecords,
+      walletTransactions: transactions.length
     };
   }
 

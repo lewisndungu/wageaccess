@@ -15,6 +15,11 @@ interface RequestActionsProps {
   onActionComplete: () => void;
 }
 
+interface OutstandingAdvanceSummary {
+  totalOutstanding: number;
+  count: number;
+}
+
 export function RequestActions({ request, onActionComplete }: RequestActionsProps) {
   const [isApproveDialogOpen, setIsApproveDialogOpen] = useState(false);
   const [isRejectDialogOpen, setIsRejectDialogOpen] = useState(false);

@@ -22,12 +22,14 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ChevronLeft, ChevronRight, Search } from "lucide-react";
+import { ZodNumberCheck } from "zod";
 
 interface DataTableProps<TData, TValue> {
   columns: ColumnDef<TData, TValue>[];
   data: TData[];
   searchColumn?: string | string[];
   onRowClick?: (row: TData) => void;
+  pageSize?: number;
 }
 
 export function DataTable<TData, TValue>({
@@ -35,10 +37,11 @@ export function DataTable<TData, TValue>({
   data,
   searchColumn,
   onRowClick,
+  pageSize = 30,
 }: DataTableProps<TData, TValue>) {
   const [pagination, setPagination] = React.useState<PaginationState>({
     pageIndex: 0,
-    pageSize: 50,
+    pageSize: pageSize,
   });
   
   const [globalFilter, setGlobalFilter] = React.useState("");

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
+import axios from 'axios';
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -14,39 +15,29 @@ import { walletData, formatCurrency, formatDateTime } from "@/lib/mock-data";
 import { toast } from "@/hooks/use-toast";
 import { ChevronLeft, DollarSign, Download, Info, Plus, RefreshCw } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-
-interface WalletTransaction {
-  id: number;
-  date: string;
-  amount: number;
-  type: string;
-  fundingSource: "employer" | "jahazii";
-  description: string;
-  status: string;
-}
+import { Skeleton } from "@/components/ui/skeleton";
+import { WalletTransaction, WalletApiResponse } from "@shared/schema";
 
 export default function WalletPage() {
   const [isTopUpDialogOpen, setIsTopUpDialogOpen] = useState(false);
   const [topUpAmount, setTopUpAmount] = useState("");
   const [isProcessing, setIsProcessing] = useState(false);
   
-  const { data: wallet, refetch: refetchWallet } = useQuery({
+  const { data: wallet, isLoading: isWalletLoading, refetch: refetchWallet } = useQuery<WalletApiResponse>({
     queryKey: ['/api/wallet'],
-    initialData: { 
-      employerBalance: walletData.employerBalance,
-      jahaziiBalance: walletData.jahaziiBalance,
-      totalBalance: walletData.totalBalance,
-      perEmployeeCap: walletData.perEmployeeCap,
-      activeEmployees: walletData.activeEmployees,
-      pendingRequests: walletData.pendingRequests,
-      pendingAmount: walletData.pendingAmount,
-      employerFundsUtilization: walletData.employerFundsUtilization
+    queryFn: async () => {
+      const response = await axios.get('/api/wallet');
+      return response.data;
     },
   });
   
-  const { data: transactions } = useQuery<WalletTransaction[]>({
+  const { data: transactions, isLoading: isTransactionsLoading } = useQuery<WalletTransaction[]>({
     queryKey: ['/api/wallet/transactions'],
-    initialData: walletData.transactions as WalletTransaction[],
+    queryFn: async () => {
+      const response = await axios.get('/api/wallet/transactions');
+      return response.data;
+    },
+    initialData: [],
   });
   
   const [fundingSource, setFundingSource] = useState<'employer' | 'jahazii'>('employer');
@@ -95,7 +86,7 @@ export default function WalletPage() {
     {
       accessorKey: "date",
       header: "Date",
-      cell: ({ row }) => formatDateTime(row.original.date),
+      cell: ({ row }) => formatDateTime(new Date(row.original.transactionDate)),
     },
     {
       accessorKey: "description",
@@ -131,7 +122,7 @@ export default function WalletPage() {
       accessorKey: "type",
       header: "Type",
       cell: ({ row }) => {
-        const type = row.original.type;
+        const type = row.original.transactionType;
         return (
           <span className="capitalize">{type && typeof type === 'string' ? type.replace(/_/g, " ") : type}</span>
         );
@@ -158,6 +149,66 @@ export default function WalletPage() {
       },
     },
   ];
+
+  // Default values for wallet data
+  const walletData = {
+    employerBalance: wallet?.employerBalance ?? 0,
+    jahaziiBalance: wallet?.jahaziiBalance ?? 0,
+    totalBalance: wallet?.totalBalance ?? 0,
+    perEmployeeCap: wallet?.perEmployeeCap ?? 0,
+    activeEmployees: wallet?.activeEmployees ?? 0,
+    pendingRequests: wallet?.pendingRequests ?? 0,
+    pendingAmount: wallet?.pendingAmount ?? 0,
+    employerFundsUtilization: wallet?.employerFundsUtilization ?? 0,
+    updatedAt: wallet?.updatedAt ?? new Date().toISOString(),
+    employeeAllocations: wallet?.employeeAllocations ?? {},
+    id: wallet?.id ?? '',
+  };
+
+  if (isWalletLoading) {
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center justify-between">
+          <h1 className="text-2xl font-bold tracking-tight">Loading Wallet...</h1>
+        </div>
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div className="lg:col-span-2">
+            <Card className="shadow-glass dark:shadow-glass-dark">
+              <CardContent className="p-8">
+                <div className="space-y-4">
+                  <Skeleton className="h-8 w-1/3" />
+                  <Skeleton className="h-12 w-1/2" />
+                  <div className="grid grid-cols-2 gap-4">
+                    <Skeleton className="h-24" />
+                    <Skeleton className="h-24" />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!wallet) {
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center justify-between">
+          <h1 className="text-2xl font-bold tracking-tight text-red-600">Wallet Not Found</h1>
+        </div>
+        <Card className="shadow-glass dark:shadow-glass-dark">
+          <CardContent className="p-8">
+            <p className="text-muted-foreground">Unable to load wallet data. Please try again later.</p>
+            <Button onClick={() => refetchWallet()} className="mt-4">
+              <RefreshCw className="mr-2 h-4 w-4" />
+              Retry
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -267,10 +318,10 @@ export default function WalletPage() {
                 <div className="flex flex-col md:flex-row md:items-center justify-between">
                   <div className="mb-4 md:mb-0">
                     <p className="text-sm text-muted-foreground">Total Balance</p>
-                    <p className="text-4xl font-bold">{formatCurrency(wallet.totalBalance)}</p>
+                    <p className="text-4xl font-bold">{formatCurrency(walletData.totalBalance)}</p>
                     <div className="mt-2 flex items-center">
                       <span className="text-sm text-muted-foreground">
-                        Per Employee Cap: {formatCurrency(wallet.perEmployeeCap)}
+                        Per Employee Cap: {formatCurrency(walletData.perEmployeeCap)}
                       </span>
                     </div>
                   </div>
@@ -281,8 +332,8 @@ export default function WalletPage() {
                         <div className="flex items-center justify-between">
                           <div>
                             <p className="text-sm text-muted-foreground">Employer Funds</p>
-                            <p className="text-lg font-semibold">{formatCurrency(wallet.employerBalance)}</p>
-                            <p className="text-xs text-muted-foreground mt-1">Utilization: {wallet.employerFundsUtilization}%</p>
+                            <p className="text-lg font-semibold">{formatCurrency(walletData.employerBalance)}</p>
+                            <p className="text-xs text-muted-foreground mt-1">Utilization: {walletData.employerFundsUtilization}%</p>
                           </div>
                           <div className="p-2 bg-blue-100 rounded-full">
                             <svg className="w-5 h-5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
@@ -297,9 +348,9 @@ export default function WalletPage() {
                       <CardContent className="p-4">
                         <div className="flex items-center justify-between">
                           <div>
-                            <p className="text-sm text-muted-foreground">Jahazii Funds</p>
-                            <p className="text-lg font-semibold">{formatCurrency(wallet.jahaziiBalance)}</p>
-                            <p className="text-xs text-muted-foreground mt-1">{wallet.activeEmployees} active employees</p>
+                            <p className="text-sm text-muted-foreground">Used Jahazii Credit</p>
+                            <p className="text-lg font-semibold">{formatCurrency(walletData.jahaziiBalance)}</p>
+                            <p className="text-xs text-muted-foreground mt-1">Total credit used for EWA</p>
                           </div>
                           <div className="p-2 bg-teal-100 rounded-full">
                             <svg className="w-5 h-5 text-teal-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
@@ -318,8 +369,8 @@ export default function WalletPage() {
                       <div className="flex items-center justify-between">
                         <div>
                           <p className="text-sm text-muted-foreground">Pending Requests</p>
-                          <p className="text-lg font-semibold">{wallet.pendingRequests}</p>
-                          <p className="text-xs text-muted-foreground mt-1">{formatCurrency(wallet.pendingAmount)}</p>
+                          <p className="text-lg font-semibold">{walletData.pendingRequests}</p>
+                          <p className="text-xs text-muted-foreground mt-1">{formatCurrency(walletData.pendingAmount)}</p>
                         </div>
                         <div className="p-2 bg-yellow-100 rounded-full">
                           <svg className="w-5 h-5 text-yellow-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
@@ -339,16 +390,16 @@ export default function WalletPage() {
                             <div className="w-full bg-gray-200 rounded-full h-2.5 overflow-hidden flex">
                               <div 
                                 className="bg-blue-600 h-2.5" 
-                                style={{ width: `${Math.min(100, wallet.employerFundsUtilization)}%` }}
+                                style={{ width: `${Math.min(100, walletData.employerFundsUtilization)}%` }}
                               ></div>
                               <div 
                                 className="bg-teal-600 h-2.5" 
-                                style={{ width: `${Math.max(0, 100 - Math.min(100, wallet.employerFundsUtilization))}%` }}
+                                style={{ width: `${Math.max(0, 100 - Math.min(100, walletData.employerFundsUtilization))}%` }}
                               ></div>
                             </div>
                             <div className="flex justify-between mt-1">
-                              <span className="text-xs text-blue-700 font-medium">{wallet.employerFundsUtilization}% Employer</span>
-                              <span className="text-xs text-teal-700 font-medium">{100 - Math.min(100, wallet.employerFundsUtilization)}% Jahazii</span>
+                              <span className="text-xs text-blue-700 font-medium">{walletData.employerFundsUtilization}% Employer</span>
+                              <span className="text-xs text-teal-700 font-medium">{100 - Math.min(100, walletData.employerFundsUtilization)}% Jahazii</span>
                             </div>
                             <p className="text-xs text-muted-foreground mt-1">
                               Current ratio of employer to Jahazii funding
@@ -365,13 +416,13 @@ export default function WalletPage() {
               <div className="text-sm text-muted-foreground">
                 <p className="mb-1">
                   <span className="font-medium text-foreground">Dual Funding System: </span>
-                  Each employee can access up to {formatCurrency(wallet.perEmployeeCap)} from employer funds. When employer funds are 
-                  depleted or exceed the cap, Jahazii provides additional funding with a small processing fee. Employers can only top up
-                  their own wallet balance, while Jahazii manages their balance separately.
+                  Each employee can access up to {formatCurrency(walletData.perEmployeeCap)} from employer funds. When employer funds are 
+                  depleted or exceed the cap, Jahazii provides additional credit with a 2% processing fee. Employers can only top up
+                  their own wallet balance.
                 </p>
                 <p className="mb-1">
                   <span className="font-medium text-foreground">Cap Management: </span>
-                  The per-employee cap applies to the total outstanding advances per employee at any given time.
+                  The per-employee cap applies to employer funds only. Jahazii credit is unlimited and available when needed, subject to credit terms.
                 </p>
                 <p>
                   <Link to="/ewa">
@@ -387,7 +438,9 @@ export default function WalletPage() {
               <div className="flex justify-between items-center">
                 <div>
                   <CardTitle>Transaction History</CardTitle>
-                  <CardDescription>Recent wallet transactions</CardDescription>
+                  <CardDescription>
+                    {isTransactionsLoading ? 'Loading transactions...' : 'Recent wallet transactions'}
+                  </CardDescription>
                 </div>
                 <Button variant="outline" className="flex items-center">
                   <Download className="mr-2 h-4 w-4" />
@@ -396,55 +449,63 @@ export default function WalletPage() {
               </div>
             </CardHeader>
             <CardContent>
-              <Tabs defaultValue="all">
-                <TabsList className="mb-4">
-                  <TabsTrigger value="all">All Transactions</TabsTrigger>
-                  <TabsTrigger value="employer">Employer Funds</TabsTrigger>
-                  <TabsTrigger value="jahazii">Jahazii Funds</TabsTrigger>
-                  <TabsTrigger value="topup">Top-ups</TabsTrigger>
-                  <TabsTrigger value="ewa">EWA Disbursements</TabsTrigger>
-                </TabsList>
-                
-                <TabsContent value="all" className="mt-0">
-                  <DataTable columns={columns} data={transactions} />
-                </TabsContent>
-                
-                <TabsContent value="employer" className="mt-0">
-                  <DataTable 
-                    columns={columns} 
-                    data={transactions.filter((t: WalletTransaction) => 
-                      t.fundingSource === 'employer'
-                    )} 
-                  />
-                </TabsContent>
-                
-                <TabsContent value="jahazii" className="mt-0">
-                  <DataTable 
-                    columns={columns} 
-                    data={transactions.filter((t: WalletTransaction) => 
-                      t.fundingSource === 'jahazii'
-                    )} 
-                  />
-                </TabsContent>
-                
-                <TabsContent value="topup" className="mt-0">
-                  <DataTable 
-                    columns={columns} 
-                    data={transactions.filter((t: WalletTransaction) => 
-                      t.type === 'employer_topup' || t.type === 'jahazii_topup'
-                    )} 
-                  />
-                </TabsContent>
-                
-                <TabsContent value="ewa" className="mt-0">
-                  <DataTable 
-                    columns={columns} 
-                    data={transactions.filter((t: WalletTransaction) => 
-                      t.type === 'employer_disbursement' || t.type === 'jahazii_disbursement'
-                    )} 
-                  />
-                </TabsContent>
-              </Tabs>
+              {isTransactionsLoading ? (
+                <div className="space-y-4">
+                  <Skeleton className="h-8 w-full" />
+                  <Skeleton className="h-8 w-full" />
+                  <Skeleton className="h-8 w-full" />
+                </div>
+              ) : (
+                <Tabs defaultValue="all">
+                  <TabsList className="mb-4">
+                    <TabsTrigger value="all">All Transactions</TabsTrigger>
+                    <TabsTrigger value="employer">Employer Funds</TabsTrigger>
+                    <TabsTrigger value="jahazii">Jahazii Credit</TabsTrigger>
+                    <TabsTrigger value="topup">Top-ups</TabsTrigger>
+                    <TabsTrigger value="ewa">EWA Disbursements</TabsTrigger>
+                  </TabsList>
+                  
+                  <TabsContent value="all" className="mt-0">
+                    <DataTable columns={columns} data={transactions || []} />
+                  </TabsContent>
+                  
+                  <TabsContent value="employer" className="mt-0">
+                    <DataTable 
+                      columns={columns} 
+                      data={(transactions || []).filter((t: WalletTransaction) => 
+                        t.fundingSource === 'employer'
+                      )} 
+                    />
+                  </TabsContent>
+                  
+                  <TabsContent value="jahazii" className="mt-0">
+                    <DataTable 
+                      columns={columns} 
+                      data={(transactions || []).filter((t: WalletTransaction) => 
+                        t.fundingSource === 'jahazii'
+                      )} 
+                    />
+                  </TabsContent>
+                  
+                  <TabsContent value="topup" className="mt-0">
+                    <DataTable 
+                      columns={columns} 
+                      data={(transactions || []).filter((t: WalletTransaction) => 
+                        t.transactionType === "employer_topup" || t.transactionType === "jahazii_topup"
+                      )} 
+                    />
+                  </TabsContent>
+                  
+                  <TabsContent value="ewa" className="mt-0">
+                    <DataTable 
+                      columns={columns} 
+                      data={(transactions || []).filter((t: WalletTransaction) => 
+                        t.transactionType === "employer_disbursement" || t.transactionType === "jahazii_disbursement"
+                      )} 
+                    />
+                  </TabsContent>
+                </Tabs>
+              )}
             </CardContent>
           </Card>
         </div>
@@ -475,7 +536,7 @@ export default function WalletPage() {
                   </div>
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  <span className="text-blue-600 font-medium">Current employer balance: {formatCurrency(wallet.employerBalance)}</span>
+                  <span className="text-blue-600 font-medium">Current employer balance: {formatCurrency(walletData.employerBalance)}</span>
                   <span className="block mt-1">
                     Only employer funds can be topped up. Jahazii funds are managed by Jahazii directly.
                   </span>
@@ -529,12 +590,12 @@ export default function WalletPage() {
                 <Label htmlFor="custom-amount">Custom Amount</Label>
                 <div className="flex space-x-2">
                   <div className="relative flex-1">
-                    <DollarSign className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500" />
+                    <span className="absolute text-sm font-semibold left-3 top-1/2 transform -translate-y-1/2 text-gray-500 ">KES</span>
                     <Input
                       id="custom-amount"
                       type="number"
                       placeholder="Enter amount"
-                      className="pl-10"
+                      className="pl-12"
                       value={topUpAmount}
                       onChange={(e) => setTopUpAmount(e.target.value)}
                       min="0"
@@ -564,7 +625,7 @@ export default function WalletPage() {
               <div className="space-y-1">
                 <p className="text-sm text-muted-foreground">Per-Employee Cap</p>
                 <div className="flex items-center justify-between">
-                  <p className="font-medium">{formatCurrency(wallet.perEmployeeCap)}</p>
+                  <p className="font-medium">{formatCurrency(walletData.perEmployeeCap)}</p>
                   <Button variant="ghost" size="sm" className="h-8 px-2 text-xs">
                     <span className="mr-1">Edit</span>
                   </Button>
@@ -579,11 +640,11 @@ export default function WalletPage() {
                 <div className="mt-2">
                   <div className="flex items-center gap-2 mb-1">
                     <div className="w-4 h-4 rounded-sm bg-blue-500"></div>
-                    <span className="text-xs">Employer funds (used first, max {formatCurrency(wallet.perEmployeeCap)} per employee)</span>
+                    <span className="text-xs">Employer funds (used first, max {formatCurrency(walletData.perEmployeeCap)} per employee)</span>
                   </div>
                   <div className="flex items-center gap-2">
                     <div className="w-4 h-4 rounded-sm bg-teal-500"></div>
-                    <span className="text-xs">Jahazii funds (used when employer funds depleted or exceed cap)</span>
+                    <span className="text-xs">Jahazii credit (unlimited, 2% fee applies)</span>
                   </div>
                 </div>
               </div>

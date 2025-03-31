@@ -155,9 +155,9 @@ export interface Payroll {
   periodEnd: Date;
   hoursWorked: number;
   grossPay: number;
-  ewaDeductions?: number;
-  taxDeductions?: number;
-  otherDeductions?: number;
+  ewaDeductions: number;
+  taxDeductions: number;
+  otherDeductions: number;
   netPay: number;
   status: string;
   processedAt?: Date;
@@ -173,7 +173,7 @@ export interface EwaRequest {
   requestDate: Date;
   amount: number;
   status: string;
-  processingFee?: number;
+  processingFee: number;
   approvedBy?: string;
   approvedAt?: Date;
   disbursedAt?: Date;
@@ -189,6 +189,17 @@ export interface Wallet {
   jahaziiBalance: number;
   perEmployeeCap: number;
   updatedAt: Date;
+  employerFundsUtilization: number;
+  activeEmployees: number;
+  pendingRequests: number;
+  pendingAmount: number;
+  employeeAllocations: {
+    [employeeId: string]: {
+      allocated: number;
+      used: number;
+      lastUpdated: Date;
+    }
+  };
 }
 
 // Wallet transaction model
@@ -196,12 +207,14 @@ export interface WalletTransaction {
   id: string;
   walletId: string;
   amount: number;
-  transactionType: string;
+  transactionType: 'employer_topup' | 'employer_disbursement' | 'jahazii_topup' | 'jahazii_disbursement' | 'jahazii_fee';
   description?: string;
   transactionDate: Date;
   referenceId: string;
-  fundingSource: string;
-  status: string;
+  fundingSource: 'employer' | 'jahazii';
+  status: 'pending' | 'completed' | 'failed';
+  employeeId?: string;
+  ewaRequestId?: string;
 }
 
 // Wallet API Response including calculated total balance

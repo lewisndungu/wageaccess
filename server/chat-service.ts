@@ -550,10 +550,28 @@ function parseBoolean(value: any): boolean {
 
 // Function to parse numeric values, defaulting to 0 if invalid
 function parseNumber(value: any, defaultValue = 0): number {
-  if (value === null || value === undefined || value === '') return defaultValue;
-  const num = Number(String(value).replace(/,/g, '')); // Remove commas before parsing
-  return isNaN(num) ? defaultValue : num;
+  // Log input value and type for debugging (conceptual)
+  // console.log(`parseNumber: Input value='${value}', type=${typeof value}`);
+
+  if (value === null || value === undefined || String(value).trim() === '') {
+     // console.log(`parseNumber: Value is null, undefined, or empty string. Returning default: ${defaultValue}`);
+    return defaultValue;
+  }
+
+  // Convert to string, remove commas AND common currency symbols/spaces just in case
+  const stringValue = String(value).trim().replace(/[,KESksh\s]/gi, ''); // Remove commas, KES, ksh, spaces (case-insensitive)
+
+  // Check if the cleaned string is a valid number representation
+  if (stringValue === '' || isNaN(Number(stringValue))) {
+      // console.warn(`parseNumber: Value '${value}' resulted in non-numeric string '${stringValue}' after cleaning. Returning default: ${defaultValue}`);
+      return defaultValue;
+  }
+
+  const num = Number(stringValue);
+  //  console.log(`parseNumber: Value '${value}' successfully parsed to number: ${num}`);
+  return num;
 }
+
 
 // Transform data function
 function transformData(data: Array<Record<string, any>>): {
@@ -574,7 +592,11 @@ function transformData(data: Array<Record<string, any>>): {
       headerMapping[bestMatch] = target;
     }
   });
-  
+
+  console.log(`headerMapping: ${JSON.stringify(headerMapping)}`);
+  console.log(`columnMappings: ${JSON.stringify(columnMappings)}`);
+  console.log(`originalHeaders: ${JSON.stringify(originalHeaders)}`);
+
   if (Object.keys(headerMapping).length === 0) {
     for (let i = 0; i < Math.min(10, data.length); i++) {
       const row = data[i];
@@ -619,7 +641,7 @@ function transformData(data: Array<Record<string, any>>): {
     
     // Initialize with Employee interface structure and defaults
     const transformedRow: Employee & { extractionErrors?: string[] } = {
-      id: `emp-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
+      id: `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
       status: 'active',
       is_on_probation: false,
       role: 'employee',
@@ -703,6 +725,8 @@ function transformData(data: Array<Record<string, any>>): {
         }
       }
     });
+
+    console.log(`transformedRow after processing: ${transformedRow.surname} -> ${JSON.stringify(transformedRow.statutory_deductions)}`);
     
     // Post-processing and calculations
     // Calculate total deductions (including potential house_allowance if parsed)

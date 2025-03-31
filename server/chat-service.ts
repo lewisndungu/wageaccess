@@ -11,8 +11,8 @@ const columnMappings: Record<string, string> = {
   'Probation Period': 'is_on_probation', // Maps to Employee.is_on_probation (boolean)
   'ID Number': 'id_no', // Maps to Employee.id_no
   'KRA Pin': 'tax_pin', // Maps to Employee.tax_pin
-  'NSSF No': 'nssf_no', // Maps to Employee.nssf_no (Membership No)
-  'NHIF No': 'nhif_no', // Maps to Employee.nhif_no (Membership No)
+  'NSSF No': 'nssf_no', // Maps to Employee.nssf_no
+  'NHIF No': 'nhif_no', // Maps to Employee.nhif_no
   'Position': 'position', // Maps to Employee.position
   'Gross Pay': 'gross_income', // Maps to Employee.gross_income
   'PAYE': 'statutory_deductions.tax', // Maps to Employee.statutory_deductions.tax
@@ -299,7 +299,7 @@ You can also use the quick action buttons below the chat to access common functi
       }
     },
     
-    async searchEmployee(query: string, userId: string): Promise<any[]> {
+    async searchEmployee(query: string, userId: string): Promise<Employee[]> {
       // Save the search query
       await storageModule.saveSearch(userId, query);
       
@@ -355,10 +355,13 @@ You can also use the quick action buttons below the chat to access common functi
     
     async calculatePayroll(employeeIds: string[], userId: string): Promise<ServerPayrollResponse[]> {
       // Implement payroll calculation logic
-      const employees = await storageModule.storage.getEmployees(employeeIds);
+      // Fetch employees individually as getEmployees(ids) doesn't exist
+      const employeePromises = employeeIds.map(id => storageModule.storage.getEmployee(id));
+      const employeesData = await Promise.all(employeePromises);
+      const employees = employeesData.filter((emp): emp is Employee => emp !== undefined);
       
-      const payrollData = employees.map((employee: any) => {
-        const grossPay = employee.salary || employee.gross_income || 0;
+      const payrollData = employees.map((employee: Employee) => {
+        const grossPay = employee.gross_income || 0;
         
         // Mock attendance data
         const standardHours = 160;
@@ -421,12 +424,12 @@ You can also use the quick action buttons below the chat to access common functi
     },
     
     // Format employee data for display in chat
-    formatEmployeeInfo(employee: any): string {
+    formatEmployeeInfo(employee: Employee): string {
       return `
-**${employee.name}**
+**${employee.other_names} ${employee.surname}**
 Position: ${employee.position}
-Hire Date: ${formatKEDate(employee.hireDate)}
-Salary: ${formatKESCurrency(employee.salary)}
+Hire Date: ${formatKEDate(employee.startDate)}
+Salary: ${formatKESCurrency(employee.gross_income)}
       `.trim();
     },
     
@@ -959,146 +962,193 @@ function extractDataWithDetectedHeaders( allRows: Array<Record<string, any>>, da
 
 // Direct extraction for non-standard formats
 function directDataExtraction(data: Array<Record<string, any>>): {
-  directExtracted: Array<Record<string, any>>;
+  directExtracted: Array<InsertEmployee>; // Use InsertEmployee from schema
   directFailedRows: Array<{row: Record<string, any>, reason: string}>;
 } {
-  const directExtracted: Array<Record<string, any>> = [];
+  const directExtracted: Array<InsertEmployee> = [];
   const directFailedRows: Array<{row: Record<string, any>, reason: string}> = [];
 
-  data.forEach(row => {
+  data.forEach((row, rowIndex) => { // Added rowIndex for error reporting
     const rowValues = Object.values(row);
     const hasName = rowValues.some(val => 
-      typeof val === 'string' && val.length > 3 && /[A-Za-z]{2,}\s+[A-Za-z]{2,}/.test(String(val))
+      typeof val === 'string' && val.length > 3 && /[A-Za-z]{2,}\\s+[A-Za-z]{2,}/.test(String(val))
     );
     
     const hasNumber = rowValues.some(val => 
-      typeof val === 'number' || (typeof val === 'string' && /^\d+$/.test(String(val)))
+      typeof val === 'number' || (typeof val === 'string' && /^\\d+$/.test(String(val)))
     );
     
     if (hasName && hasNumber) {
-      // Create a new row with MongoDB document structure
-      const extractedRow: Record<string, any> = {
+      // Initialize with InsertEmployee structure
+      const extractedRow: InsertEmployee = {
+        id: `emp-${Date.now()}-${Math.random().toString(36).substring(2, 9)}-direct`, // Add direct indicator
         status: 'active', // Default status
         is_on_probation: false, // Default probation status
         role: 'employee', // Default role
         country: 'KE', // Default country code for Kenya
-        statutory_deductions: {
-          nhif: 0,
-          nssf: 0,
-          tax: 0,
-          levy: 0
-        },
-        contact: {
-          mobile: '',
-          city: ''
-        },
-        bank_info: {
-          acc_no: null,
-          bank_name: null
-        }
+        statutory_deductions: { nhif: 0, nssf: 0, tax: 0, levy: 0 },
+        contact: { email: '', phoneNumber: '' }, // Use phoneNumber
+        bank_info: { acc_no: null, bank_name: null, bank_code: null }, // Add bank_code
+        gross_income: 0,
+        // net_income will be calculated if possible, or defaulted
+        total_deductions: 0,
+        loan_deductions: 0,
+        employer_advances: 0,
+        jahazii_advances: 0,
+        max_salary_advance_limit: 0,
+        available_salary_advance_limit: 0,
+        terms_accepted: false,
+        surname: '',
+        other_names: '',
+        id_no: '',
+        tax_pin: '',
+        sex: '', // Default sex
+        nssf_no: '',
+        nhif_no: '', // Default nhif_no
+        employeeNumber: '', // Default employeeNumber
+        position: '', // Default position
+        // extractionErrors: [], // Consider adding if useful, needs Employee type
+        id_confirmed: false,
+        mobile_confirmed: false,
+        tax_pin_verified: false,
+        created_at: new Date(),
+        modified_at: new Date(),
+        active: true,
       };
       
-      let extractedFields = 0;
-      
+      let extractedFieldsCount = 0;
+      let hasIdentifier = false;
+
       Object.entries(row).forEach(([key, value]) => {
+        const processedValue = String(value).trim();
+        if (processedValue === '') return; // Skip empty values
+
         // Full name extraction
-        if (typeof value === 'string' && value.length > 3 && /[A-Za-z]{2,}\s+[A-Za-z]{2,}/.test(String(value))) {
-          const fullName = String(value).trim();
-          const nameParts = fullName.split(/\s+/);
-          
+        if (typeof value === 'string' && value.length > 3 && /[A-Za-z]{2,}\\s+[A-Za-z]{2,}/.test(processedValue)) {
+          const nameParts = processedValue.split(/\\s+/);
           if (nameParts.length >= 2) {
-            extractedRow['First Name'] = nameParts[0];
-            extractedRow['Last Name'] = nameParts.slice(1).join(' ');
-            extractedRow['fullName'] = fullName;
+            extractedRow.surname = nameParts.slice(-1).join(' ');
+            extractedRow.other_names = nameParts.slice(0, -1).join(' ');
           } else {
-            extractedRow['First Name'] = fullName;
-            extractedRow['Last Name'] = '';
-            extractedRow['fullName'] = fullName;
+            extractedRow.other_names = processedValue;
+            // Keep surname empty
           }
-          extractedFields++;
-        } 
-        // ID number
-        else if (/^\d{5,}$/.test(String(value))) {
-          extractedRow['ID Number'] = value;
-          extractedFields++;
+          hasIdentifier = true;
+          extractedFieldsCount++;
         }
-        // KRA PIN
-        else if (/^[A-Z]\d{9}[A-Z]$/.test(String(value))) {
-          extractedRow['KRA Pin'] = value;
-          extractedFields++;
+        // ID number (basic check)
+        else if (/^\\d{5,}$/.test(processedValue) && !extractedRow.id_no) {
+          extractedRow.id_no = processedValue;
+          extractedFieldsCount++;
         }
-        // NSSF number
-        else if (/^\d{4,6}$/.test(String(value))) {
-          extractedRow['NSSF No'] = value;
-          extractedFields++;
+        // KRA PIN (basic check)
+        else if (/^[A-Z]\\d{9}[A-Z]$/i.test(processedValue) && !extractedRow.tax_pin) { // Case-insensitive
+          extractedRow.tax_pin = processedValue.toUpperCase();
+          extractedFieldsCount++;
         }
-        // Salary amount
-        else if (typeof value === 'number' && value > 1000) {
-          if (!extractedRow['Gross Pay']) {
-            extractedRow['Gross Pay'] = value;
-            
-            // Default to 30% of gross for tax
-            extractedRow['tax'] = Math.floor(value * 0.3);
-            // Default to 1.5% for NSSF
-            extractedRow['NSSF'] = Math.min(Math.floor(value * 0.015), 2160);
-            // Add default NHIF value
-            extractedRow['NHIF'] = Math.min(Math.floor(value * 0.01), 1700);
-            // Default to 1.5% for levy
-            extractedRow['levy'] = Math.floor(value * 0.015);
-            
-            // Calculate total deductions
-            const totalDeductions = extractedRow['tax'] +
-                                   extractedRow['NSSF'] +
-                                   extractedRow['NHIF'] +
-                                   extractedRow['levy'];
-            
-            extractedRow['Loan Deduction'] = 0;
-            extractedRow['Employer Advance'] = 0;
-            
-            extractedFields++;
+        // NSSF number (basic check)
+        else if (/^\\d{4,10}$/.test(processedValue) && !extractedRow.nssf_no) {
+          extractedRow.nssf_no = processedValue;
+          extractedFieldsCount++;
+        }
+         // NHIF number (basic check - often same as ID, but could be different)
+         else if (/^\\d{5,}$/.test(processedValue) && !extractedRow.nhif_no && processedValue !== extractedRow.id_no) {
+          extractedRow.nhif_no = processedValue;
+          extractedFieldsCount++;
+        }
+        // Employee Number (basic check - alphanumeric)
+        else if (/^[a-zA-Z0-9\-\/]+$/.test(processedValue) && !extractedRow.employeeNumber) {
+            extractedRow.employeeNumber = processedValue;
+            hasIdentifier = true;
+            extractedFieldsCount++;
+        }
+        // Phone Number (basic check - digits, maybe +)
+        else if (/^\+?\d{9,15}$/.test(processedValue) && !extractedRow.contact!.phoneNumber) {
+            extractedRow.contact!.phoneNumber = processedValue;
+            extractedFieldsCount++;
+        }
+        // Position (string, likely contains letters)
+        else if (typeof value === 'string' && /[a-zA-Z]/.test(processedValue) && !extractedRow.position && !hasIdentifier) { // Avoid grabbing names as positions
+             extractedRow.position = processedValue;
+             extractedFieldsCount++;
+        }
+        // Salary amount (number > 1000)
+        else if (typeof value === 'number' && value > 1000 && !extractedRow.gross_income) {
+          extractedRow.gross_income = value;
+
+          // --- Default statutory calculation based on gross ---
+          // These are rough estimates and may not be accurate.
+          // Consider linking the actual calculation logic if available.
+          const gross = extractedRow.gross_income;
+          // PAYE - Very rough estimate (e.g., 10% after reliefs) - Needs proper calculation
+          if (extractedRow.statutory_deductions) {
+              extractedRow.statutory_deductions.tax = Math.max(0, Math.floor((gross - 24000) * 0.1)); // Simplified PAYE placeholder
           }
+          // NSSF - Tier I (6% up to 7k) + Tier II (6% from 7k to 36k) - max 2160
+          const nssfTier1Limit = 7000;
+          const nssfTier2Limit = 36000;
+          const nssfRate = 0.06;
+          const nssfTier1 = Math.min(gross, nssfTier1Limit) * nssfRate;
+          const nssfTier2Base = Math.max(0, gross - nssfTier1Limit);
+          const nssfTier2 = Math.min(nssfTier2Base, nssfTier2Limit - nssfTier1Limit) * nssfRate;
+          extractedRow.statutory_deductions!.nssf = Math.min(Math.floor(nssfTier1 + nssfTier2), 2160);
+          // NHIF - Based on gross income bands (simplified) - max 1700
+          let nhifCalc = 0;
+          if (gross >= 100000) nhifCalc = 1700;
+          else if (gross >= 50000) nhifCalc = 1200;
+          else if (gross >= 20000) nhifCalc = 750;
+          else if (gross >= 12000) nhifCalc = 500;
+          else if (gross >= 6000) nhifCalc = 300;
+          else nhifCalc = 150;
+          extractedRow.statutory_deductions!.nhif = nhifCalc;
+          // Housing Levy - 1.5% of gross - max 2500
+          extractedRow.statutory_deductions!.levy = Math.min(Math.floor(gross * 0.015), 2500);
+          // --- End default calculation ---
+
+          extractedFieldsCount++;
         }
+        // Other numeric values could be loans, advances (more complex to guess)
       });
-      
-      if (extractedFields > 2) {
-        // Ensure all required fields are present
-        const requiredFields = [
-          'Emp No', 'First Name', 'Last Name', 'fullName', 'ID Number', 
-          'NSSF No', 'KRA Pin', 'NHIF', 'Position', 'Gross Pay', 
-          'Employer Advance', 'tax', 'levy', 'Loan Deduction'
-        ];
-        
-        // Add placeholders for any missing required fields
-        requiredFields.forEach(field => {
-          if (extractedRow[field] === undefined) {
-            if (['Gross Pay', 'tax', 'NHIF', 'levy', 'Employer Advance', 'Loan Deduction'].includes(field)) {
-              extractedRow[field] = 0;
-            } else {
-              extractedRow[field] = '';
-            }
+
+      // Post-processing: Calculate total deductions and net income if possible
+      if ((extractedRow.gross_income ?? 0) > 0) {
+          extractedRow.total_deductions =
+              (extractedRow.statutory_deductions?.tax ?? 0) +
+              (extractedRow.statutory_deductions?.nssf ?? 0) +
+              (extractedRow.statutory_deductions?.nhif ?? 0) +
+              (extractedRow.statutory_deductions?.levy ?? 0) +
+              (extractedRow.loan_deductions ?? 0) +
+              (extractedRow.employer_advances ?? 0);
+
+          extractedRow.net_income = (extractedRow.gross_income ?? 0) - (extractedRow.total_deductions ?? 0);
+
+          // Calculate EWA limits based on net income
+          const netIncomeForLimit = extractedRow.net_income ?? 0;
+          if (netIncomeForLimit > 0) {
+              extractedRow.max_salary_advance_limit = Math.floor(netIncomeForLimit * 0.5);
+              extractedRow.available_salary_advance_limit = extractedRow.max_salary_advance_limit;
           }
-        });
-        
-        // Ensure the row has an ID
-        if (!extractedRow.id) {
-          extractedRow.id = `emp-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
-        }
-        
+      }
+
+      // Validation: Check if enough meaningful fields were extracted
+      if (extractedFieldsCount >= 3 && hasIdentifier) { // Require at least 3 fields + a name/employeeNumber
         directExtracted.push(extractedRow);
       } else {
         directFailedRows.push({
-          row, 
-          reason: `Could only identify ${extractedFields} fields (minimum 3 required)`
+          row,
+          reason: `Row ${rowIndex + 1}: Only identified ${extractedFieldsCount} fields or missing identifier (Name/Emp No). Minimum 3 fields + identifier required.`
         });
       }
     } else {
+      // Check if the row is truly empty before marking as failed
       const hasValues = Object.values(row).some(v => v !== "" && v !== null && v !== undefined);
       if (hasValues) {
         directFailedRows.push({
-          row, 
-          reason: 'Row does not contain recognizable employee data pattern'
+          row,
+          reason: `Row ${rowIndex + 1}: Does not contain a recognizable pattern (e.g., Name and Number).`
         });
       }
+      // Ignore completely empty rows silently
     }
   });
   
@@ -1106,4 +1156,4 @@ function directDataExtraction(data: Array<Record<string, any>>): {
 }
 
 // Create a singleton instance of the chat service
-export const chatService = createChatService(); 
+export const chatService = createChatService();

@@ -1,11 +1,10 @@
-
 import React from 'react';
 import { Link } from 'react-router-dom';
+import { User, Mail, Phone, Building, Briefcase, Calendar, DollarSign } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Employee } from '@shared/schema';
 import { formatKESCurrency, formatKEDate } from '@/lib/format-utils';
-import { User, Phone, Mail, Calendar, Briefcase, Building, DollarSign } from 'lucide-react';
+import type { Employee } from '@shared/schema';
 
 interface EmployeeCardProps {
   employee: Employee;
@@ -31,12 +30,7 @@ const EmployeeCard: React.FC<EmployeeCardProps> = ({ employee }) => {
               <Briefcase className="h-4 w-4 text-muted-foreground" />
               <span>{employee.position}</span>
             </div>
-            
-            <div className="flex items-center gap-2">
-              <Building className="h-4 w-4 text-muted-foreground" />
-              <span>{employee.department?.name}</span>
-            </div>
-            
+
             <div className="flex items-center gap-2">
               <DollarSign className="h-4 w-4 text-muted-foreground" />
               <span>{formatKESCurrency(employee.gross_income)}</span>
@@ -47,14 +41,14 @@ const EmployeeCard: React.FC<EmployeeCardProps> = ({ employee }) => {
               <span>Hired: {formatKEDate(employee.created_at)}</span>
             </div>
             
-            {employee.contact.email && (
+            {employee.contact?.email && (
               <div className="flex items-center gap-2">
                 <Mail className="h-4 w-4 text-muted-foreground" />
                 <span>{employee.contact.email}</span>
               </div>
             )}
             
-            {employee.contact.phoneNumber && (
+            {employee.contact?.phoneNumber && (
               <div className="flex items-center gap-2">
                 <Phone className="h-4 w-4 text-muted-foreground" />
                 <span>{employee.contact.phoneNumber}</span>

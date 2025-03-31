@@ -42,7 +42,7 @@ import { processFile, downloadTransformedData } from '@/lib/spreadsheet-processo
 import { calculatePayrollBasedOnAttendance } from '@/lib/kenyan-payroll';
 import { useEmployeeStore } from '@/lib/store';
 import type { Advance as StoreAdvance } from '@/lib/store';
-import type { Employee } from "@shared/schema";
+import type { Employee, InsertEmployee, ServerPayrollResponse } from "@shared/schema";
 import { cn } from '@/lib/utils';
 import { 
   formatKESCurrency, 
@@ -57,96 +57,15 @@ import EmployeeCard from './EmployeeCard';
 import ActionPills from './ActionPills';
 import { useTheme } from '../ui/theme-provider';
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { api } from '@/lib/api';
+import { useDebounce } from '@/lib/hooks';
 
-type ExtractedRow = Record<string, any> & {
-  id: string;
-  extractionErrors?: string[];
-};
-
-type ProcessedData = {
-  headers: string[];
-  extractedData: ExtractedRow[];
-  failedRows: {
-    rowIndex: number;
-    errors: string[];
-    originalData: any;
-  }[];
-  fileName: string;
-};
-
-const TARGET_HEADERS = [
-  'Emp No', 'First Name', 'Last Name', 'Full Name', 'ID Number', 
-  'NSSF No', 'KRA Pin', 'NHIF', 'Position', 'Gross Pay', 
-  'Employer Advance', 'PAYE', 'Levy', 'Loan Deduction'
-];
-
-// Local storage for employees is now handled by chatService
-
-const employeeStorage = {
-  employees: [] as ExtractedRow[],
-  addEmployees: function(employees: ExtractedRow[]) {
-    employees.forEach(employee => {
-      const existingIndex = this.employees.findIndex(e => 
-        (e['ID Number'] && employee['ID Number'] && e['ID Number'] === employee['ID Number']) ||
-        (e['Emp No'] && employee['Emp No'] && e['Emp No'] === employee['Emp No'])
-      );
-      
-      if (existingIndex >= 0) {
-        this.employees[existingIndex] = { ...this.employees[existingIndex], ...employee };
-      } else {
-        this.employees.push(employee);
-      }
-    });
-    
-    return this.employees.length;
-  },
-  getEmployees: function() {
-    return [...this.employees];
-  },
-  findEmployee: function(query: string) {
-    const lowerQuery = query.toLowerCase();
-    return this.employees.filter(emp => 
-      (emp['First Name'] && emp['First Name'].toLowerCase().includes(lowerQuery)) ||
-      (emp['Last Name'] && emp['Last Name'].toLowerCase().includes(lowerQuery)) ||
-      (emp['fullName'] && emp['fullName'].toLowerCase().includes(lowerQuery)) ||
-      (emp['ID Number'] && emp['ID Number'].toString().includes(lowerQuery)) ||
-      (emp['Emp No'] && emp['Emp No'].toString().includes(lowerQuery))
-    );
-  },
-  updateEmployee: function(id: string, updates: Partial<ExtractedRow>) {
-    const index = this.employees.findIndex(e => e.id === id);
-    if (index >= 0) {
-      this.employees[index] = { ...this.employees[index], ...updates };
-      return true;
-    }
-    return false;
-  }
-};
-
-const mockAttendanceData = {
-  getAttendance: function(employeeId: string) {
-    const standardHours = 160;
-    const workedHours = Math.floor(Math.random() * 40) + 130;
-    
-    return {
-      employeeId,
-      standardHours,
-      workedHours,
-      present: Math.floor(workedHours / 8),
-      absent: Math.floor((standardHours - workedHours) / 8),
-      late: Math.floor(Math.random() * 5)
-    };
-  }
-};
-
-// Create a simplified employee type for the store
 type StoreEmployee = {
   id: string;
   name: string;
   email: string;
   phone: string;
   position: string;
-  department: string;
   hireDate: string;
   salary: number;
   address: string;
@@ -159,6 +78,19 @@ type StoreEmployee = {
   };
 };
 
+type ProcessedData = {
+  extractedData: InsertEmployee[];
+  failedRows: {
+    row: Record<string, any>;
+    reason: string;
+  }[];
+  fileName: string;
+};
+
+const TARGET_HEADERS = [
+  'Emp No', 'First Name', 'Last Name', 'ID Number', 'NSSF No', 'KRA Pin', 'NHIF No', 'Position', 'Gross Pay', 'Employer Advance', 'PAYE', 'NSSF', 'NHIF', 'Levy', 'Loan Deduction', 'Net Pay'
+];
+
 const ChatInterface = () => {
   // Load saved messages from local storage
   const [messages, setMessages] = useState<Message[]>([]);
@@ -167,8 +99,12 @@ const ChatInterface = () => {
   const [isUploading, setIsUploading] = useState(false);
   const [currentData, setCurrentData] = useState<ProcessedData | null>(null);
   const [showPreview, setShowPreview] = useState(false);
-  const [editingCell, setEditingCell] = useState<{rowId: string, column: string, value: any, fieldName?: string} | null>(null);
+  const [editingCell, setEditingCell] = useState<{rowId: string, column: string, value: any, fieldName?: keyof InsertEmployee} | null>(null);
   const [showHelpDialog, setShowHelpDialog] = useState(false);
+  const [calculatedPayrollData, setCalculatedPayrollData] = useState<ServerPayrollResponse[] | null>(null);
+  const [searchResults, setSearchResults] = useState<Employee[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
+  const [showSearchPreview, setShowSearchPreview] = useState(false);
   
   const fileInputRef = useRef<HTMLInputElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -178,6 +114,9 @@ const ChatInterface = () => {
   const navigate = useNavigate();
   const { theme, setTheme } = useTheme();
   const queryClient = useQueryClient();
+  
+  // Debounce the search input
+  const debouncedSearchTerm = useDebounce(inputMessage.toLowerCase().replace('find employee ', '').trim(), 300);
   
   // Load message history from API when component mounts
   useEffect(() => {
@@ -233,6 +172,32 @@ const ChatInterface = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
+  // Effect for handling employee search
+  useEffect(() => {
+    const searchEmployees = async () => {
+      if (!inputMessage.toLowerCase().startsWith('find employee') || !debouncedSearchTerm) {
+        setSearchResults([]);
+        setShowSearchPreview(false);
+        return;
+      }
+      
+      setIsSearching(true);
+      setShowSearchPreview(true);
+      
+      try {
+        const results = await chatService.searchEmployee(debouncedSearchTerm);
+        setSearchResults(results);
+      } catch (error) {
+        console.error('Error searching employees:', error);
+        setSearchResults([]);
+      } finally {
+        setIsSearching(false);
+      }
+    };
+    
+    searchEmployees();
+  }, [debouncedSearchTerm, inputMessage]);
+
   const handleSendMessage = async () => {
     if (!inputMessage.trim()) return;
     
@@ -271,7 +236,28 @@ const ChatInterface = () => {
     }
   };
   
-  const handleActionClick = (action: ChatAction) => {
+  const trackCommand = async (command: string) => {
+    try {
+      await api.post('/chat/command', { command });
+    } catch (error) {
+      console.error('Error tracking command:', error);
+    }
+  };
+
+  const trackSearch = async (search: string) => {
+    try {
+      await api.post('/chat/search', { search });
+    } catch (error) {
+      console.error('Error tracking search:', error);
+    }
+  };
+
+  const handleActionClick = async (action: ChatAction) => {
+    // Track the action as a command
+    if (action.id) {
+      await trackCommand(action.id);
+    }
+    
     // First check if the action already has a client-side handler
     if (action.action && typeof action.action === 'function') {
       action.action();
@@ -295,7 +281,7 @@ const ChatInterface = () => {
           setInputMessage('Find employee ');
           break;
         case 'calculate-payroll':
-          processUserMessage('Calculate payroll for all employees');
+          handleCalculatePayroll();
           break;
         case 'help':
           setShowHelpDialog(true);
@@ -323,25 +309,36 @@ const ChatInterface = () => {
     setMessages((prev: Message[]) => [...prev, userMessage]);
     
     try {
-      // Process message on server
-      const response = await chatService.processMessage(message);
+      const { data } = await api.post('/chat/message', {
+        message,
+        userId: 'current-user',
+        timestamp: new Date()
+      });
       
       // Add server response with client-side action handlers
-      const processedResponse = {
-        ...response,
-        actions: response.actions?.map(action => ({
+      const processedResponse: Message = {
+        ...data,
+        actions: data.actions?.map((action: ChatAction) => ({
           ...action,
           action: () => handleActionClick(action)
-        }))
+        })),
+        timestamp: new Date(data.timestamp),
+        employeeData: data.employeeData ? {
+          ...data.employeeData,
+          created_at: new Date(data.employeeData.created_at),
+          modified_at: new Date(data.employeeData.modified_at),
+          startDate: data.employeeData.startDate ? new Date(data.employeeData.startDate) : undefined,
+          last_withdrawal_time: data.employeeData.last_withdrawal_time ? new Date(data.employeeData.last_withdrawal_time) : undefined
+        } : undefined
       };
       
       setMessages((prev: Message[]) => [...prev, processedResponse]);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error processing message:', error);
       setMessages((prev: Message[]) => [...prev, {
         id: Date.now().toString(),
         type: 'error',
-        content: 'Sorry, I encountered an error processing your message. Please try again.',
+        content: error.message || 'Sorry, I encountered an error processing your message. Please try again.',
         timestamp: new Date()
       }]);
     }
@@ -357,7 +354,7 @@ const ChatInterface = () => {
         fileInputRef.current?.click();
         break;
       case 'export-payroll':
-        processUserMessage('Calculate payroll for all employees');
+        handleCalculatePayroll();
         break;
       case 'manage-employees':
         setMessages(prev => [...prev, {
@@ -398,11 +395,16 @@ const ChatInterface = () => {
         }
       ]);
       
-      // Use chatService to upload and process file
-      const result = await chatService.uploadFile(file);
+      const formData = new FormData();
+      formData.append('file', file);
       
-      // Update UI with result
-      const processedData: ProcessedData = result;
+      const { data } = await api.post('/api/chat/upload', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        }
+      });
+      
+      const processedData: ProcessedData = data;
       setCurrentData(processedData);
       
       const fileMessage: Message = {
@@ -438,16 +440,16 @@ const ChatInterface = () => {
       
       setShowPreview(true);
       
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error processing file:', error);
-      toast.error(`Failed to process the spreadsheet: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      toast.error(error.message || 'Failed to process the spreadsheet');
       
       setMessages(prev => [
         ...prev,
         {
           id: Date.now().toString(),
           type: 'error',
-          content: `Error processing file: ${error instanceof Error ? error.message : 'Unknown error'}`,
+          content: `Error processing file: ${error.message || 'Unknown error'}`,
           timestamp: new Date()
         }
       ]);
@@ -474,15 +476,19 @@ const ChatInterface = () => {
   
   // Create a mutation for importing employees
   const importEmployeesMutation = useMutation({
-    mutationFn: async (employeeData: any[]) => {
-      return await chatService.importEmployees(employeeData);
+    mutationFn: async (employeeData: InsertEmployee[]) => {
+      const { data } = await api.post('/api/chat/import-employees', {
+        employees: employeeData
+      });
+      return data;
     },
     onSuccess: () => {
-      // Invalidate employees queries to refetch the data
-      queryClient.invalidateQueries({ queryKey: ['/api/employees/active'] });
+      queryClient.invalidateQueries({ queryKey: ['employees'] });
+      queryClient.invalidateQueries({ queryKey: ['active-employees'] });
     },
-    onError: (error) => {
+    onError: (error: any) => {
       console.error('Error importing employees:', error);
+      toast.error(error.message || 'Failed to import employees');
     }
   });
 
@@ -496,17 +502,16 @@ const ChatInterface = () => {
         
         // Transform and add imported employees to the Employees component store
         const transformedEmployees = currentData.extractedData.map((emp): StoreEmployee => {
-          const fullName = emp['fullName'] || `${emp['First Name'] || ''} ${emp['Last Name'] || ''}`;
+          const fullName = `${emp.other_names ?? ''} ${emp.surname ?? ''}`.trim();
           return {
-            id: emp.id || `emp-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
-            name: fullName.trim(),
-            email: emp['Email'] || emp['email'] || `${fullName.toLowerCase().replace(/\s+/g, '.')}@company.com`,
-            phone: emp['Phone'] || emp['phone'] || emp['Contact'] || '(000) 000-0000',
-            position: emp['Position'] || emp['Job Title'] || emp['Designation'] || 'Employee',
-            department: emp['Department'] || 'General',
-            hireDate: emp['Hire Date'] || emp['Start Date'] || new Date().toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' }),
-            salary: parseFloat(emp['Gross Pay'] || '0') || parseFloat(emp['Salary'] || '0') || 0,
-            address: emp['Address'] || 'No address provided',
+            id: emp.id ?? `emp-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
+            name: fullName || 'Unknown Name',
+            email: emp.contact?.email || `${(emp.other_names ?? 'user').toString().toLowerCase()}.${(emp.surname ?? 'unknown').toString().toLowerCase()}@company.com`,
+            phone: emp.contact?.phoneNumber || '(000) 000-0000',
+            position: emp.position || 'Employee',
+            hireDate: emp.startDate ? formatKEDate(emp.startDate) : formatKEDate(new Date()),
+            salary: emp.gross_income ?? 0,
+            address: emp.address || 'No address provided',
             advances: [],
             attendance: {
               present: Math.floor(Math.random() * 20) + 150,
@@ -534,7 +539,7 @@ const ChatInterface = () => {
             {
               id: 'calculate-payroll',
               label: 'Calculate Payroll',
-              action: () => processUserMessage('Calculate payroll for all employees')
+              action: () => handleCalculatePayroll()
             }
           ]
         }]);
@@ -570,49 +575,83 @@ const ChatInterface = () => {
     }]);
   };
 
-  const displayHeaders = currentData?.headers || TARGET_HEADERS;
-  
-  const handleDownload = () => {
-    if (!currentData) return;
-    
+  const handleCalculatePayroll = async (employeeIds?: string[]) => {
+    setMessages(prev => [...prev, {
+      id: Date.now().toString(),
+      type: 'system',
+      content: `Calculating payroll for ${employeeIds ? employeeIds.length + ' selected' : 'all active'} employees...`,
+      timestamp: new Date()
+    }]);
+    setIsLoading(true);
+    setCalculatedPayrollData(null);
+
     try {
-      downloadTransformedData(currentData.extractedData, currentData.fileName);
-      toast.success('File downloaded successfully');
-    } catch (error) {
-      console.error('Error downloading file:', error);
-      toast.error('Failed to download the file');
+      const { data } = await api.post('/api/chat/calculate-payroll', {
+        employeeIds,
+        periodStart: new Date(new Date().setDate(1)), // First day of current month
+        periodEnd: new Date() // Today
+      });
+      
+      const payrollResult: ServerPayrollResponse[] = data;
+      setCalculatedPayrollData(payrollResult);
+      
+      if (payrollResult && payrollResult.length > 0) {
+        setMessages(prev => [...prev, {
+          id: (Date.now() + 1).toString(),
+          type: 'system',
+          content: `✅ Payroll calculation complete! Generated payroll for ${payrollResult.length} employees.`,
+          timestamp: new Date(),
+          actions: [
+            {
+              id: 'download-payroll',
+              label: 'Download Payroll (Excel)',
+              action: handleDownloadPayrollData
+            }
+          ]
+        }]);
+        toast.success(`Payroll calculated for ${payrollResult.length} employees.`);
+      } else {
+        toast.warning('No employee data found for payroll calculation.');
+      }
+      
+    } catch (error: any) {
+      console.error("Error calculating payroll:", error);
+      const errorMessage = error.message || 'Unknown error during payroll calculation.';
+      setMessages(prev => [...prev, {
+        id: Date.now().toString(),
+        type: 'error',
+        content: `Payroll calculation failed: ${errorMessage}`,
+        timestamp: new Date()
+      }]);
+      toast.error(`Payroll calculation failed: ${errorMessage}`);
+    } finally {
+       setIsLoading(false); 
     }
   };
   
-  const handleDownloadFailedRows = () => {
-    if (!currentData || !currentData.failedRows.length) return;
-    
+  const handleDownloadPayrollData = () => {
+    if (!calculatedPayrollData || calculatedPayrollData.length === 0) {
+      toast.warning('No payroll data available to download.');
+      return;
+    }
+
     try {
+      const ws = XLSX.utils.json_to_sheet(calculatedPayrollData);
       const wb = XLSX.utils.book_new();
-      
-      const failedData = currentData.failedRows.map(({ rowIndex, errors, originalData }) => ({
-        'Row Number': rowIndex,
-        'Errors': errors.join('; '),
-        'Original Data': JSON.stringify(originalData)
-      }));
-      
-      const ws = XLSX.utils.json_to_sheet(failedData);
-      
-      XLSX.utils.book_append_sheet(wb, ws, 'Failed Extractions');
-      
-      const fileName = currentData.fileName.split('.')[0];
-      const timestamp = new Date().toISOString().replace(/:/g, '-').substring(0, 19);
-      const outputFileName = `${fileName}_failed_rows_${timestamp}.csv`;
-      
-      XLSX.writeFile(wb, outputFileName);
-      
-      toast.success('Failed rows downloaded successfully');
+      XLSX.utils.book_append_sheet(wb, ws, "Payroll Data");
+
+      const timestamp = new Date().toISOString().split('T')[0];
+      const fileName = `payroll_export_${timestamp}.xlsx`;
+      XLSX.writeFile(wb, fileName);
+
+      toast.success('Payroll data downloaded successfully.');
+
     } catch (error) {
-      console.error('Error downloading failed rows:', error);
-      toast.error('Failed to download failed rows');
+       console.error("Error downloading payroll data:", error);
+       toast.error('Failed to download payroll data.');
     }
   };
-  
+
   const handleCellEdit = (rowId: string, column: string, value: any) => {
     const fieldName = getFieldName(column);
     setEditingCell({ rowId, column, value, fieldName });
@@ -623,11 +662,18 @@ const ChatInterface = () => {
     
     const { rowId, column, value, fieldName } = editingCell;
     
+    if (!fieldName) {
+        console.error("Cannot save cell edit: fieldName is undefined for column", column);
+        toast.error(`Failed to save edit for column: ${column}`);
+        setEditingCell(null);
+        return;
+    }
+    
     const updatedData = {
       ...currentData,
       extractedData: currentData.extractedData.map(row => {
         if (row.id === rowId) {
-          return { ...row, [fieldName || column]: value };
+          return { ...row, [fieldName]: value };
         }
         return row;
       })
@@ -658,13 +704,74 @@ const ChatInterface = () => {
     }
   };
 
-  // Filter the headers to only include the ones in TARGET_HEADERS order
-  const filteredDisplayHeaders = TARGET_HEADERS;
+  const getFieldName = (displayHeader: string): keyof InsertEmployee | undefined => {
+    const mapping: Record<string, keyof InsertEmployee> = {
+      'Emp No': 'employeeNumber',
+      'First Name': 'other_names',
+      'Last Name': 'surname',
+      'ID Number': 'id_no',
+      'NSSF No': 'nssf_no',
+      'KRA Pin': 'tax_pin',
+      'NHIF No': 'nhif_no',
+      'Position': 'position',
+      'Gross Pay': 'gross_income',
+      'Employer Advance': 'employer_advances',
+      'Loan Deduction': 'loan_deductions',
+      'Net Pay': 'net_income',
+    };
+    return mapping[displayHeader];
+  };
 
-  // Map display header names to actual data field names
-  const getFieldName = (displayHeader: string) => {
-    if (displayHeader === 'Full Name') return 'fullName';
-    return displayHeader;
+  const getRowValue = (row: InsertEmployee, header: string): any => {
+    switch (header) {
+      case 'Emp No': return row.employeeNumber;
+      case 'First Name': return row.other_names;
+      case 'Last Name': return row.surname;
+      case 'ID Number': return row.id_no;
+      case 'NSSF No': return row.nssf_no;
+      case 'KRA Pin': return row.tax_pin;
+      case 'NHIF No': return row.nhif_no;
+      case 'Position': return row.position;
+      case 'Gross Pay': return row.gross_income;
+      case 'Employer Advance': return row.employer_advances;
+      case 'Loan Deduction': return row.loan_deductions;
+      case 'Net Pay': return row.net_income;
+      case 'PAYE': return row.statutory_deductions?.tax;
+      case 'NSSF': return row.statutory_deductions?.nssf;
+      case 'NHIF': return row.statutory_deductions?.nhif;
+      case 'Levy': return row.statutory_deductions?.levy;
+      default: return '';
+    }
+  };
+
+  const handleDownload = () => {
+    if (!currentData) return;
+    
+    try {
+      downloadTransformedData(currentData.extractedData, 'processed_data.xlsx');
+      toast.success('Successfully downloaded processed data');
+    } catch (error) {
+      console.error('Error downloading data:', error);
+      toast.error('Failed to download data');
+    }
+  };
+  
+  const handleDownloadFailedRows = () => {
+    if (!currentData || !currentData.failedRows.length) return;
+    
+    try {
+      const ws = XLSX.utils.json_to_sheet(currentData.failedRows);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "Failed Rows");
+      
+      const timestamp = new Date().toISOString().split('T')[0];
+      XLSX.writeFile(wb, `failed_rows_${timestamp}.xlsx`);
+      
+      toast.success('Successfully downloaded failed rows');
+    } catch (error) {
+      console.error('Error downloading failed rows:', error);
+      toast.error('Failed to download failed rows');
+    }
   };
 
   return (
@@ -775,7 +882,7 @@ const ChatInterface = () => {
                               <Download className="h-3 w-3 mr-1" />
                               Download Processed
                             </Button>
-                            {message.fileData.failedRows.length > 0 && (
+                            {message.fileData?.failedRows?.length > 0 && (
                               <Button 
                                 size="sm" 
                                 variant="outline" 
@@ -845,36 +952,105 @@ const ChatInterface = () => {
         </div>
         
         <div className="p-4 border-t">
-          <div className="flex gap-2">
-            <Input
-              placeholder="Type a message..."
-              value={inputMessage}
-              onChange={(e) => setInputMessage(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()}
-              className="flex-1"
-            />
-            <input
-              type="file"
-              accept=".xlsx,.csv"
-              onChange={handleFileChange}
-              ref={fileInputRef}
-              className="hidden"
-            />
-            <Button 
-              variant="outline" 
-              size="icon" 
-              onClick={handleUploadClick}
-              disabled={isUploading}
-            >
-              <Upload className="h-4 w-4" />
-            </Button>
-            <Button 
-              type="submit" 
-              size="icon"
-              onClick={handleSendMessage}
-            >
-              <Send className="h-4 w-4" />
-            </Button>
+          <div className="flex flex-col gap-2">
+            <div className="flex gap-2">
+              <div className="flex-1 relative">
+                <Input
+                  placeholder="Type a message..."
+                  value={inputMessage}
+                  onChange={(e) => setInputMessage(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      if (searchResults.length === 1) {
+                        // If there's exactly one search result, select it
+                        const employee = searchResults[0];
+                        setMessages(prev => [...prev, {
+                          id: Date.now().toString(),
+                          type: 'employee',
+                          content: chatService.formatEmployeeInfo(employee),
+                          timestamp: new Date(),
+                          employeeData: employee
+                        }]);
+                        setInputMessage('');
+                        setShowSearchPreview(false);
+                      } else {
+                        handleSendMessage();
+                      }
+                    }
+                  }}
+                  className="flex-1"
+                />
+                
+                {/* Search Preview Dropdown */}
+                {showSearchPreview && (
+                  <div className="absolute z-50 w-full mt-1 bg-background rounded-md border shadow-lg">
+                    {isSearching ? (
+                      <div className="p-4 text-center text-muted-foreground">
+                        <span className="animate-spin inline-block mr-2">⌛</span>
+                        Searching...
+                      </div>
+                    ) : searchResults.length > 0 ? (
+                      <ul className="py-1 max-h-64 overflow-y-auto">
+                        {searchResults.map((employee) => (
+                          <li
+                            key={employee.id}
+                            className="px-3 py-2 hover:bg-accent cursor-pointer flex items-center gap-2"
+                            onClick={() => {
+                              setMessages(prev => [...prev, {
+                                id: Date.now().toString(),
+                                type: 'employee',
+                                content: chatService.formatEmployeeInfo(employee),
+                                timestamp: new Date(),
+                                employeeData: employee
+                              }]);
+                              setInputMessage('');
+                              setShowSearchPreview(false);
+                            }}
+                          >
+                            <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
+                              <User className="h-4 w-4 text-primary" />
+                            </div>
+                            <div>
+                              <p className="font-medium">{`${employee.other_names} ${employee.surname}`}</p>
+                              <p className="text-sm text-muted-foreground">
+                                {employee.position} • #{employee.employeeNumber}
+                              </p>
+                            </div>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : debouncedSearchTerm ? (
+                      <div className="p-4 text-center text-muted-foreground">
+                        No employees found
+                      </div>
+                    ) : null}
+                  </div>
+                )}
+              </div>
+              
+              <input
+                type="file"
+                accept=".xlsx,.csv"
+                onChange={handleFileChange}
+                ref={fileInputRef}
+                className="hidden"
+              />
+              <Button 
+                variant="outline" 
+                size="icon" 
+                onClick={handleUploadClick}
+                disabled={isUploading}
+              >
+                <Upload className="h-4 w-4" />
+              </Button>
+              <Button 
+                type="submit" 
+                size="icon"
+                onClick={handleSendMessage}
+              >
+                <Send className="h-4 w-4" />
+              </Button>
+            </div>
           </div>
         </div>
       </div>
@@ -910,64 +1086,69 @@ const ChatInterface = () => {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      {filteredDisplayHeaders.map((header) => (
+                      {TARGET_HEADERS.map((header) => (
                         <TableHead key={header} className="whitespace-nowrap">{header}</TableHead>
                       ))}
-                      <TableHead>Actions</TableHead>
+                      <TableHead>Status</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {currentData.extractedData.map((row) => (
-                      <TableRow key={row.id}>
-                        {filteredDisplayHeaders.map((header) => (
-                          <TableCell key={`${row.id}-${header}`} className="py-2">
-                            {editingCell && editingCell.rowId === row.id && editingCell.column === header ? (
-                              <div className="flex gap-2">
-                                <Input 
-                                  value={editingCell.value} 
-                                  onChange={(e) => setEditingCell({ ...editingCell, value: e.target.value })}
-                                  className="h-8 min-w-[100px]"
-                                />
-                                <Button size="sm" variant="ghost" onClick={handleCellSave} className="h-8 w-8 p-0">
-                                  <CheckCircle className="h-4 w-4" />
-                                </Button>
-                                <Button size="sm" variant="ghost" onClick={handleCellEditCancel} className="h-8 w-8 p-0">
-                                  <X className="h-4 w-4" />
-                                </Button>
-                              </div>
-                            ) : (
-                              <div className="flex items-center justify-between group">
-                                <span className="truncate max-w-[200px]">
-                                  {row[getFieldName(header)] !== undefined && row[getFieldName(header)] !== null ? 
-                                    typeof row[getFieldName(header)] === 'number' ? 
-                                      Number.isInteger(row[getFieldName(header)]) ? 
-                                        row[getFieldName(header)].toString() : 
-                                        row[getFieldName(header)].toFixed(2) 
-                                      : typeof row[getFieldName(header)] === 'boolean' ?
-                                        row[getFieldName(header)] ? 'Yes' : 'No'
-                                        : typeof row[getFieldName(header)] === 'object' ?
-                                          JSON.stringify(row[getFieldName(header)]).substring(0, 50) + (JSON.stringify(row[getFieldName(header)]).length > 50 ? '...' : '')
-                                          : row[getFieldName(header)].toString()
+                      <TableRow key={row.id ?? Math.random()}>
+                        {TARGET_HEADERS.map((header) => {
+                          const fieldName = getFieldName(header);
+                          const cellValue = getRowValue(row, header);
+                          
+                          return (
+                            <TableCell key={`${row.id ?? 'new'}-${header}`} className="py-2">
+                              {editingCell && editingCell.rowId === row.id && editingCell.column === header ? (
+                                <div className="flex gap-2">
+                                  <Input 
+                                    value={editingCell.value} 
+                                    onChange={(e) => setEditingCell({ ...editingCell, value: e.target.value })}
+                                    className="h-8 min-w-[100px]"
+                                  />
+                                  <Button size="sm" variant="ghost" onClick={handleCellSave} className="h-8 w-8 p-0" disabled={!fieldName}>
+                                    <CheckCircle className="h-4 w-4" />
+                                  </Button>
+                                  <Button size="sm" variant="ghost" onClick={handleCellEditCancel} className="h-8 w-8 p-0">
+                                    <X className="h-4 w-4" />
+                                  </Button>
+                                </div>
+                              ) : (
+                                <div className="flex items-center justify-between group">
+                                  <span className="truncate max-w-[200px]">
+                                    {cellValue !== undefined && cellValue !== null ?
+                                      typeof cellValue === 'number' ?
+                                        (header === 'Gross Pay' || header === 'Net Pay' || header === 'PAYE' || header === 'NSSF' || header === 'NHIF' || header === 'Levy' || header === 'Loan Deduction' || header === 'Employer Advance') ?
+                                          formatKESCurrency(cellValue)
+                                          : Number.isInteger(cellValue) ? 
+                                            cellValue.toString() 
+                                            : cellValue.toFixed(2) 
+                                      : typeof cellValue === 'boolean' ?
+                                        cellValue ? 'Yes' : 'No'
+                                      : typeof cellValue === 'object' ?
+                                        JSON.stringify(cellValue).substring(0, 30) + (JSON.stringify(cellValue).length > 30 ? '...' : '') 
+                                      : cellValue.toString()
                                     : ''}
-                                </span>
-                                <Button 
-                                  size="sm"
-                                  variant="ghost"
-                                  onClick={() => handleCellEdit(row.id, header, row[getFieldName(header)] || '')}
-                                  className="opacity-0 group-hover:opacity-100 h-6 w-6 p-0"
-                                >
-                                  <Edit className="h-3 w-3" />
-                                </Button>
-                              </div>
-                            )}
-                          </TableCell>
-                        ))}
+                                  </span>
+                                  {fieldName && (
+                                    <Button 
+                                      size="sm"
+                                      variant="ghost"
+                                      onClick={() => handleCellEdit(row.id!, header, cellValue ?? '')}
+                                      className="opacity-0 group-hover:opacity-100 h-6 w-6 p-0"
+                                    >
+                                      <Edit className="h-3 w-3" />
+                                    </Button>
+                                  )}
+                                </div>
+                              )}
+                            </TableCell>
+                          );
+                        })}
                         <TableCell>
-                          <div className="flex items-center gap-2">
-                            <Badge variant={row.extractionErrors?.length ? 'destructive' : 'outline'}>
-                              {row.extractionErrors?.length ? `${row.extractionErrors.length} issues` : 'Valid'}
-                            </Badge>
-                          </div>
+                          <Badge variant={'outline'}>Valid</Badge>
                         </TableCell>
                       </TableRow>
                     ))}

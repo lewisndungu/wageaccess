@@ -8,7 +8,7 @@ import { Clock, MapPin } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { Employee } from 'server/shared/schema';
+import { Employee } from '@shared/schema';
 
 
 interface ClockInOutProps {

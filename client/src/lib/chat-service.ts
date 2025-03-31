@@ -273,6 +273,25 @@ export const chatService = {
     }
   },
   
+  // New function to explicitly request payroll calculation
+  async requestPayrollCalculation(employeeIds?: string[]): Promise<any> { // Return type might need refinement based on ServerPayrollResponse
+    try {
+      const userId = this.getUserId();
+      const response = await axios.post('/api/chat/calculate-payroll', {
+        employeeIds, // Pass optional employeeIds
+        userId
+      });
+      
+      // The backend now saves a message, so we don't necessarily need to return one here.
+      // We return the raw payroll data for the frontend to handle.
+      return response.data; // This should be ServerPayrollResponse[]
+    } catch (error) {
+      console.error('Error calculating payroll:', error);
+      // Re-throw the error so the calling component can handle it (e.g., show a toast)
+      throw error;
+    }
+  },
+  
   clearHistory(): void {
     localStorage.removeItem(CURRENT_MESSAGE_KEY);
   },

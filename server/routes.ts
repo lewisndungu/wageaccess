@@ -3042,7 +3042,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/chat/calculate-payroll", async (req, res) => {
     try {
+      // employeeIds is now optional in the request body
       const { employeeIds, userId } = req.body;
+      // Pass employeeIds (which might be undefined) to the service
       const result = await chatService.calculatePayroll(employeeIds, userId);
       res.json(result);
     } catch (error) {

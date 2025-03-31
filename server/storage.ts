@@ -150,6 +150,56 @@ export class MemStorage implements IStorage {
     records: Attendance[];
   } | null = null;
 
+  // --- Payroll Calculation Logic (mirrors client/src/lib/payroll-calculator.ts) ---
+  private readonly AHL_RATE = 0.015;
+  private readonly SHIF_RATE = 0.0275;
+  private readonly PERSONAL_RELIEF = 2400;
+  private readonly NSSF_RATE = 0.06;
+  private readonly TAX_BANDS = [
+    { limit: 24_000, rate: 0.1 },
+    { limit: 8_333, rate: 0.25 },
+    { limit: 467_667, rate: 0.3 },
+    { limit: 300_000, rate: 0.325 },
+    { limit: Infinity, rate: 0.35 },
+  ];
+
+  private calculateMockAHL(grossIncome: number): number {
+    return grossIncome * this.AHL_RATE;
+  }
+
+  private calculateMockSHIF(grossIncome: number): number {
+    return grossIncome * this.SHIF_RATE;
+  }
+
+  private calculateMockNSSF(grossIncome: number): number {
+    if (grossIncome <= 0) return 0;
+    if (grossIncome <= 8000) return 480;
+    if (grossIncome <= 72000) return this.NSSF_RATE * grossIncome;
+    return 4320;
+  }
+
+  private calculateMockPAYE(grossIncome: number): number {
+    const ahl = this.calculateMockAHL(grossIncome);
+    const shif = this.calculateMockSHIF(grossIncome);
+    const nssf = this.calculateMockNSSF(grossIncome);
+    const taxableIncome = Math.max(0, grossIncome - (ahl + shif + nssf));
+
+    let remainingIncome = taxableIncome;
+    let totalTax = 0;
+
+    for (const band of this.TAX_BANDS) {
+      if (remainingIncome <= 0) break;
+      const bandTaxable = Math.min(remainingIncome, band.limit);
+      totalTax += bandTaxable * band.rate;
+      remainingIncome -= bandTaxable;
+    }
+
+    const finalPAYE = Math.max(totalTax - this.PERSONAL_RELIEF, 0);
+    return Math.round(finalPAYE);
+  }
+  // --- End Payroll Calculation Logic ---
+
+
   constructor() {
     this.users = new Map();
     this.departments = new Map();
@@ -221,6 +271,18 @@ export class MemStorage implements IStorage {
       const otpCode = generateOtpCode(employee.id);
       await this.createOtpCode(otpCode);
     }
+  }
+
+  flushAllData() {
+    this.users.clear();
+    this.departments.clear();
+    this.employees.clear();
+    this.attendance.clear();
+    this.payroll.clear();
+    this.ewaRequests.clear();
+    this.wallets.clear();
+    this.walletTransactions.clear();
+    this.otpCodes.clear();
   }
 
   // User operations
@@ -1072,22 +1134,7 @@ export class MemStorage implements IStorage {
         (phoneNumber && phoneNumber.includes(query)) // Direct number match for phone
       ) {
         // Format employee data for the result
-        results.push({
-          id: emp.id, // Use employee's main ID
-          name,
-          position,
-          employeeNumber: emp.employeeNumber,
-          salary: emp.hourlyRate, // Map salary from hourlyRate
-          email: email,
-          hireDate: emp.startDate,
-          idNumber,
-          kraPin,
-          nssfNo,
-          nhifNo,
-          status: emp.status,
-          phoneNumber: phoneNumber, // Use extracted phone number
-          profileImage: profileImage,
-        });
+        results.push(emp);
       }
     }
 
@@ -1557,7 +1604,7 @@ export class MemStorage implements IStorage {
   
   /**
    * Helper function to process payroll for a specific period (Optimized)
-   * Extracted to support multi-period payroll generation
+   * Now uses calculation logic mirroring the client-side PayrollCalculator.
    */
   private async processPayrollForPeriod(
     employees: Employee[],
@@ -1569,64 +1616,6 @@ export class MemStorage implements IStorage {
   ): Promise<number> {
     let recordsCreated = 0;
 
-    // --- Define Constants and Helpers Outside Loop ---
-    const AHL_RATE = 0.015;
-    const SHIF_RATE = 0.0275;
-    const PERSONAL_RELIEF = 2400;
-    const NSSF_RATE = 0.06; // Assuming Tier I + Tier II combined rate application
-
-    const TAX_BANDS = [
-      { limit: 24_000, rate: 0.1 },      // Up to 24,000
-      { limit: 8_333, rate: 0.25 },     // 24,001 to 32,333
-      { limit: 467_667, rate: 0.3 },    // 32,334 to 500,000
-      { limit: 300_000, rate: 0.325 },  // 500,001 to 800,000
-      { limit: Infinity, rate: 0.35 }, // Over 800,000
-    ];
-
-    const calculateAffordableHousingLevy = (gp: number): number => gp * AHL_RATE;
-    const calculateSHIF = (gp: number): number => gp * SHIF_RATE;
-    // NSSF Calculation based on Client Logic (adjust tiers/rates if necessary)
-    const calculateNSSF = (gp: number): number => {
-      if (gp <= 0) return 0;
-      // Example Tier 1 NSSF (if applicable, adjust based on exact rules)
-      // const tier1Limit = 7000; // Example limit
-      // const tier1Contribution = Math.min(gp, tier1Limit) * NSSF_RATE;
-
-      // Example Tier 2 NSSF (if applicable)
-      // const tier2Limit = 36000; // Example limit
-      // let tier2Contribution = 0;
-      // if (gp > tier1Limit) {
-      //    tier2Contribution = Math.min(gp - tier1Limit, tier2Limit - tier1Limit) * NSSF_RATE;
-      // }
-
-      // Use client calculator's simpler tiered approach if the above is too complex or inaccurate:
-      // Fallback to the simpler structure from client calc if unsure about exact tiers:
-       if (gp <= 8000) return 480; // Min contribution override? Check client logic source
-       if (gp <= 72000) return NSSF_RATE * gp; // Example calculation up to a limit
-       return 4320; // Example max contribution
-
-      // Or return combined tier1 + tier2 if that's the correct logic:
-      // return Math.round(tier1Contribution + tier2Contribution);
-    };
-
-    const calculatePAYE = (taxableIncome: number): number => {
-      let remainingIncome = Math.max(0, taxableIncome);
-      let totalTax = 0;
-
-      for (const band of TAX_BANDS) {
-        if (remainingIncome <= 0) break;
-        const bandTaxable = Math.min(remainingIncome, band.limit);
-        totalTax += bandTaxable * band.rate;
-        remainingIncome -= bandTaxable;
-      }
-
-      const finalPAYE = Math.max(totalTax - PERSONAL_RELIEF, 0);
-      return Math.round(finalPAYE);
-    };
-    // --- End Define Constants and Helpers ---
-
-    // --- Removed Standard Work Hours Calculation ---
-    // We now calculate based on actual attendance hours per employee.
     const endDate = new Date(periodEnd);
     endDate.setHours(23, 59, 59, 999); // End at the end of the day
     console.log(`Processing payroll period: ${periodStart.toISOString().split('T')[0]} to ${endDate.toISOString().split('T')[0]}`);
@@ -1685,20 +1674,17 @@ export class MemStorage implements IStorage {
         // --- End EWA Deduction Calculation ---
 
 
-        // Calculate deductions using pre-defined functions based on the calculated grossPay
-        const ahlDeduction = calculateAffordableHousingLevy(grossPay);
-        const shifDeduction = calculateSHIF(grossPay);
-        const nssfDeduction = calculateNSSF(grossPay);
-
-        // Taxable income calculation
-        const taxableIncome = grossPay - (ahlDeduction + shifDeduction + nssfDeduction);
-        const payeDeduction = calculatePAYE(taxableIncome);
+        // Calculate deductions using the replicated calculator logic based on the calculated grossPay
+        const ahlDeduction = this.calculateMockAHL(grossPay); // Fix: Use this.calculateMockAHL
+        const shifDeduction = this.calculateMockSHIF(grossPay); // Fix: Use this.calculateMockSHIF
+        const nssfDeduction = this.calculateMockNSSF(grossPay); // Fix: Use this.calculateMockNSSF
+        const payeDeduction = this.calculateMockPAYE(grossPay); // Fix: Use this.calculateMockPAYE
 
         // Total deductions and Net Pay
         const totalStatutory = ahlDeduction + shifDeduction + nssfDeduction + payeDeduction;
-        // Use the calculated ewaDeductions from actual requests
-        // TODO: Incorporate other loan/advance deductions if necessary from employee record
-        const totalDeductions = totalStatutory + ewaDeductions + (employee.loan_deductions || 0) + (employee.employer_advances || 0);
+        // Also include existing loan/advance deductions from the employee record
+        const otherNonStatutoryDeductions = (employee.loan_deductions || 0) + (employee.employer_advances || 0);
+        const totalDeductions = totalStatutory + ewaDeductions + otherNonStatutoryDeductions;
         const netPay = grossPay - totalDeductions;
 
         // Create payroll record using calculated values
@@ -1709,13 +1695,13 @@ export class MemStorage implements IStorage {
           hoursWorked: parseFloat(summedHoursWorked.toFixed(2)), // Use calculated actual hours
           grossPay: parseFloat(grossPay.toFixed(2)), // Use calculated gross pay
           ewaDeductions: parseFloat(ewaDeductions.toFixed(2)), // Store the calculated EWA deduction
-          taxDeductions: parseFloat(payeDeduction.toFixed(2)),
-          otherDeductions: parseFloat((shifDeduction + nssfDeduction + ahlDeduction + (employee.loan_deductions || 0) + (employee.employer_advances || 0)).toFixed(2)), // Group statutory and other non-EWA deductions
+          taxDeductions: parseFloat(payeDeduction.toFixed(2)), // PAYE only
+          otherDeductions: parseFloat((shifDeduction + nssfDeduction + ahlDeduction + otherNonStatutoryDeductions).toFixed(2)), // Group statutory (non-PAYE) and other deductions
           netPay: parseFloat(netPay.toFixed(2)),
           status: 'processed',
           processedAt: new Date(),
-          processedBy: faker.string.uuid(), // Use faker for mock data generation context
-          referenceNumber: faker.string.uuid() // Use faker for mock data generation context
+          processedBy: faker.string.uuid(),
+          referenceNumber: faker.string.uuid()
         };
 
         await this.createPayroll(payroll);
@@ -1723,29 +1709,23 @@ export class MemStorage implements IStorage {
 
         // Update employee's derived financial values based on calculated results for this period
         const maxAdvanceLimit = Math.max(0, Math.floor(netPay * 0.5));
-        // Update available limit considering the EWA deductions for this period
         const availableAdvanceLimit = Math.max(0, maxAdvanceLimit - ewaDeductions);
 
         await this.updateEmployee(employee.id, {
-          // We don't update gross_income or net_income here, as they are calculated per period.
-          // Store the LATEST calculated deduction breakdown
+          // Update total deductions based on this run
           total_deductions: parseFloat(totalDeductions.toFixed(2)),
+          // Update statutory breakdown based on this run
           statutory_deductions: {
-            nhif: parseFloat(shifDeduction.toFixed(2)), // Use SHIF
+            nhif: parseFloat(shifDeduction.toFixed(2)),
             nssf: parseFloat(nssfDeduction.toFixed(2)),
             tax: parseFloat(payeDeduction.toFixed(2)),
-            levy: parseFloat(ahlDeduction.toFixed(2)) // Use AHL
+            levy: parseFloat(ahlDeduction.toFixed(2))
           },
           // Update EWA limits based on this payroll run's net pay
           max_salary_advance_limit: maxAdvanceLimit,
           available_salary_advance_limit: availableAdvanceLimit,
-          // We might want to keep loan_deductions and employer_advances as they are,
-          // unless the payroll process explicitly clears them. For mock data, let's assume they persist
-          // or are managed elsewhere.
+          // Keep loan_deductions/employer_advances as they are (assuming external management)
         });
-
-        // Optional: Keep minimal logging inside the loop if needed
-        // console.log(`Created payroll record for employee ${employee.id}: ${grossPay.toFixed(2)} KES gross, ${netPay.toFixed(2)} KES net (calculated based on ${summedHoursWorked.toFixed(2)} hours)`);
 
       } catch (error: any) {
         console.error(`Error processing payroll for employee ${employee.id}: ${error.message}`);
@@ -1758,167 +1738,143 @@ export class MemStorage implements IStorage {
   }
 
   /**
-   * Generates mock EWA (Earned Wage Access) requests for employees
-   * @param requestsPerEmployee Number of requests to generate per employee (default 0-2)
+   * Generates mock EWA requests for all employees
+   * @param maxRequestsPerEmployee Maximum number of requests per employee (default 2)
    * @returns Number of EWA requests created
    */
-  async generateMockEwaRequestsForEmployees(requestsPerEmployee: number = 2): Promise<number> {
+  async generateMockEwaRequestsForEmployees(maxRequestsPerEmployee: number = 2): Promise<number> {
     const employees = await this.getAllActiveEmployees();
     console.log(`Generating mock EWA requests for ${employees.length} active employees`);
-    
-    let recordsCreated = 0;
-    const today = new Date();
-    // Keep track of employees who already got a pending request in this run
-    const employeesWithPendingRequest = new Set<string>(); 
-    
-    // Reasons for EWA requests
-    const ewaReasons = [
-      'Medical emergency',
-      'School fees payment',
-      'Rent payment',
-      'Family emergency',
-      'Utility bills',
-      'Home repair',
-      'Transportation costs',
-      'Debt repayment',
-      'Child care expenses',
-      'Unexpected travel'
-    ];
-    
-    // Status options with weighted probabilities
-    const statusOptions = [
-      { status: 'pending', weight: 0.3 },
-      { status: 'approved', weight: 0.4 },
-      { status: 'disbursed', weight: 0.2 },
-      { status: 'rejected', weight: 0.1 }
-    ];
-    
-    // Helper function for weighted random selection
-    const getWeightedRandomStatus = (): string => {
-      const totalWeight = statusOptions.reduce((sum, option) => sum + option.weight, 0);
-      let random = Math.random() * totalWeight;
-      
-      for (const option of statusOptions) {
-        random -= option.weight;
-        if (random <= 0) {
-          return option.status;
-        }
-      }
-      
-      return 'pending'; // Fallback
-    };
-    
-    // Generate random dates for the past 30 days
-    const getRandomPastDate = (maxDaysAgo: number = 30): Date => {
-      const daysAgo = faker.number.int({ min: 0, max: maxDaysAgo });
-      const result = new Date(today);
-      result.setDate(result.getDate() - daysAgo);
-      return result;
-    };
-    
+
+    let requestsCreated = 0;
+
     for (const employee of employees) {
-      try {
-        // Get the latest payroll for this employee
-        const payrolls = await this.getPayrollForEmployee(employee.id);
-        const latestPayroll = payrolls.sort((a, b) => 
-          new Date(b.periodEnd).getTime() - new Date(a.periodEnd).getTime()
-        )[0];
-        
-        // Skip if no payroll exists
-        if (!latestPayroll) {
-          console.log(`No payroll found for employee ${employee.id}, skipping EWA generation`);
-          continue;
+      // Skip inactive employees
+      if (!employee.active) continue;
+
+      // Determine the number of requests for this employee (0-2)
+      const numRequests = faker.number.int({ min: 0, max: maxRequestsPerEmployee });
+
+      // Helper to check for pending requests
+      const hasPendingRequest = async (empId: string) => {
+        const pending = await this.getPendingEwaRequests();
+        return pending.some(req => req.employeeId === empId);
+      };
+
+      // Helper to get the latest payroll record
+      const getLatestPayroll = async (empId: string): Promise<Payroll | null> => {
+        const payrolls = await this.getPayrollForEmployee(empId); // Already sorted by date desc
+        return payrolls.length > 0 ? payrolls[0] : null;
+      };
+
+      for (let i = 0; i < numRequests; i++) {
+        // Ensure only one 'pending' request per employee per run
+        if (i === 0 && await hasPendingRequest(employee.id)) {
+          console.log(`Employee ${employee.id} already has a pending request, skipping additional requests`);
+          break;
         }
-        
-        // Get available EWA limit for this employee
-        const availableLimit = employee.available_salary_advance_limit || 
-                              (latestPayroll.netPay * 0.5); // Default to 50% of net pay
-        
-        // Random number of requests for this employee (0 to requestsPerEmployee)
-        const numRequests = faker.number.int({ min: 0, max: requestsPerEmployee });
-        
-        for (let i = 0; i < numRequests; i++) {
-          // Generate random amount (10% to 80% of available limit)
-          const amount = faker.number.float({ 
-            min: Math.min(1000, availableLimit * 0.1), 
-            max: availableLimit * 0.8 
-          });
-          
-          // Processing fee (1-3% of amount)
-          const processingFee = amount * faker.number.float({ min: 0.01, max: 0.03 });
-          
-          // Random status with weighted probabilities
-          let status = getWeightedRandomStatus(); // Use let to allow modification
-          
-          // Ensure only one pending request per employee in this run
-          if (status === 'pending') {
-            if (employeesWithPendingRequest.has(employee.id)) {
-              // Already has a pending request, change this one to approved
-              status = 'approved'; 
-            } else {
-              // First pending request for this employee, track it
-              employeesWithPendingRequest.add(employee.id);
-            }
-          }
-          
-          // Request date (within last 30 days)
-          const requestDate = getRandomPastDate();
-          
-          // Basic EWA request
-          const ewaRequest: InsertEwaRequest = {
-            employeeId: employee.id,
-            amount: parseFloat(amount.toFixed(2)),
-            status,
-            requestDate,
-            processingFee: parseFloat(processingFee.toFixed(2)),
-            reason: faker.helpers.arrayElement(ewaReasons)
-          };
-          
-          // Add approval details if approved or disbursed
-          if (status === 'approved' || status === 'disbursed') {
-            const approvalDate = new Date(requestDate);
-            approvalDate.setHours(approvalDate.getHours() + faker.number.int({ min: 1, max: 24 }));
-            
-            ewaRequest.approvedAt = approvalDate;
-            ewaRequest.approvedBy = faker.string.uuid(); // Mock approver ID
-          }
-          
-          // Add disbursement date if disbursed
-          if (status === 'disbursed') {
-            const disbursedDate = new Date(ewaRequest.approvedAt || requestDate);
-            disbursedDate.setHours(disbursedDate.getHours() + faker.number.int({ min: 1, max: 12 }));
-            
-            ewaRequest.disbursedAt = disbursedDate;
-          }
-          
-          // Add rejection reason if rejected
-          if (status === 'rejected') {
-            ewaRequest.rejectionReason = faker.helpers.arrayElement([
+
+        // Base request amount on available salary advance limit or fallback to 50% of latest payroll's net pay
+        // Fix 2: Use helper function to get latest payroll
+        const latestPayroll = await getLatestPayroll(employee.id);
+        // Fix 1 (Line 1871): Ensure maxRequestable is explicitly a number
+        const availableLimit = employee.available_salary_advance_limit ?? 0;
+        const fallbackLimit = latestPayroll ? Number(latestPayroll.netPay) * 0.5 : 0; // Explicit Number()
+        const potentialMax = availableLimit > 0 ? availableLimit : fallbackLimit;
+        const maxRequestable = Math.max(0, Number(potentialMax)); // Explicit Number()
+
+        if (maxRequestable <= 0) {
+            console.log(`Employee ${employee.id} has no available EWA limit (Max: ${maxRequestable}), skipping EWA generation.`);
+            continue;
+        }
+
+        // Ensure min/max for faker are numbers
+        const reqMin = Math.min(500, maxRequestable * 0.1);
+        const reqMax = maxRequestable * 0.8;
+        // Ensure max >= min before passing to faker
+        const finalReqMax = Math.max(reqMin, reqMax);
+        // Explicitly cast inputs to Number for faker
+        const requestAmount = faker.number.float({ min: Number(reqMin), max: Number(finalReqMax) });
+
+        // Distribute statuses with weights
+        const status = faker.helpers.weightedArrayElement([
+          { weight: 3, value: 'pending' },
+          { weight: 4, value: 'approved' }, // Increased approved/disbursed slightly
+          { weight: 2, value: 'disbursed' },
+          { weight: 1, value: 'rejected' }
+        ]);
+
+        // Add relevant timestamps and reasons based on status
+        const requestDate = faker.date.recent({ days: 30 }); // More recent requests
+        let approvedAt: Date | undefined = undefined;
+        let disbursedAt: Date | undefined = undefined;
+        let rejectionReason: string | undefined = undefined;
+
+        if (status === 'approved' || status === 'disbursed') {
+          approvedAt = faker.date.soon({ days: 2, refDate: requestDate });
+        }
+        if (status === 'disbursed') {
+          // Ensure approvedAt is set if disbursing
+          if (!approvedAt) approvedAt = faker.date.soon({ days: 1, refDate: requestDate });
+          disbursedAt = faker.date.soon({ days: 1, refDate: approvedAt });
+        }
+        if (status === 'rejected') {
+           rejectionReason = faker.helpers.arrayElement([
               'Insufficient salary balance',
               'Previous request pending',
               'Maximum withdrawal limit reached',
               'Account verification required',
               'Company policy restriction'
             ]);
-          }
-          
-          await this.createEwaRequest(ewaRequest);
-          recordsCreated++;
-          
-          console.log(`Created EWA request for employee ${employee.id}: ${amount.toFixed(2)} KES (${status})`);
         }
-      } catch (error: any) {
-        console.error(`Error creating EWA requests for employee ${employee.id}: ${error.message}`);
+
+        const ewaRequest: InsertEwaRequest = {
+          employeeId: employee.id,
+          status,
+          amount: parseFloat(requestAmount.toFixed(2)),
+          processingFee: 0, // Assuming 0 fee for mock data simplicity
+          requestDate,
+          approvedAt,
+          disbursedAt,
+          reason: faker.helpers.arrayElement([
+            'Medical emergency',
+            'School fees payment',
+            'Rent payment',
+            'Family emergency',
+            'Utility bills'
+          ]),
+          rejectionReason,
+        };
+
+        const newEwaRequest = await this.createEwaRequest(ewaRequest);
+        requestsCreated++;
+
+        // Update employee's available salary advance limit based on the request amount IF disbursed
+        // This reflects the limit decreasing upon successful withdrawal
+        if (status === 'disbursed') {
+          const currentAvailable = employee.available_salary_advance_limit ?? fallbackLimit; // Use fallback if undefined
+          const updatedEmployee: Partial<Employee> = {
+            available_salary_advance_limit: Math.max(0, currentAvailable - requestAmount),
+            last_withdrawal_time: disbursedAt, // Record last withdrawal time
+          };
+          await this.updateEmployee(employee.id, updatedEmployee);
+          // Update the local employee object to reflect change for subsequent requests in loop
+          employee.available_salary_advance_limit = updatedEmployee.available_salary_advance_limit ?? fallbackLimit;
+          employee.last_withdrawal_time = updatedEmployee.last_withdrawal_time;
+        }
       }
     }
-    
-    console.log(`Successfully created ${recordsCreated} EWA requests`);
-    return recordsCreated;
+
+    console.log(`Successfully created ${requestsCreated} EWA requests`);
+    return requestsCreated;
   }
 
   /**
-   * Generate comprehensive mock data for all employees
+   * Generates all mock data for employees (attendance, payroll, EWA, wallet transactions)
    * @param days Number of days to generate attendance for (default 30)
+   * @param periodStart Start date for the payroll period (default first day of current month)
+   * @param periodEnd End date for the payroll period (default today)
+   * @param maxRequestsPerEmployee Maximum number of EWA requests per employee (default 2)
    * @returns Summary of records created
    */
   async generateAllMockDataForEmployees(days: number = 30): Promise<{
@@ -1929,211 +1885,279 @@ export class MemStorage implements IStorage {
     walletTransactions: number;
   }> {
     console.log(`Starting comprehensive mock data generation for imported employees...`);
-    
+
     // Generate attendance data first
     const attendanceRecords = await this.generateMockAttendanceForEmployees(days);
     console.log(`Step 1/5 completed: ${attendanceRecords} attendance records generated`);
-    
+
     // Generate today's records with employees not clocked in yet
-    const todayRecords = await this.generateTodayAttendanceRecords();
-    console.log(`Step 2/5 completed: ${todayRecords} attendance records for today generated`);
-    
-    // Generate payroll based on the attendance data
-    // Use a period from 30 days ago to today for payroll calculation
+    // Fix 2 (Line 1899): Remove duplicate call
+    // const todayRecords = await this.generateTodayAttendanceRecords();
+    // console.log(`Step 2/5 completed: ${todayRecords} attendance records for today generated`);
+    // Note: todayRecords is generated later now, adjust step numbering if needed or remove variable if unused.
+
+    // --- REORDERED: Generate EWA requests BEFORE payroll ---
+    // This allows payroll to correctly calculate deductions based on EWA disbursed in the period.
+    const ewaRequests = await this.generateMockEwaRequestsForEmployees(2);
+    console.log(`Step 3/5 completed: ${ewaRequests} EWA requests generated`);
+
+    // --- Generate payroll based on the attendance data ---
+    // Payroll period will encompass the generated attendance/EWA dates.
     const periodStart = new Date();
     periodStart.setDate(periodStart.getDate() - days);
-    const periodEnd = new Date();
-    
-    const payrollRecords = await this.generateMockPayrollForEmployees(periodStart, periodEnd);
-    console.log(`Step 3/5 completed: ${payrollRecords} payroll records generated`);
-    
-    // Generate EWA requests
-    const ewaRequests = await this.generateMockEwaRequestsForEmployees(2);
-    console.log(`Step 4/5 completed: ${ewaRequests} EWA requests generated`);
+    periodStart.setHours(0, 0, 0, 0);
+    const periodEnd = new Date(); // Use today as end date
+    periodEnd.setHours(23, 59, 59, 999);
 
-    // Generate wallet and transactions
+    const payrollRecords = await this.generateMockPayrollForEmployees(periodStart, periodEnd);
+    console.log(`Step 4/5 completed: ${payrollRecords} payroll records generated`);
+
+    // --- Generate wallet and transactions ---
     // Create initial wallet if it doesn't exist
     let wallet = await this.getWallet();
     if (!wallet) {
+      console.error("Wallet not found, creating default wallet for transaction generation.");
       wallet = await this.createWallet({
-        employerBalance: 1000000, // 1M KES initial balance
-        jahaziiBalance: 0,       // Start with 0 used credit
-        perEmployeeCap: 50000,   // 50K KES per employee (employer funds only)
+        employerBalance: 1000000, // Default initial balance
+        jahaziiBalance: 0,
+        perEmployeeCap: 50000,
         updatedAt: new Date()
       });
-    }
-
-    // Generate wallet transactions based on EWA requests and random top-ups
-    const transactions: InsertWalletTransaction[] = [];
-    
-    // Add transactions for each EWA request
-    const allEwaRequests = await this.getDisbursedEwaRequests();
-    for (const request of allEwaRequests) {
-      const useJahaziiCredit = request.amount > wallet.perEmployeeCap || 
-        Math.random() > 0.7; // 30% chance to use Jahazii credit even for smaller amounts
-
-      transactions.push({
-        walletId: wallet.id,
-        amount: -request.amount, // Negative amount for disbursements
-        transactionType: useJahaziiCredit ? 'jahazii_disbursement' : 'employer_disbursement',
-        description: `EWA disbursement for ${request.employee?.other_names} ${request.employee?.surname}${
-          useJahaziiCredit ? ' (via Jahazii Credit)' : ''
-        }`,
-        transactionDate: request.disbursedAt || new Date(),
-        referenceId: `EWA-${request.id}`,
-        fundingSource: useJahaziiCredit ? 'jahazii' : 'employer',
-        status: 'completed',
-        employeeId: request.employeeId,
-        ewaRequestId: request.id
-      });
-
-      // If using Jahazii credit, add a processing fee transaction
-      if (useJahaziiCredit) {
-        const processingFee = Math.round(request.amount * 0.02); // 2% processing fee
-        transactions.push({
-          walletId: wallet.id,
-          amount: -processingFee,
-          transactionType: 'jahazii_fee',
-          description: `Processing fee for EWA disbursement (${request.employee?.other_names} ${request.employee?.surname})`,
-          transactionDate: request.disbursedAt || new Date(),
-          referenceId: `FEE-${request.id}`,
-          fundingSource: 'jahazii',
-          status: 'completed',
-          employeeId: request.employeeId,
-          ewaRequestId: request.id
-        });
+      if (!wallet) {
+        console.error("Failed to create wallet, cannot generate transactions.");
+        throw new Error("Failed to create wallet, cannot generate transactions.");
       }
     }
 
-    // Add some random top-ups (only for employer funds)
-    const numTopUps = faker.number.int({ min: 3, max: 8 });
-    for (let i = 0; i < numTopUps; i++) {
-      const amount = faker.number.int({ 
-        min: 100000,  // 100K
-        max: 1000000  // 1M
-      });
-      
-      transactions.push({
+    const transactions: InsertWalletTransaction[] = [];
+
+    // Fetch disbursed EWA requests
+    const disbursedEwaRequests = await this.getDisbursedEwaRequests();
+    console.log(`Found ${disbursedEwaRequests.length} disbursed EWA requests to create transactions for.`);
+
+    // Create disbursement transactions for each disbursed EWA request
+    for (const ewaRequest of disbursedEwaRequests) {
+      const employee = await this.getEmployee(ewaRequest.employeeId);
+      if (!employee) {
+          console.warn(`Employee ${ewaRequest.employeeId} not found for EWA request ${ewaRequest.id}, skipping transaction.`);
+          continue;
+      }
+
+      // Determine funding source based on request amount and employer balance/cap
+      // Using weightedArrayElement correctly: pass an array of objects with weight and value
+      const useJahaziiCredit = ewaRequest.amount > wallet.perEmployeeCap ||
+        faker.helpers.weightedArrayElement([
+          { weight: 70, value: false }, // 70% chance to use employer funds (if available)
+          { weight: 30, value: true }   // 30% chance to use Jahazii credit
+        ]);
+
+      const fundingSource: 'employer' | 'jahazii' = useJahaziiCredit ? 'jahazii' : 'employer';
+      const transactionType = useJahaziiCredit ? 'jahazii_disbursement' : 'employer_disbursement';
+
+      const transaction: InsertWalletTransaction = {
         walletId: wallet.id,
-        amount: amount,
-        transactionType: 'employer_topup',
-        description: `Employer wallet top-up via ${faker.helpers.arrayElement(['bank transfer', 'M-Pesa', 'card'])}`,
-        transactionDate: faker.date.recent({ days: days }),
-        referenceId: `TOP-${faker.string.alphanumeric(8).toUpperCase()}`,
-        fundingSource: 'employer',
-        status: 'completed'
-      });
+        employeeId: employee.id,
+        ewaRequestId: ewaRequest.id,
+        transactionType: transactionType, // Use correct type
+        description: `EWA Disbursement for ${employee.other_names} ${employee.surname}${useJahaziiCredit ? ' (Jahazii)' : ''}`,
+        amount: -ewaRequest.amount, // Negative for disbursement
+        fundingSource: fundingSource,
+        status: 'completed',
+        transactionDate: ewaRequest.disbursedAt || new Date(), // Use disbursement date
+        referenceId: `EWA-${ewaRequest.id}`,
+      };
+
+      transactions.push(transaction);
+
+      // Add Jahazii fee transaction if applicable
+      if (fundingSource === 'jahazii') {
+          const processingFee = Math.round(ewaRequest.amount * 0.02); // Example 2% fee
+          const feeTransaction: InsertWalletTransaction = {
+            walletId: wallet.id,
+            employeeId: employee.id,
+            ewaRequestId: ewaRequest.id,
+            transactionType: 'jahazii_fee',
+            description: `Processing Fee for EWA-${ewaRequest.id}`,
+            amount: -processingFee, // Negative for fee
+            fundingSource: 'jahazii',
+            status: 'completed',
+            transactionDate: ewaRequest.disbursedAt || new Date(),
+            referenceId: `FEE-${ewaRequest.id}`,
+          };
+          transactions.push(feeTransaction);
+      }
     }
 
-    // Calculate total used Jahazii credit (sum of all Jahazii disbursements and fees)
-    const totalJahaziiUsed = transactions
-      .filter(t => t.fundingSource === 'jahazii')
-      .reduce((sum, t) => sum + Math.abs(t.amount || 0), 0);
+    // Add random employer top-ups
+    const topUpCount = faker.number.int({ min: 3, max: 8 });
+    for (let i = 0; i < topUpCount; i++) {
+      const topUpAmount = faker.number.int({ min: 50000, max: 500000 });
+      const topUpDate = faker.date.recent({ days: 30});
 
-    // Update wallet balances
-    const totalEmployerTopUps = transactions
-      .filter(t => t.transactionType === 'employer_topup')
-      .reduce((sum, t) => sum + (t.amount || 0), 0);
-    
-    const totalEmployerDisbursements = transactions
-      .filter(t => t.transactionType === 'employer_disbursement')
-      .reduce((sum, t) => sum + (t.amount || 0), 0);
+      const transaction: InsertWalletTransaction = {
+        walletId: wallet.id,
+        transactionType: 'employer_topup',
+        description: `Employer Top-up via ${faker.helpers.arrayElement(['Bank Transfer', 'M-Pesa', 'Card'])}`,
+        amount: topUpAmount,
+        fundingSource: 'employer',
+        status: 'completed',
+        transactionDate: topUpDate,
+        referenceId: `TOPUP-${faker.string.alphanumeric(6).toUpperCase()}`,
+      };
 
-    await this.updateWallet(wallet.id, {
-      employerBalance: wallet.employerBalance + totalEmployerTopUps + totalEmployerDisbursements,
-      jahaziiBalance: totalJahaziiUsed,
-      updatedAt: new Date()
-    });
+      transactions.push(transaction);
+    }
+
+    // Persist all created transactions
+    for (const txn of transactions) {
+        await this.createWalletTransaction(txn);
+    }
+
+    // NOTE: Wallet balance update is now handled in generateAllMockDataForEmployees AFTER all generation steps
+    // This ensures the final balance reflects all created transactions.
 
     console.log(`Step 5/5 completed: ${transactions.length} wallet transactions generated`);
     console.log(`Mock data generation completed successfully!`);
-    
+
     return {
       attendanceRecords,
       payrollRecords,
       ewaRequests,
-      todayRecords,
+      todayRecords: 0, // todayRecords is generated later now, adjust step numbering if needed or remove variable if unused.
       walletTransactions: transactions.length
     };
   }
 
   /**
-   * Generate attendance records for today with all employees showing as not clocked in yet
-   * @returns Number of attendance records created for today
+   * Generates mock wallet transactions based on EWA requests and random top-ups
+   * @returns Number of wallet transactions created
    */
-  async generateTodayAttendanceRecords(): Promise<number> {
-    const employees = await this.getAllActiveEmployees();
-    console.log(`Generating today's attendance records for ${employees.length} employees (not clocked in yet)`);
-    
-    const today = new Date();
-    let recordsCreated = 0;
-    
-    // First remove any existing attendance records for today to avoid duplicates
-    const existingRecords = await this.getAttendanceForDate(today);
-    for (const record of existingRecords) {
-      try {
-        await this.deleteAttendance(record.id);
-        console.log(`Deleted existing attendance record for today: ${record.id}`);
-      } catch (error) {
-        console.error(`Failed to delete existing attendance record: ${error}`);
-      }
-    }
-    
-    // Create new records for each active employee
-    for (const employee of employees) {
-      try {
-        const attendance: InsertAttendance = {
-          employeeId: employee.id,
-          date: new Date(today),
-          clockInTime: undefined, // Not clocked in yet
-          clockOutTime: undefined, // Not clocked out yet
-          status: 'pending', // Status is pending until they clock in
-          hoursWorked: 0,
-          geoLocation: {},
-          notes: undefined
-        };
-        
-        await this.createAttendance(attendance);
-        recordsCreated++;
-      } catch (error: any) {
-        console.error(`Error creating today's attendance for employee ${employee.id}: ${error.message}`);
-      }
-    }
-    
-    console.log(`Successfully created ${recordsCreated} attendance records for today (not clocked in yet)`);
-    return recordsCreated;
-  }
+  async generateMockWalletTransactionsForEmployees(): Promise<number> {
+    console.log(`Generating mock wallet transactions...`);
+    let transactionsCreated = 0;
 
-  async getEmployees(employeeIds: string[]): Promise<Employee[]> {
-    const result: Employee[] = []; // Store full Employee objects
+    // Get the wallet or create if needed (should exist after main generation)
+    // Fix 3 (Line 1923): Ensure wallet is declared with let
+    let wallet: Wallet | undefined = await this.getWallet(); // Explicitly type
 
-    for (const id of employeeIds) {
-      try {
-        const employee = await this.getEmployee(id); // Fetches the full Employee object
-        if (!employee) {
-          console.warn(`Employee with ID ${id} not found.`);
+    if (!wallet) {
+      console.log("Wallet not found, creating default wallet for transaction generation.");
+       // Fix 2 (Line 1929): Use intermediate variable and assign back
+       const createdWallet = await this.createWallet({
+        employerBalance: 1000000, // Default initial balance
+        jahaziiBalance: 0,
+        perEmployeeCap: 50000,
+        updatedAt: new Date()
+      });
+       if (createdWallet) {
+           wallet = createdWallet; // Assign to outer 'let wallet'
+       } else {
+           console.error("Failed to create wallet after attempting.");
+       }
+    }
+
+    // Add null check after attempting to get/create wallet
+    if (!wallet) {
+        console.error("Failed to get or create wallet, cannot generate transactions.");
+        return 0; // Exit if wallet is still not available
+    }
+
+    const transactions: InsertWalletTransaction[] = [];
+
+    // Fetch disbursed EWA requests
+    const disbursedEwaRequests = await this.getDisbursedEwaRequests();
+    console.log(`Found ${disbursedEwaRequests.length} disbursed EWA requests to create transactions for.`);
+
+    // Create disbursement transactions for each disbursed EWA request
+    for (const ewaRequest of disbursedEwaRequests) {
+      const employee = await this.getEmployee(ewaRequest.employeeId);
+      if (!employee) {
+          console.warn(`Employee ${ewaRequest.employeeId} not found for EWA request ${ewaRequest.id}, skipping transaction.`);
           continue;
-        }
+      }
 
-        result.push(employee); // Add the full employee object (potentially with department)
-      } catch (error: any) {
-        console.error(`Error getting employee ${id}: ${error.message}`, error);
+      // Determine funding source based on request amount and employer balance/cap
+      // Using weightedArrayElement correctly: pass an array of objects with weight and value
+      // Fix 3: Correct usage of weightedArrayElement
+      // Fix 4 (Line 2078): Remove incorrect .value access
+      const useJahaziiCredit: boolean = ewaRequest.amount > wallet.perEmployeeCap ||
+        faker.helpers.weightedArrayElement([
+          { weight: 70, value: false }, // 70% chance to use employer funds (if available)
+          { weight: 30, value: true }   // 30% chance to use Jahazii credit
+        ]); // Remove .value
+
+      // Fix 5: Explicitly type fundingSource
+      const fundingSource: 'employer' | 'jahazii' = useJahaziiCredit ? 'jahazii' : 'employer';
+      // Determine correct transactionType based on fundingSource
+      const transactionType: 'employer_disbursement' | 'jahazii_disbursement' = useJahaziiCredit ? 'jahazii_disbursement' : 'employer_disbursement';
+
+      const transaction: InsertWalletTransaction = {
+        walletId: wallet.id,
+        employeeId: employee.id,
+        ewaRequestId: ewaRequest.id,
+        transactionType: transactionType, // Use correct type variable
+        description: `EWA Disbursement for ${employee.other_names} ${employee.surname}${useJahaziiCredit ? ' (Jahazii)' : ''}`,
+        amount: -ewaRequest.amount, // Negative for disbursement
+        fundingSource: fundingSource, // Use correct fundingSource variable
+        status: 'completed',
+        transactionDate: ewaRequest.disbursedAt || new Date(), // Use disbursement date
+        referenceId: `EWA-${ewaRequest.id}`,
+      };
+
+      transactions.push(transaction);
+      transactionsCreated++;
+
+      // Add Jahazii fee transaction if applicable
+      if (fundingSource === 'jahazii') {
+          const processingFee = Math.round(ewaRequest.amount * 0.02); // Example 2% fee
+          const feeTransaction: InsertWalletTransaction = {
+            walletId: wallet.id,
+            employeeId: employee.id,
+            ewaRequestId: ewaRequest.id,
+            transactionType: 'jahazii_fee',
+            description: `Processing Fee for EWA-${ewaRequest.id}`,
+            amount: -processingFee, // Negative for fee
+            fundingSource: 'jahazii',
+            status: 'completed',
+            transactionDate: ewaRequest.disbursedAt || new Date(),
+            referenceId: `FEE-${ewaRequest.id}`,
+          };
+          transactions.push(feeTransaction);
+          transactionsCreated++;
       }
     }
 
-    return result;
-  }
+    // Add random employer top-ups
+    const topUpCount = faker.number.int({ min: 3, max: 8 });
+    for (let i = 0; i < topUpCount; i++) {
+      const topUpAmount = faker.number.int({ min: 50000, max: 500000 });
+      const topUpDate = faker.date.recent({ days: 30});
 
-  async flushAllData(): Promise<void> {
-    this.users.clear();
-    this.departments.clear();
-    this.employees.clear();
-    this.attendance.clear();
-    this.payroll.clear();
-    this.ewaRequests.clear();
-    this.wallets.clear();
-    this.walletTransactions.clear();
-    this.otpCodes.clear();
+      const transaction: InsertWalletTransaction = {
+        walletId: wallet.id,
+        transactionType: 'employer_topup',
+        description: `Employer Top-up via ${faker.helpers.arrayElement(['Bank Transfer', 'M-Pesa', 'Card'])}`,
+        amount: topUpAmount,
+        fundingSource: 'employer',
+        status: 'completed',
+        transactionDate: topUpDate,
+        referenceId: `TOPUP-${faker.string.alphanumeric(6).toUpperCase()}`,
+      };
+
+      transactions.push(transaction);
+      transactionsCreated++;
+    }
+
+    // Persist all created transactions
+    for (const txn of transactions) {
+        await this.createWalletTransaction(txn);
+    }
+
+    // NOTE: Wallet balance update is now handled in generateAllMockDataForEmployees AFTER all generation steps
+    // This ensures the final balance reflects all created transactions.
+
+    console.log(`Generated ${transactionsCreated} wallet transaction records.`);
+    return transactionsCreated;
   }
 }
 

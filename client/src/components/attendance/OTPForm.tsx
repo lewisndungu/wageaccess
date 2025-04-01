@@ -143,11 +143,6 @@ export function OTPForm({ onSuccess }: OTPFormProps) {
       queryClient.invalidateQueries({ queryKey: ['/api/attendance'] });
       queryClient.invalidateQueries({ queryKey: ['/api/attendance/recent-events'] });
       queryClient.invalidateQueries({ queryKey: ['/api/statistics/dashboard'] });
-      
-      // Force a page reload after a small delay
-      setTimeout(() => {
-        window.location.reload();
-      }, 1500);
     },
     onError: (error) => {
       const errorMessage = error instanceof Error ? error.message : "Failed to verify OTP";

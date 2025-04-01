@@ -247,7 +247,7 @@ export function generateEmployees(users: User[], departments: Department[]): Ins
       },
 
       // Employee specific fields
-      employeeNumber: `EMP-${faker.string.numeric(4)}`,
+      employeeNumber: faker.string.numeric(4),
       position: employeeData.position,
       status: "active",
       is_on_probation: faker.datatype.boolean(0.2), // 20% chance on probation
@@ -412,19 +412,34 @@ export function generateWalletTransactions(wallet: Wallet): InsertWalletTransact
   const transactions: InsertWalletTransaction[] = [];
   
   for (let i = 0; i < 10; i++) {
-    const amount = faker.number.float({ min: 1000, max: 100000 });
-    const transactionType = faker.helpers.arrayElement(['deposit', 'withdrawal', 'transfer']);
+    // Use valid transaction types from the schema
+    const transactionType = faker.helpers.arrayElement([
+      'employer_topup', 
+      'employer_disbursement', 
+      'jahazii_topup', 
+      'jahazii_disbursement', 
+      'jahazii_fee', 
+      'transfer_out'
+    ]);
+    
+    // Determine amount based on type (positive for topup, negative otherwise)
+    const amount = transactionType.includes('topup') 
+      ? faker.number.float({ min: 50000, max: 500000 }) // Larger amounts for topups
+      : -faker.number.float({ min: 1000, max: wallet.perEmployeeCap || 50000 }); // Negative for disbursements/fees/transfers
+
+    // Use valid funding sources from the schema
+    const fundingSource = faker.helpers.arrayElement(['employer', 'jahazii']);
     
     transactions.push({
       id: faker.string.uuid(),
       walletId: wallet.id,
       amount,
-      transactionType,
-      fundingSource: faker.helpers.arrayElement(['bank', 'mpesa', 'card']),
-      status: 'completed',
-      description: `${transactionType} via ${faker.helpers.arrayElement(['bank', 'mpesa', 'card'])}`,
+      transactionType, // Use the valid type
+      fundingSource: fundingSource, // Use the valid source
+      status: 'completed', // Keep status as completed for simplicity
+      description: `${transactionType.replace('_',' ')} via ${fundingSource}`, // Updated description
       referenceId: faker.string.uuid(),
-      transactionDate: new Date()
+      transactionDate: faker.date.recent({ days: 30 }) // More recent dates
     });
   }
   

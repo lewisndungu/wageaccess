@@ -45,7 +45,6 @@ export default function WalletPage() {
       const response = await axios.get('/api/wallet/transactions');
       return response.data;
     },
-    initialData: [],
   });
   
   const [fundingSource, setFundingSource] = useState<'employer' | 'jahazii'>('employer');

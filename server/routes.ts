@@ -1780,6 +1780,109 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // EWA Routes
+  app.get("/api/ewa/available", async (req: Request, res: Response) => {
+    try {
+      const { employeeId } = req.query;
+      if (!employeeId || typeof employeeId !== 'string') {
+        return res.status(400).json({ message: "Employee ID is required" });
+      }
+
+      const employee = await storage.getEmployee(employeeId);
+      if (!employee) {
+        return res.status(404).json({ message: "Employee not found" });
+      }
+
+      // Get latest payroll for the employee
+      const payrolls = await storage.getPayrollForEmployee(employeeId);
+      const latestPayroll = payrolls[0]; // Already sorted by most recent
+
+      // Calculate earned wage based on latest payroll or current data
+      const earnedWage = latestPayroll?.grossPay || (employee.gross_income || 0);
+
+      // Get total withdrawn amount from disbursed EWA requests
+      const ewaRequests = await storage.getEwaRequestsForEmployee(employeeId);
+      const totalWithdrawn = ewaRequests
+        .filter(req => req.status === 'disbursed')
+        .reduce((sum, req) => sum + (req.amount || 0), 0);
+
+      // Calculate available amount (50% of earned wage minus withdrawn)
+      const maxAllowedPercentage = 0.5;
+      const availableAmount = Math.max(0, (earnedWage * maxAllowedPercentage) - totalWithdrawn);
+
+      return res.json({
+        employeeId,
+        earned: earnedWage,
+        totalWithdrawn,
+        maxAllowedPercentage,
+        availableAmount,
+        asOfDate: new Date()
+      });
+    } catch (error) {
+      console.error("Error calculating available EWA:", error);
+      return res.status(500).json({ message: "Failed to calculate available EWA" });
+    }
+  });
+
+  app.get("/api/ewa/requests/pending", async (req: Request, res: Response) => {
+    try {
+      const { employeeId } = req.query;
+      if (!employeeId || typeof employeeId !== 'string') {
+        return res.status(400).json({ message: "Employee ID is required" });
+      }
+
+      const requests = await storage.getEwaRequestsForEmployee(employeeId);
+      const pendingRequests = requests.filter(req => req.status === 'pending');
+
+      return res.json(pendingRequests);
+    } catch (error) {
+      console.error("Error fetching pending EWA requests:", error);
+      return res.status(500).json({ message: "Failed to fetch pending requests" });
+    }
+  });
+
+  app.post("/api/ewa/requests", validateBody(insertEwaRequestSchema), async (req: Request, res: Response) => {
+    try {
+      const { employeeId, amount, reason } = req.body;
+
+      // Validate employee exists
+      const employee = await storage.getEmployee(employeeId);
+      if (!employee) {
+        return res.status(404).json({ message: "Employee not found" });
+      }
+
+      // Check if employee has pending requests
+      const pendingRequests = await storage.getPendingEwaRequests();
+      const hasPendingRequest = pendingRequests.some(req => req.employeeId === employeeId);
+      if (hasPendingRequest) {
+        return res.status(400).json({ message: "Employee already has a pending request" });
+      }
+
+      // Calculate available amount
+      const availableResponse = await fetch(`${req.protocol}://${req.get('host')}/api/ewa/available?employeeId=${employeeId}`);
+      const availableData = await availableResponse.json();
+      
+      if (amount > availableData.availableAmount) {
+        return res.status(400).json({ message: "Requested amount exceeds available limit" });
+      }
+
+      // Create the EWA request
+      const ewaRequest: InsertEwaRequest = {
+        employeeId,
+        amount,
+        reason,
+        status: 'pending',
+        processingFee: amount * 0.05 // 5% processing fee
+      };
+
+      const newRequest = await storage.createEwaRequest(ewaRequest);
+      return res.status(201).json(newRequest);
+    } catch (error) {
+      console.error("Error creating EWA request:", error);
+      return res.status(500).json({ message: "Failed to create EWA request" });
+    }
+  });
+
   // NEW ENDPOINT: Export payroll to Excel
   app.post("/api/payroll/export/xlsx", async (req, res) => {
     try {

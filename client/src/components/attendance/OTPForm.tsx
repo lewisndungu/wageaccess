@@ -284,7 +284,7 @@ export function OTPForm({ onSuccess }: OTPFormProps) {
                         </Avatar>
                         <div>
                           <p className="text-sm font-medium">{`${emp.other_names} ${emp.surname}`}</p>
-                          <p className="text-xs text-muted-foreground">{typeof emp.department === 'object' ? emp.department.name : emp.department} • #{emp.employeeNumber}</p>
+                          <p className="text-xs text-muted-foreground">{emp.position} • #{emp.employeeNumber}</p>
                         </div>
                       </div>
                     </li>
@@ -314,7 +314,7 @@ export function OTPForm({ onSuccess }: OTPFormProps) {
                       #{selectedEmployee.employeeNumber}
                     </Badge>
                   </div>
-                  <p className="text-sm text-muted-foreground">{typeof selectedEmployee.department === 'object' ? selectedEmployee.department.name : selectedEmployee.department}</p>
+                  <p className="text-sm text-muted-foreground">{selectedEmployee?.position}</p>
                   <p className="text-xs mt-1">Current time: {currentTime}</p>
                 </div>
               </div>

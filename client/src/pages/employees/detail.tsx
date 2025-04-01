@@ -3,7 +3,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { formatDate } from "@/lib/date-utils";
 import { formatCurrency } from "@/lib/format-utils";
-import { ChevronLeft, DownloadIcon, User, Phone, Mail, MapPin, Calendar, DollarSign, Briefcase, BadgeCheck } from "lucide-react";
+import { ChevronLeft, DownloadIcon, User, Phone, Mail, MapPin, Calendar, Banknote, Briefcase, BadgeCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -415,7 +415,7 @@ export default function EmployeeDetailPage() {
                 <span className="text-sm">Joined: {formatDate(employee.startDate || employee.created_at || '')}</span>
               </div>
               <div className="flex items-center">
-                <DollarSign className="h-4 w-4 mr-2 text-gray-500" />
+                <Banknote className="h-4 w-4 mr-2 text-gray-500" />
                 <span className="text-sm">Salary: {formatCurrency(employee.gross_income || 0)}</span>
               </div>
             </div>

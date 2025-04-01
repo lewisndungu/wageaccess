@@ -99,7 +99,7 @@ import {
   CheckCircle,
   XCircle,
   Clock,
-  DollarSign,
+  Banknote,
   CalendarDays,
   Users,
   Building,
@@ -1913,7 +1913,7 @@ export default function ProcessPayrollPage() {
                             {formatKES(payrollSummary.totalGrossPay)}
                           </h4>
                         </div>
-                        <DollarSign className="h-5 w-5 text-muted-foreground" />
+                        <Banknote className="h-5 w-5 text-muted-foreground" />
                       </div>
                     </CardContent>
                   </Card>

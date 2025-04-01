@@ -14,7 +14,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 
 import { toast } from "@/hooks/use-toast";
 import { calculateEarnedWage, formatKES } from "@/lib/tax-utils";
-import { AlertCircle, Check, DollarSign, HelpCircle, Info } from "lucide-react";
+import { AlertCircle, Check, Banknote, HelpCircle, Info } from "lucide-react";
 import { calculateAvailableEWA } from "@/lib/integration-service";
 
 interface EWARequestFormProps {
@@ -166,7 +166,7 @@ export function EWARequestForm({ onSuccess }: EWARequestFormProps) {
                 </p>
               </div>
               <div className="bg-primary/10 p-3 rounded-full">
-                <DollarSign className="h-6 w-6 text-primary" />
+                <Banknote className="h-6 w-6 text-primary" />
               </div>
             </div>
             
@@ -230,7 +230,7 @@ export function EWARequestForm({ onSuccess }: EWARequestFormProps) {
               <FormItem>
                 <FormLabel>Request Amount (KES)</FormLabel>
                 <div className="relative">
-                  <DollarSign className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500" />
+                  <Banknote className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500" />
                   <FormControl>
                     <Input
                       {...field}

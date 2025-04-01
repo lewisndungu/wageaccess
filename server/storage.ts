@@ -868,7 +868,7 @@ export class MemStorage implements IStorage {
       approvedBy: ewaRequestData.approvedBy,
       requestDate: new Date(),
       amount: Number(ewaRequestData.amount || 0),
-      processingFee: ewaRequestData.processingFee || 0,
+      processingFee: parseFloat((Number(ewaRequestData.amount || 0) * 0.05).toFixed(2)), // 5% processing fee
       approvedAt: new Date(),
       disbursedAt: new Date(),
       reason: ewaRequestData.reason,
@@ -1859,8 +1859,8 @@ export class MemStorage implements IStorage {
         const ewaRequest: InsertEwaRequest = {
           employeeId: employee.id,
           status,
-          amount: parseFloat(requestAmount.toFixed(2)),
-          processingFee: 0, // Assuming 0 fee for mock data simplicity
+          amount: Number(requestAmount.toFixed(2)),
+          processingFee: parseFloat((Number(requestAmount.toFixed(2)) * 0.05).toFixed(2)), // 5% processing fee
           requestDate,
           approvedAt,
           disbursedAt,

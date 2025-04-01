@@ -3533,6 +3533,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // EWA Dashboard Statistics
+  app.get("/api/ewa/dashboard-stats", async (_req, res) => {
+    try {
+      // Get all EWA requests
+      const requests = await storage.getDisbursedEwaRequests();
+      const pendingRequests = await storage.getPendingEwaRequests();
+
+      // Calculate statistics
+      const pendingCount = pendingRequests.length;
+      const pendingAmount = pendingRequests.reduce((sum, r) => sum + (r.amount || 0), 0);
+      const disbursedAmount = requests.reduce((sum, r) => sum + (r.amount || 0), 0);
+      const processingFees = requests.reduce((sum, r) => sum + (r.processingFee || 0), 0);
+
+      return res.status(200).json({
+        pendingRequests: pendingCount,
+        pendingAmount,
+        disbursedAmount,
+        processingFees
+      });
+    } catch (error) {
+      console.error("Error fetching EWA dashboard stats:", error);
+      return res.status(500).json({
+        message: "Failed to fetch EWA dashboard statistics",
+        error: error instanceof Error ? error.message : "Unknown error"
+      });
+    }
+  });
+
   const httpServer = createServer(app);
   return httpServer;
 }

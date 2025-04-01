@@ -8,7 +8,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "@/hooks/use-toast";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { formatKES } from "@/lib/tax-utils";
-import { Wallet, ArrowUpRight, ArrowDownRight, Clock, DollarSign, AlertCircle, History, CreditCard, Users } from "lucide-react";
+import { Wallet, ArrowUpRight, ArrowDownRight, Clock, Banknote, AlertCircle, History, CreditCard, Users } from "lucide-react";
 import { 
   Wallet as SharedWallet, 
   WalletTransaction as SharedWalletTransaction,
@@ -153,7 +153,7 @@ export function EWAWallet({ employeeId, isEmployer = false }: EWAWalletProps) {
       case 'jahazii_disbursement':
         return <ArrowUpRight className="h-4 w-4 text-red-500" />;
       case 'jahazii_fee':
-        return <DollarSign className="h-4 w-4 text-orange-500" />;
+        return <Banknote className="h-4 w-4 text-orange-500" />;
       default:
         return <Clock className="h-4 w-4 text-gray-500" />;
     }
@@ -301,7 +301,7 @@ export function EWAWallet({ employeeId, isEmployer = false }: EWAWalletProps) {
               <div className="space-y-2">
                 <Label htmlFor="amount">Transfer Amount (KES)</Label>
                 <div className="relative">
-                  <DollarSign className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                  <Banknote className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
                   <Input
                     id="amount"
                     type="number"

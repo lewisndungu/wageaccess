@@ -32,7 +32,7 @@ import {
   formatKES,
 } from "@/lib/tax-utils";
 import {
-  DollarSign,
+  Banknote,
   BarChart,
   Calendar,
   Briefcase,

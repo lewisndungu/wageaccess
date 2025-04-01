@@ -22,7 +22,6 @@ import { ManagerControls } from "@/components/attendance/ManagerControls";
 import { Link } from "react-router-dom";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Employee as SchemaEmployee, Attendance } from "@shared/schema";
-import { convertServerEmployee } from "@/lib/store";
 import axios from "axios";
 
 export default function AttendancePage() {

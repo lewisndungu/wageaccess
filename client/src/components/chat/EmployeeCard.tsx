@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { User, Mail, Phone, Building, Briefcase, Calendar, DollarSign } from 'lucide-react';
+import { User, Mail, Phone, Building, Briefcase, Calendar, Banknote } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { formatKESCurrency, formatKEDate } from '@/lib/format-utils';
@@ -32,7 +32,7 @@ const EmployeeCard: React.FC<EmployeeCardProps> = ({ employee }) => {
             </div>
 
             <div className="flex items-center gap-2">
-              <DollarSign className="h-4 w-4 text-muted-foreground" />
+              <Banknote className="h-4 w-4 text-muted-foreground" />
               <span>{formatKESCurrency(employee.gross_income)}</span>
             </div>
             

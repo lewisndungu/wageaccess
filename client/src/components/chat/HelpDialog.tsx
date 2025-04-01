@@ -15,7 +15,7 @@ import {
   FileSpreadsheet, 
   Calculator, 
   Download, 
-  DollarSign, 
+  Banknote, 
   UserPlus, 
   Users,
   Calendar,

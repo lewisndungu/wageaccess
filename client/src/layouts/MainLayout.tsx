@@ -14,7 +14,7 @@ import {
   LayoutDashboard,
   Users,
   Clock,
-  DollarSign,
+  Banknote,
   CreditCard,
   LogIn,
   UserCog,
@@ -198,7 +198,7 @@ export default function MainLayout({ children }: MainLayoutProps) {
             <li>
               <SidebarLink
                 to="/payroll"
-                icon={<DollarSign size={18} />}
+                icon={<Banknote size={18} />}
                 label="Payroll"
                 active={location.pathname.startsWith("/payroll")}
               />

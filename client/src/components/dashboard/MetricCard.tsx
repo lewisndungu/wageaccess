@@ -1,5 +1,5 @@
 import { Card } from "@/components/ui/card";
-import { ArrowUpRight, ArrowDownRight, Users, Clock, DollarSign, CreditCard } from "lucide-react";
+import { ArrowUpRight, ArrowDownRight, Users, Clock, Banknote, CreditCard } from "lucide-react";
 
 interface MetricCardProps {
   title: string;
@@ -30,7 +30,7 @@ export function MetricCard({
       case "time-line":
         return <Clock className={`w-5 h-5 ${colorClass}`} />;
       case "money-dollar-box-line":
-        return <DollarSign className={`w-5 h-5 ${colorClass}`} />;
+        return <Banknote className={`w-5 h-5 ${colorClass}`} />;
       case "bank-card-line":
         return <CreditCard className={`w-5 h-5 ${colorClass}`} />;
       default:

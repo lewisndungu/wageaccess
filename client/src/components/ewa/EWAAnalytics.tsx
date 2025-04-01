@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useQuery } from "@tanstack/react-query";
 import { DatePicker } from "@/components/ui/date-picker";
-import { Calendar, Download, FileSpreadsheet, Users, DollarSign, BarChart2, PieChart, TrendingUp, ArrowUpRight, ArrowDownRight } from "lucide-react";
+import { Calendar, Download, FileSpreadsheet, Users, Banknote, BarChart2, PieChart, TrendingUp, ArrowUpRight, ArrowDownRight } from "lucide-react";
 import { formatKES } from "@/lib/tax-utils";
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, BarChart, Bar, PieChart as RechartsPieChart, Pie, Cell, Legend } from 'recharts';
 
@@ -213,7 +213,7 @@ export function EWAAnalytics() {
                 <p className="text-2xl font-bold">{formatKES(analyticsData.metrics.totalDisbursed)}</p>
               </div>
               <div className="h-10 w-10 bg-primary/10 rounded-full flex items-center justify-center">
-                <DollarSign className="h-5 w-5 text-primary" />
+                <Banknote className="h-5 w-5 text-primary" />
               </div>
             </div>
           </CardContent>

@@ -12,7 +12,7 @@ import {
   AlertTriangle,
   Info,
   UserPlus,
-  DollarSign,
+  Banknote,
   Users,
   HelpCircle,
   User,
@@ -928,7 +928,7 @@ const ChatInterface = () => {
             onClick={() => handleQuickAction('export-payroll')}
             className="text-xs"
           >
-            <DollarSign className="h-3 w-3 mr-1" />
+            <Banknote className="h-3 w-3 mr-1" />
             Export Current Payroll
           </Button>
           <Button 

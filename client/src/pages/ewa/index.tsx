@@ -19,6 +19,13 @@ import { BarChart2, CreditCard, Download, FileText, Plus, User, Wallet } from "l
 import { EwaRequest } from "@shared/schema";
 import { WalletApiResponse } from "@shared/schema";
 
+interface DashboardStats {
+  pendingRequests: number;
+  pendingAmount: number;
+  disbursedAmount: number;
+  processingFees: number;
+}
+
 export default function EWAPage() {
   const [activeTab, setActiveTab] = useState("pending");
   
@@ -28,6 +35,14 @@ export default function EWAPage() {
       const response = await axios.get('/api/ewa/requests', { 
         params: { status: activeTab === 'all' ? undefined : activeTab }
       });
+      return response.data;
+    },
+  });
+
+  const dashboardStatsQuery = useQuery<DashboardStats>({
+    queryKey: ['/api/ewa/dashboard-stats'],
+    queryFn: async () => {
+      const response = await axios.get('/api/ewa/dashboard-stats');
       return response.data;
     },
   });
@@ -43,6 +58,12 @@ export default function EWAPage() {
   });
   
   const walletBalance = walletDataQuery.data?.totalBalance ?? 0;
+  const stats = dashboardStatsQuery.data ?? {
+    pendingRequests: 0,
+    pendingAmount: 0,
+    disbursedAmount: 0,
+    processingFees: 0
+  };
   
   const filteredRequests = requests.filter((req): req is EwaRequest => {
     if (activeTab === "all") return true;
@@ -62,9 +83,11 @@ export default function EWAPage() {
         return (
           <div className="flex items-center">
             <Avatar className="h-8 w-8 mr-2">
-              <AvatarImage src={request.employee?.avatar_url} alt={request.employee?.other_names} />
               <AvatarFallback>
-                <User className="h-4 w-4" />
+                <span className="text-xs font-medium">
+                  {request.employee?.other_names.charAt(0)}
+                  {request.employee?.surname.charAt(0)}
+                  </span>
               </AvatarFallback>
             </Avatar>
             <div>
@@ -193,13 +216,13 @@ export default function EWAPage() {
         </div>
       </div>
       
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-5">
         <Card className="bg-white dark:bg-gray-800 shadow-sm border border-gray-100 dark:border-gray-800 overflow-hidden">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">Pending Requests</CardTitle>
           </CardHeader>
           <CardContent>
-            {ewaDataQuery.isLoading ? (
+            {dashboardStatsQuery.isLoading ? (
               <div className="space-y-2">
                 <Skeleton className="h-8 w-1/2" />
                 <Skeleton className="h-4 w-3/4" />
@@ -207,14 +230,10 @@ export default function EWAPage() {
             ) : (
               <>
                 <div className="text-2xl font-bold">
-                  {requests.filter((r): r is EwaRequest => r.status === "pending").length}
+                  {stats.pendingRequests}
                 </div>
                 <div className="text-sm text-muted-foreground mt-1">
-                  {formatCurrency(
-                    requests
-                      .filter((r): r is EwaRequest => r.status === "pending")
-                      .reduce((sum, r) => sum + (r.amount || 0), 0)
-                  )} pending approval
+                  {formatCurrency(stats.pendingAmount)} pending approval
                 </div>
               </>
             )}
@@ -226,7 +245,7 @@ export default function EWAPage() {
             <CardTitle className="text-sm font-medium text-muted-foreground">Disbursed This Month</CardTitle>
           </CardHeader>
           <CardContent>
-             {ewaDataQuery.isLoading ? (
+             {dashboardStatsQuery.isLoading ? (
               <div className="space-y-2">
                 <Skeleton className="h-8 w-1/2" />
                 <Skeleton className="h-4 w-3/4" />
@@ -234,14 +253,30 @@ export default function EWAPage() {
             ) : (
               <>
                 <div className="text-2xl font-bold">
-                  {formatCurrency(
-                    requests
-                      .filter((r): r is EwaRequest => r.status === "disbursed")
-                      .reduce((sum, r) => sum + (r.amount || 0), 0)
-                  )}
+                  {formatCurrency(stats.disbursedAmount)}
                 </div>
                 <div className="text-sm text-muted-foreground mt-1">
                   {requests.filter((r): r is EwaRequest => r.status === "disbursed").length} transactions
+                </div>
+              </>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card className="bg-white dark:bg-gray-800 shadow-sm border border-gray-100 dark:border-gray-800 overflow-hidden">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">Jahazii Earnings</CardTitle>
+          </CardHeader>
+          <CardContent>
+             {dashboardStatsQuery.isLoading ? (
+              <div className="space-y-2">
+                <Skeleton className="h-8 w-1/2" />
+                <Skeleton className="h-4 w-3/4" />
+              </div>
+            ) : (
+              <>
+                <div className="text-2xl font-bold">
+                  {formatCurrency(stats.processingFees)}
                 </div>
               </>
             )}

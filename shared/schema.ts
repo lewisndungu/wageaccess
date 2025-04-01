@@ -207,7 +207,7 @@ export interface WalletTransaction {
   id: string;
   walletId: string;
   amount: number;
-  transactionType: 'employer_topup' | 'employer_disbursement' | 'jahazii_topup' | 'jahazii_disbursement' | 'jahazii_fee';
+  transactionType: 'employer_topup' | 'employer_disbursement' | 'jahazii_topup' | 'jahazii_disbursement' | 'jahazii_fee' | 'transfer_out';
   description?: string;
   transactionDate: Date;
   referenceId: string;

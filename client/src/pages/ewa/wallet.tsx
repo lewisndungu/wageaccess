@@ -17,11 +17,19 @@ import { ChevronLeft, DollarSign, Download, Info, Plus, RefreshCw } from "lucide
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { WalletTransaction, WalletApiResponse } from "@shared/schema";
+import { 
+  Select, 
+  SelectContent, 
+  SelectItem, 
+  SelectTrigger, 
+  SelectValue 
+} from "@/components/ui/select";
 
 export default function WalletPage() {
   const [isTopUpDialogOpen, setIsTopUpDialogOpen] = useState(false);
   const [topUpAmount, setTopUpAmount] = useState("");
   const [isProcessing, setIsProcessing] = useState(false);
+  const [paymentMethod, setPaymentMethod] = useState('mpesa');
   
   const { data: wallet, isLoading: isWalletLoading, refetch: refetchWallet } = useQuery<WalletApiResponse>({
     queryKey: ['/api/wallet'],
@@ -57,7 +65,8 @@ export default function WalletPage() {
     try {
       await apiRequest('POST', '/api/wallet/topup', { 
         amount: parseFloat(topUpAmount),
-        fundingSource
+        fundingSource,
+        paymentMethod
       });
       
       queryClient.invalidateQueries({ queryKey: ['/api/wallet'] });
@@ -243,56 +252,35 @@ export default function WalletPage() {
               </DialogHeader>
               <div className="space-y-4 py-4">
                 <div className="space-y-2">
-                  <Label htmlFor="amount">Amount (KES)</Label>
+                  <Label htmlFor="amount">Top-up Amount (KES)</Label>
                   <div className="relative">
-                    <DollarSign className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500" />
+                    <span className="text-muted-foreground font-semibold text-sm absolute left-3 top-1/2 transform -translate-y-1/2">KES</span>
                     <Input
                       id="amount"
                       type="number"
-                      placeholder="0.00"
-                      className="pl-10"
+                      placeholder="Enter amount"
                       value={topUpAmount}
                       onChange={(e) => setTopUpAmount(e.target.value)}
-                      min="0"
-                      step="0.01"
+                      className="pl-12"
                     />
                   </div>
-                </div>
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <Label htmlFor="fundingSource">Funding Source</Label>
-                    <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
-                      Employer Funds Only
-                    </Badge>
-                  </div>
-                  <div className="relative">
-                    <Input
-                      id="fundingSource"
-                      value="Employer Funds"
-                      className="bg-gray-50"
-                      disabled
-                    />
-                    <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
-                      <Info className="h-4 w-4 text-muted-foreground" />
-                    </div>
-                  </div>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Funds will be added to your employer balance for early wage access. Only Jahazii can top up the Jahazii balance.
-                  </p>
                 </div>
                 
                 <div className="space-y-2">
                   <Label htmlFor="method">Payment Method</Label>
-                  <select
-                    id="method"
-                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    <option value="bank_transfer">Bank Transfer</option>
-                    <option value="mpesa">M-Pesa</option>
-                    <option value="card">Credit/Debit Card</option>
-                  </select>
+                  <Select value={paymentMethod} onValueChange={setPaymentMethod}>
+                    <SelectTrigger id="method">
+                      <SelectValue placeholder="Select payment method" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="bank_transfer">Bank Transfer</SelectItem>
+                      <SelectItem value="mpesa">M-Pesa</SelectItem>
+                      <SelectItem value="card">Credit/Debit Card</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
+
               <DialogFooter>
                 <Button variant="outline" onClick={() => setIsTopUpDialogOpen(false)}>
                   Cancel
@@ -517,32 +505,6 @@ export default function WalletPage() {
               <CardDescription>Add funds to your wallet</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <Label htmlFor="quick-fundingSource">Funding Source</Label>
-                  <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
-                    Employer Funds Only
-                  </Badge>
-                </div>
-                <div className="relative">
-                  <Input
-                    id="quick-fundingSource"
-                    value="Employer Funds"
-                    className="bg-gray-50"
-                    disabled
-                  />
-                  <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
-                    <Info className="h-4 w-4 text-muted-foreground" />
-                  </div>
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  <span className="text-blue-600 font-medium">Current employer balance: {formatCurrency(walletData.employerBalance)}</span>
-                  <span className="block mt-1">
-                    Only employer funds can be topped up. Jahazii funds are managed by Jahazii directly.
-                  </span>
-                </p>
-              </div>
-              
               <div className="grid grid-cols-2 gap-2">
                 <Button 
                   variant="outline" 

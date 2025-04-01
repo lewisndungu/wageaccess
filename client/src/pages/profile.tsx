@@ -73,9 +73,10 @@ export default function ProfilePage() {
             <div className="h-24 bg-gradient-to-r from-primary to-primary/70"></div>
             <div className="px-6 pb-6 -mt-12">
               <Avatar className="h-24 w-24 border-4 border-background">
-                <AvatarImage src={profile?.profileImage} alt={fullName} />
                 <AvatarFallback>
-                  <User className="h-12 w-12" />
+                  <div className="h-24 w-24 bg-primary/10 flex items-center justify-center rounded-full text-2xl font-bold">
+                    {fullName.charAt(0)}{fullName.charAt(1)}
+                  </div>
                 </AvatarFallback>
               </Avatar>
               <div className="mt-4 space-y-2">

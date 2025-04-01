@@ -224,7 +224,7 @@ export function AttendanceDashboard({
     filteredRecords?.sort((a, b) => {
       const dateA = new Date(a.clockInTime || "");
       const dateB = new Date(b.clockInTime || "");
-      return dateA.getTime() - dateB.getTime();
+      return dateB.getTime() - dateA.getTime();
     }) || [];
 
   // Function to calculate rate change (needs to be defined before metrics)

@@ -151,7 +151,14 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
-import { format, startOfMonth, endOfMonth, subMonths, getDate, getDaysInMonth } from "date-fns";
+import {
+  format,
+  startOfMonth,
+  endOfMonth,
+  subMonths,
+  getDate,
+  getDaysInMonth,
+} from "date-fns";
 import { cn } from "@/lib/utils";
 import { DateRange } from "react-day-picker";
 import {
@@ -202,7 +209,7 @@ type RequestInit = {
 };
 
 // Define a helper function to make API requests (with types for the response)
-const apiRequest = async <T = any>(
+const apiRequest = async <T = any,>(
   method: string,
   url: string,
   data?: any
@@ -236,18 +243,18 @@ export default function ProcessPayrollPage() {
     const today = new Date();
     const daysInMonth = getDaysInMonth(today);
     const currentDay = getDate(today);
-    
+
     // If we're in the last week of the month (within last 7 days), use current month
     // Otherwise, use previous month
     const isLastWeek = currentDay > daysInMonth - 7;
-    
+
     const targetMonth = isLastWeek ? today : subMonths(today, 1);
     const firstDay = startOfMonth(targetMonth);
     const lastDay = endOfMonth(targetMonth);
 
     return {
-      startDate: format(firstDay, 'yyyy-MM-dd'),
-      endDate: format(lastDay, 'yyyy-MM-dd'),
+      startDate: format(firstDay, "yyyy-MM-dd"),
+      endDate: format(lastDay, "yyyy-MM-dd"),
     };
   });
   const [excludedEmployees, setExcludedEmployees] = useState<string[]>([]);
@@ -312,7 +319,7 @@ export default function ProcessPayrollPage() {
     const daysInMonth = getDaysInMonth(today);
     const currentDay = getDate(today);
     const isLastWeek = currentDay > daysInMonth - 7;
-    
+
     const targetMonth = isLastWeek ? today : subMonths(today, 1);
     const firstDay = startOfMonth(targetMonth);
     const lastDay = endOfMonth(targetMonth);
@@ -367,12 +374,13 @@ export default function ProcessPayrollPage() {
         cell: ({ row }) => (
           <div>
             {formatHoursToHalfHour(Number(row.getValue("hoursWorked")))}
-            {row.original.overtimeHours && Number(row.original.overtimeHours) > 0 && (
-              <span className="text-xs text-muted-foreground ml-1">
-                (+{formatHoursToHalfHour(Number(row.original.overtimeHours))}{" "}
-                OT)
-              </span>
-            )}
+            {row.original.overtimeHours &&
+              Number(row.original.overtimeHours) > 0 && (
+                <span className="text-xs text-muted-foreground ml-1">
+                  (+{formatHoursToHalfHour(Number(row.original.overtimeHours))}{" "}
+                  OT)
+                </span>
+              )}
           </div>
         ),
       },
@@ -449,8 +457,8 @@ export default function ProcessPayrollPage() {
       const lastDay = endOfMonth(today);
 
       setPayPeriod({
-        startDate: format(firstDay, 'yyyy-MM-dd'),
-        endDate: format(lastDay, 'yyyy-MM-dd'),
+        startDate: format(firstDay, "yyyy-MM-dd"),
+        endDate: format(lastDay, "yyyy-MM-dd"),
       });
 
       // Update date range picker state
@@ -464,8 +472,8 @@ export default function ProcessPayrollPage() {
       const lastDay = endOfMonth(previousMonth);
 
       setPayPeriod({
-        startDate: format(firstDay, 'yyyy-MM-dd'),
-        endDate: format(lastDay, 'yyyy-MM-dd'),
+        startDate: format(firstDay, "yyyy-MM-dd"),
+        endDate: format(lastDay, "yyyy-MM-dd"),
       });
 
       // Update date range picker state
@@ -519,23 +527,26 @@ export default function ProcessPayrollPage() {
 
     // Generic error handler for the worker instance
     const genericWorkerError = (error: ErrorEvent) => {
-        console.error("Generic unhandled error from payroll worker:", error);
-        toast({
-            title: "Worker Error",
-            description: `A background calculation error occurred: ${error.message}`,
-            variant: "destructive",
-          });
-        // Reset loading states if a calculation was in progress
-        setIsCalculating(false);
-        setIsRecalculating(false);
-    }
-    payrollWorkerRef.current.addEventListener("error", genericWorkerError)
+      console.error("Generic unhandled error from payroll worker:", error);
+      toast({
+        title: "Worker Error",
+        description: `A background calculation error occurred: ${error.message}`,
+        variant: "destructive",
+      });
+      // Reset loading states if a calculation was in progress
+      setIsCalculating(false);
+      setIsRecalculating(false);
+    };
+    payrollWorkerRef.current.addEventListener("error", genericWorkerError);
 
     // Cleanup function to terminate the worker when the component unmounts
     return () => {
       if (payrollWorkerRef.current) {
         console.log("Terminating payroll worker...");
-        payrollWorkerRef.current.removeEventListener("error", genericWorkerError);
+        payrollWorkerRef.current.removeEventListener(
+          "error",
+          genericWorkerError
+        );
         payrollWorkerRef.current.terminate();
         payrollWorkerRef.current = null;
       }
@@ -578,15 +589,16 @@ export default function ProcessPayrollPage() {
         if (eligibleEmployees.length === 0) {
           toast({
             title: "No Eligible Employees",
-            description:
-              "No employees are eligible for payroll calculation.",
+            description: "No employees are eligible for payroll calculation.",
             variant: "destructive",
           });
           return reject(new Error("No eligible employees"));
         }
 
         // Setup message handler for this specific calculation run
-        const handleWorkerMessage = (event: MessageEvent<OutgoingWorkerMessage>) => {
+        const handleWorkerMessage = (
+          event: MessageEvent<OutgoingWorkerMessage>
+        ) => {
           const { type, payload } = event.data;
 
           if (type === "PROGRESS") {
@@ -609,7 +621,7 @@ export default function ProcessPayrollPage() {
                 payload || "An error occurred in the calculation worker.",
               variant: "destructive",
             });
-             // Clean up listeners for this run
+            // Clean up listeners for this run
             worker.removeEventListener("message", handleWorkerMessage);
             worker.removeEventListener("error", handleSpecificWorkerError);
             reject(new Error(payload)); // Reject the promise
@@ -617,17 +629,23 @@ export default function ProcessPayrollPage() {
         };
 
         // Setup specific error handler for this run
-         const handleSpecificWorkerError = (error: ErrorEvent) => {
-            console.error("Specific error caught during payroll calculation worker run:", error);
-            toast({
-                title: "Worker Calculation Error",
-                description: `Calculation failed: ${error.message}`,
-                variant: "destructive",
-            });
-            // Clean up listeners for this run
-            worker.removeEventListener("message", handleWorkerMessage);
-            worker.removeEventListener("error", handleSpecificWorkerError);
-            reject(error.error || new Error("Unhandled worker error during calculation")); // Reject the promise
+        const handleSpecificWorkerError = (error: ErrorEvent) => {
+          console.error(
+            "Specific error caught during payroll calculation worker run:",
+            error
+          );
+          toast({
+            title: "Worker Calculation Error",
+            description: `Calculation failed: ${error.message}`,
+            variant: "destructive",
+          });
+          // Clean up listeners for this run
+          worker.removeEventListener("message", handleWorkerMessage);
+          worker.removeEventListener("error", handleSpecificWorkerError);
+          reject(
+            error.error ||
+              new Error("Unhandled worker error during calculation")
+          ); // Reject the promise
         };
 
         // Add new listeners for this specific run
@@ -639,9 +657,10 @@ export default function ProcessPayrollPage() {
           employees: eligibleEmployees,
           period: payPeriod,
         };
-        console.log(`Sending CALCULATION job to worker for ${eligibleEmployees.length} employees.`);
+        console.log(
+          `Sending CALCULATION job to worker for ${eligibleEmployees.length} employees.`
+        );
         worker.postMessage({ type: "CALCULATE", payload });
-
       } catch (error) {
         console.error("Error initiating payroll calculation:", error);
         toast({
@@ -743,15 +762,19 @@ export default function ProcessPayrollPage() {
     // Reset existing calculation first
     setPayrollCalculations([]);
     setPayrollSummary({
-      totalGrossPay: 0, totalDeductions: 0, totalNetPay: 0,
-      totalEwaDeductions: 0, employeeCount: 0, departmentSummary: [],
+      totalGrossPay: 0,
+      totalDeductions: 0,
+      totalNetPay: 0,
+      totalEwaDeductions: 0,
+      employeeCount: 0,
+      departmentSummary: [],
       previousPeriodComparison: 0,
     });
-  
+
     setIsCalculating(true);
     setIsRecalculating(true);
     setCalculationProgress(0);
-  
+
     calculatePayroll() // Call the worker-based function
       .then((calculations) => {
         if (calculations && calculations.length > 0) {
@@ -804,7 +827,8 @@ export default function ProcessPayrollPage() {
         console.error("Error calculating payroll:", error);
         toast({
           title: "Calculation Error",
-          description: "An error occurred during calculation. Please try again.",
+          description:
+            "An error occurred during calculation. Please try again.",
           variant: "destructive",
         });
       } finally {
@@ -818,7 +842,9 @@ export default function ProcessPayrollPage() {
   };
 
   // Add state for storing the payroll reference number
-  const [payrollReferenceNumber, setPayrollReferenceNumber] = useState<string | null>(null);
+  const [payrollReferenceNumber, setPayrollReferenceNumber] = useState<
+    string | null
+  >(null);
 
   // Update the process payroll button click handler
   const handleProcessPayroll = async () => {
@@ -845,9 +871,9 @@ export default function ProcessPayrollPage() {
           otherDeductions: calc.otherDeductions || 0,
           totalDeductions: calc.totalDeductions,
           netPay: calc.netPay,
-          status: "completed"
+          status: "completed",
         })),
-        notes: finalizationNote
+        notes: finalizationNote,
       });
 
       // Store the reference number from the response
@@ -857,14 +883,14 @@ export default function ProcessPayrollPage() {
 
       toast({
         title: "Payroll processed successfully",
-        description: "The payroll has been processed and saved. Click 'Back to Payroll' to return to the payroll list.",
+        description:
+          "The payroll has been processed and saved. Click 'Back to Payroll' to return to the payroll list.",
       });
 
       setCurrentStage("complete");
-      
+
       // Invalidate the payroll query cache to ensure fresh data
       queryClient.invalidateQueries({ queryKey: ["payroll"] });
-      
     } catch (error) {
       console.error("Error processing payroll:", error);
       toast({
@@ -905,19 +931,23 @@ export default function ProcessPayrollPage() {
 
         // Include the reference number in the filename
         fileName = `Payroll_${payrollReferenceNumber}_${periodStr}.xlsx`;
-        
+
         // Call the Excel export API endpoint with axios
         // Only send the reference number and period - server will fetch the data
-        const response = await axios.post("/api/payroll/export/xlsx", {
-          referenceNumber: payrollReferenceNumber,
-          payPeriod,
-        }, {
-          responseType: 'blob' // Important for handling binary data
-        });
-        
+        const response = await axios.post(
+          "/api/payroll/export/xlsx",
+          {
+            referenceNumber: payrollReferenceNumber,
+            payPeriod,
+          },
+          {
+            responseType: "blob", // Important for handling binary data
+          }
+        );
+
         // Create a download link and trigger the download
-        const blob = new Blob([response.data], { 
-          type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' 
+        const blob = new Blob([response.data], {
+          type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         });
         const url = window.URL.createObjectURL(blob);
         const a = document.createElement("a");
@@ -925,7 +955,7 @@ export default function ProcessPayrollPage() {
         a.download = fileName;
         document.body.appendChild(a);
         a.click();
-        
+
         // Clean up
         window.URL.revokeObjectURL(url);
         document.body.removeChild(a);
@@ -940,7 +970,7 @@ export default function ProcessPayrollPage() {
           setIsExporting(false);
           return;
         }
-        
+
         fileName = `Payslips_${payrollReferenceNumber}_${periodStr}.zip`;
         // Simulate export process for other types
         await new Promise((resolve) => setTimeout(resolve, 1500));
@@ -955,7 +985,7 @@ export default function ProcessPayrollPage() {
           setIsExporting(false);
           return;
         }
-        
+
         fileName = `PayrollSummary_${payrollReferenceNumber}_${periodStr}.pdf`;
         // Simulate export process for other types
         await new Promise((resolve) => setTimeout(resolve, 1500));
@@ -1334,7 +1364,7 @@ export default function ProcessPayrollPage() {
 
       // Get the saved payroll data
       const savedPayroll = await response.json();
-      
+
       // Store the payroll reference number in state
       setPayrollReferenceNumber(savedPayroll.id);
 
@@ -1544,8 +1574,8 @@ export default function ProcessPayrollPage() {
                 <div className="flex items-center">
                   <CalendarDays className="h-5 w-5 mr-2 text-primary" />
                   <div>
-                    <h3 className="text-sm font-medium">Current Pay Period</h3>
-                    <p className="text-xs text-muted-foreground">
+                    <h3 className="font-medium">Payroll Period</h3>
+                    <p className="text-sm text-muted-foreground">
                       {formatDate(payPeriod.startDate)} -{" "}
                       {formatDate(payPeriod.endDate)} (
                       {(() => {
@@ -1659,9 +1689,30 @@ export default function ProcessPayrollPage() {
               {/* Processing Scope */}
               <Card>
                 <CardHeader>
-                  <CardTitle className="flex items-center">
-                    <Users className="mr-2 h-5 w-5" />
-                    Processing Scope
+                  <CardTitle className="flex items-center justify-between">
+                    <div className="flex items-center">
+                      <Users className="mr-2 h-5 w-5" />
+                      Processing Scope
+                    </div>
+                    <div>
+                      <Button
+                        size="default"
+                        onClick={handleCalculateAndReview}
+                        disabled={eligibleEmployeeCount === 0 || isCalculating}
+                      >
+                        {isCalculating ? (
+                          <>
+                            <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+                            Calculating ({Math.round(calculationProgress)}%)
+                          </>
+                        ) : (
+                          <>
+                            <Calculator className="mr-2 h-5 w-5" />
+                            Calculate & Review
+                          </>
+                        )}
+                      </Button>
+                    </div>
                   </CardTitle>
                   <CardDescription>
                     Select which employees to include in this payroll run
@@ -1805,11 +1856,32 @@ export default function ProcessPayrollPage() {
 
         {currentStage === STAGES.FINALIZE && (
           <Card className="overflow-hidden">
-            <CardHeader className="pb-2">
-              <CardTitle>Review & Finalize</CardTitle>
-              <CardDescription>
-                Review and finalize payroll calculations
-              </CardDescription>
+            <CardHeader>
+              <CardTitle className="flex items-center justify-between">
+                <div className="flex items-center">
+                  <Users className="mr-2 h-5 w-5" />
+                  Review & Finalize
+                </div>
+                <div>
+                  <Button
+                    variant="default"
+                    onClick={handleNext}
+                    disabled={isSubmitting || payrollCalculations.length === 0}
+                  >
+                    {isSubmitting ? (
+                      <>
+                        <span className="mr-2">Processing</span>
+                        <RefreshCw className="h-4 w-4 animate-spin" />
+                      </>
+                    ) : (
+                      <>
+                        Finalize Payroll
+                        <ChevronRight className="ml-2 h-4 w-4" />
+                      </>
+                    )}
+                  </Button>
+                </div>
+                </CardTitle>
             </CardHeader>
             <CardContent>
               <div className="space-y-6">
@@ -1980,34 +2052,57 @@ export default function ProcessPayrollPage() {
                       <div className="space-y-3">
                         {payrollReferenceNumber && (
                           <div className="flex justify-between items-center py-2 border-b border-border/40 bg-blue-50/50 dark:bg-blue-900/10 px-2 rounded">
-                            <span className="font-semibold text-muted-foreground">Reference No.</span>
-                            <span className="font-medium text-primary">{payrollReferenceNumber}</span>
+                            <span className="font-semibold text-muted-foreground">
+                              Reference No.
+                            </span>
+                            <span className="font-medium text-primary">
+                              {payrollReferenceNumber}
+                            </span>
                           </div>
                         )}
                         <div className="flex justify-between items-center py-2 border-b border-border/40">
-                          <span className="font-semibold text-muted-foreground">Period</span>
+                          <span className="font-semibold text-muted-foreground">
+                            Period
+                          </span>
                           <span className="font-medium">
-                            {formatDate(payPeriod.startDate)} - {formatDate(payPeriod.endDate)}
+                            {formatDate(payPeriod.startDate)} -{" "}
+                            {formatDate(payPeriod.endDate)}
                           </span>
                         </div>
                         <div className="flex justify-between items-center py-2 border-b border-border/40">
-                          <span className="font-semibold text-muted-foreground">Employees Processed</span>
-                          <span className="font-medium text-lg">{payrollSummary.employeeCount}</span>
+                          <span className="font-semibold text-muted-foreground">
+                            Employees Processed
+                          </span>
+                          <span className="font-medium text-lg">
+                            {payrollSummary.employeeCount}
+                          </span>
                         </div>
                         <div className="flex justify-between items-center py-2 border-b border-border/40">
-                          <span className="font-semibold text-muted-foreground">Total Gross</span>
-                          <span className="font-medium text-lg">{formatKES(payrollSummary.totalGrossPay)}</span>
+                          <span className="font-semibold text-muted-foreground">
+                            Total Gross
+                          </span>
+                          <span className="font-medium text-lg">
+                            {formatKES(payrollSummary.totalGrossPay)}
+                          </span>
                         </div>
                         <div className="flex justify-between items-center py-2 border-b border-border/40">
-                          <span className="font-semibold text-muted-foreground">Total Deductions</span>
-                          <span className="font-medium text-lg">{formatKES(payrollSummary.totalDeductions)}</span>
+                          <span className="font-semibold text-muted-foreground">
+                            Total Deductions
+                          </span>
+                          <span className="font-medium text-lg">
+                            {formatKES(payrollSummary.totalDeductions)}
+                          </span>
                         </div>
                       </div>
                     </CardContent>
                     <div className="mt-auto border-t">
                       <div className="flex justify-between items-center p-4 bg-green-50 dark:bg-green-900/20 rounded-md m-3">
-                        <span className="font-bold text-green-800 dark:text-green-300">Total Net Pay</span>
-                        <span className="font-bold text-2xl text-green-700 dark:text-green-400">{formatKES(payrollSummary.totalNetPay)}</span>
+                        <span className="font-bold text-green-800 dark:text-green-300">
+                          Total Net Pay
+                        </span>
+                        <span className="font-bold text-2xl text-green-700 dark:text-green-400">
+                          {formatKES(payrollSummary.totalNetPay)}
+                        </span>
                       </div>
                     </div>
                   </Card>
@@ -2020,7 +2115,9 @@ export default function ProcessPayrollPage() {
                           <Download className="h-4 w-4 mr-2 text-primary" />
                           Export Options
                         </CardTitle>
-                        <CardDescription>Select your preferred export format</CardDescription>
+                        <CardDescription>
+                          Select your preferred export format
+                        </CardDescription>
                       </CardHeader>
                       <CardContent className="p-4">
                         <div className="space-y-3">
@@ -2040,7 +2137,9 @@ export default function ProcessPayrollPage() {
                                   )}
                                 </div>
                                 <div className="flex flex-col flex-1">
-                                  <span className="font-medium text-base">Excel Spreadsheet</span>
+                                  <span className="font-medium text-base">
+                                    Excel Spreadsheet
+                                  </span>
                                   <span className="text-xs text-muted-foreground mt-1">
                                     {isExporting && exportType === "xlsx"
                                       ? "Generating spreadsheet..."
@@ -2066,7 +2165,9 @@ export default function ProcessPayrollPage() {
                                   )}
                                 </div>
                                 <div className="flex flex-col flex-1">
-                                  <span className="font-medium text-base">Payslips</span>
+                                  <span className="font-medium text-base">
+                                    Payslips
+                                  </span>
                                   <span className="text-xs text-muted-foreground mt-1">
                                     {isExporting && exportType === "payslips"
                                       ? "Generating payslips..."
@@ -2092,7 +2193,9 @@ export default function ProcessPayrollPage() {
                                   )}
                                 </div>
                                 <div className="flex flex-col flex-1">
-                                  <span className="font-medium text-base">Summary Report</span>
+                                  <span className="font-medium text-base">
+                                    Summary Report
+                                  </span>
                                   <span className="text-xs text-muted-foreground mt-1">
                                     {isExporting && exportType === "summary"
                                       ? "Generating report..."
@@ -2110,8 +2213,16 @@ export default function ProcessPayrollPage() {
                                 <RefreshCw className="h-5 w-5 animate-spin text-primary" />
                               </div>
                               <span className="text-sm font-medium">
-                                Generating {exportType === "xlsx" ? "Excel spreadsheet" : exportType === "payslips" ? "PDF payslips" : "summary report"}...
-                                <span className="text-xs text-muted-foreground ml-2">This may take a moment</span>
+                                Generating{" "}
+                                {exportType === "xlsx"
+                                  ? "Excel spreadsheet"
+                                  : exportType === "payslips"
+                                  ? "PDF payslips"
+                                  : "summary report"}
+                                ...
+                                <span className="text-xs text-muted-foreground ml-2">
+                                  This may take a moment
+                                </span>
                               </span>
                             </div>
                           )}
@@ -2123,8 +2234,8 @@ export default function ProcessPayrollPage() {
 
                 {/* Navigation Buttons */}
                 <div className="flex justify-between items-center py-3 px-4 mt-4">
-                  <Button 
-                    variant="outline" 
+                  <Button
+                    variant="outline"
                     onClick={handleBack}
                     className="font-medium px-5"
                   >
@@ -2132,7 +2243,7 @@ export default function ProcessPayrollPage() {
                     Back
                   </Button>
 
-                  <Button 
+                  <Button
                     className="bg-primary hover:bg-primary/90 text-white font-medium px-6 shadow-md"
                     asChild
                   >
@@ -2802,4 +2913,3 @@ export default function ProcessPayrollPage() {
     </div>
   );
 }
-

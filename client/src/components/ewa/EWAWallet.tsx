@@ -1,16 +1,19 @@
 import { useState } from 'react';
+import axios from 'axios';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "@/hooks/use-toast";
-import { apiRequest, queryClient } from "@/lib/queryClient";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { formatKES } from "@/lib/tax-utils";
 import { Wallet, ArrowUpRight, ArrowDownRight, Clock, DollarSign, AlertCircle, History, CreditCard, Users } from "lucide-react";
-import { walletData } from "@/lib/mock-data";
-import { Wallet as SharedWallet, WalletTransaction as SharedWalletTransaction } from '../../../../shared/schema';
+import { 
+  Wallet as SharedWallet, 
+  WalletTransaction as SharedWalletTransaction,
+  WalletApiResponse
+} from '../../../../shared/schema';
 
 interface EWAWalletProps {
   employeeId?: string;
@@ -23,14 +26,73 @@ export function EWAWallet({ employeeId, isEmployer = false }: EWAWalletProps) {
   const [accountNumber, setAccountNumber] = useState('');
   const [receiverName, setReceiverName] = useState('');
   
-  // Fetch wallet data
-  const { data, isLoading, refetch } = useQuery<SharedWallet>({
+  // Get QueryClient instance
+  const queryClient = useQueryClient();
+
+  // Fetch wallet data using axios
+  const { 
+    data: walletData,
+    isLoading: isLoadingWallet,
+    error: walletError,
+    refetch: refetchWallet
+  } = useQuery<WalletApiResponse>({
     queryKey: ['/api/wallet', employeeId],
-    initialData: walletData
+    queryFn: async () => {
+      const response = await axios.get(`/api/wallet${employeeId ? `?employeeId=${employeeId}` : ''}`);
+      return response.data;
+    },
   });
   
-  // Create a typed reference to wallet data
-  const wallet = data;
+  // Fetch wallet transactions separately using axios
+  const { 
+    data: transactions, 
+    isLoading: isLoadingTransactions,
+    error: transactionsError,
+    refetch: refetchTransactions 
+  } = useQuery<SharedWalletTransaction[]>({
+    queryKey: ['/api/wallet/transactions', employeeId],
+    queryFn: async () => {
+      const response = await axios.get(`/api/wallet/transactions${employeeId ? `?employeeId=${employeeId}` : ''}`);
+      return response.data;
+    },
+    initialData: [],
+  });
+
+  // --- Transfer Mutation ---
+  const transferMutation = useMutation({
+    mutationFn: async (transferData: { amount: number; accountNumber: string; receiverName: string; employeeId?: string }) => {
+      const response = await axios.post('/api/wallet/transfer', transferData);
+      // Throw an error if the API indicates failure
+      if (!response.data.success) {
+        throw new Error(response.data.message || "Transfer failed on the server.");
+      }
+      return response.data; // Return data on success
+    },
+    onSuccess: (data) => {
+      toast({
+        title: "Transfer Successful",
+        description: data.message || `Transfer processed successfully.`,
+      });
+      // Reset form
+      setTransferAmount('');
+      setAccountNumber('');
+      setReceiverName('');
+      // Invalidate queries to refetch data after successful transfer
+      queryClient.invalidateQueries({ queryKey: ['/api/wallet', employeeId] });
+      queryClient.invalidateQueries({ queryKey: ['/api/wallet/transactions', employeeId] });
+    },
+    onError: (error) => {
+      toast({
+        title: "Transfer Error",
+        description: error instanceof Error ? error.message : "Failed to complete transfer",
+        variant: "destructive",
+      });
+    },
+  });
+  // --- End Transfer Mutation ---
+
+  // Create a typed reference to wallet data, handling potential undefined state
+  const wallet = walletData;
   
   // Handle transfer
   const handleTransfer = async () => {
@@ -45,10 +107,10 @@ export function EWAWallet({ employeeId, isEmployer = false }: EWAWalletProps) {
       return;
     }
     
-    if (amount > wallet.totalBalance) {
+    if (!wallet || amount > wallet.employerBalance) {
       toast({
         title: "Insufficient Balance",
-        description: "You don't have enough funds to complete this transfer",
+        description: "You don't have enough funds or wallet data is unavailable",
         variant: "destructive",
       });
       return;
@@ -72,64 +134,50 @@ export function EWAWallet({ employeeId, isEmployer = false }: EWAWalletProps) {
       return;
     }
     
-    setIsProcessing(true);
-    
-    try {
-      // In a real app, we would call the API
-      // Mock successful transfer
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      toast({
-        title: "Transfer Successful",
-        description: `${formatKES(amount)} has been transferred to ${receiverName}.`,
-      });
-      
-      // Reset form
-      setTransferAmount('');
-      setAccountNumber('');
-      setReceiverName('');
-      
-      // Refresh wallet data
-      refetch();
-      
-      // Invalidate queries to refresh data
-      queryClient.invalidateQueries({ queryKey: ['/api/wallet'] });
-    } catch (error) {
-      toast({
-        title: "Error",
-        description: error instanceof Error ? error.message : "Failed to complete transfer",
-        variant: "destructive",
-      });
-    } finally {
-      setIsProcessing(false);
-    }
+    // Call the mutation
+    transferMutation.mutate({
+      amount: amount,
+      accountNumber,
+      receiverName,
+      employeeId // Pass employeeId if available/needed
+    });
   };
   
   // Get transaction icon based on type
-  const getTransactionIcon = (type: string) => {
-    switch (type.toLowerCase()) {
-      case 'deposit':
+  const getTransactionIcon = (type: SharedWalletTransaction['transactionType']) => {
+    switch (type) {
+      case 'employer_topup':
+      case 'jahazii_topup':
         return <ArrowDownRight className="h-4 w-4 text-green-500" />;
-      case 'withdrawal':
+      case 'employer_disbursement':
+      case 'jahazii_disbursement':
         return <ArrowUpRight className="h-4 w-4 text-red-500" />;
-      case 'transfer':
-        return <ArrowUpRight className="h-4 w-4 text-orange-500" />;
-      case 'ewa':
-        return <CreditCard className="h-4 w-4 text-blue-500" />;
+      case 'jahazii_fee':
+        return <DollarSign className="h-4 w-4 text-orange-500" />;
       default:
         return <Clock className="h-4 w-4 text-gray-500" />;
     }
   };
 
   // Format date
-  const formatDate = (dateString: string): string => {
-    const date = new Date(dateString);
+  const formatDate = (dateString: string | Date): string => {
+    const date = typeof dateString === 'string' ? new Date(dateString) : dateString;
     return date.toLocaleDateString('en-US', {
       month: 'short',
       day: 'numeric',
       year: 'numeric',
     });
   };
+
+  // Handle loading state
+  if (isLoadingWallet || isLoadingTransactions) {
+    return <div>Loading wallet data...</div>;
+  }
+
+  // Handle error state
+  if (walletError || transactionsError || !wallet) {
+    return <div>Error loading wallet data: { (walletError || transactionsError)?.message || "Wallet data unavailable." }</div>;
+  }
   
   return (
     <Card className="shadow-glass dark:shadow-glass-dark">
@@ -150,10 +198,10 @@ export function EWAWallet({ employeeId, isEmployer = false }: EWAWalletProps) {
             <CardContent className="p-6">
               <div className="flex flex-col space-y-4">
                 <p className="text-primary-foreground/70 text-sm">Available Balance</p>
-                <p className="text-3xl font-bold">{formatKES(wallet.totalBalance)}</p>
+                <p className="text-3xl font-bold">{formatKES(wallet.employerBalance)}</p>
                 {wallet.pendingAmount > 0 && (
                   <p className="text-xs text-primary-foreground/70">
-                    + {formatKES(wallet.pendingAmount)} pending
+                    + {formatKES(wallet.pendingAmount)} pending requests
                   </p>
                 )}
               </div>
@@ -185,10 +233,10 @@ export function EWAWallet({ employeeId, isEmployer = false }: EWAWalletProps) {
                 <div className="flex flex-col space-y-2">
                   <p className="text-sm text-muted-foreground">Quick Actions</p>
                   <div className="grid grid-cols-2 gap-2">
-                    <Button variant="outline" className="w-full" onClick={() => setTransferAmount(wallet.totalBalance.toString())}>
+                    <Button variant="outline" className="w-full" onClick={() => setTransferAmount(wallet.employerBalance.toString())}>
                       Max
                     </Button>
-                    <Button variant="outline" className="w-full" onClick={() => setTransferAmount((wallet.totalBalance / 2).toString())}>
+                    <Button variant="outline" className="w-full" onClick={() => setTransferAmount((wallet.employerBalance / 2).toString())}>
                       Half
                     </Button>
                   </div>
@@ -205,25 +253,25 @@ export function EWAWallet({ employeeId, isEmployer = false }: EWAWalletProps) {
           </TabsList>
           
           <TabsContent value="transactions" className="p-0 pt-4">
-            {wallet.transactions && wallet.transactions.length > 0 ? (
+            {transactions && transactions.length > 0 ? (
               <div className="space-y-2 max-h-[300px] overflow-y-auto">
-                {wallet.transactions.map(transaction => (
+                {transactions.map((transaction: SharedWalletTransaction) => (
                   <div 
                     key={transaction.id} 
                     className="border rounded-md p-3 flex justify-between items-center"
                   >
                     <div className="flex items-center">
                       <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center mr-3">
-                        {getTransactionIcon(transaction.type)}
+                        {getTransactionIcon(transaction.transactionType)}
                       </div>
                       <div>
-                        <p className="font-medium text-sm">{transaction.description}</p>
-                        <p className="text-xs text-muted-foreground">{formatDate(transaction.date)}</p>
+                        <p className="font-medium text-sm">{transaction.description || transaction.transactionType.replace('_', ' ').toUpperCase()}</p>
+                        <p className="text-xs text-muted-foreground">{formatDate(transaction.transactionDate)}</p>
                       </div>
                     </div>
                     <div className="text-right">
-                      <p className={`font-medium ${transaction.type === 'deposit' || transaction.type === 'ewa' ? 'text-green-600' : 'text-red-600'}`}>
-                        {transaction.type === 'deposit' || transaction.type === 'ewa' ? '+' : '-'} {formatKES(transaction.amount)}
+                      <p className={`font-medium ${transaction.amount > 0 ? 'text-green-600' : 'text-red-600'}`}>
+                        {transaction.amount > 0 ? '+' : ''} {formatKES(transaction.amount)}
                       </p>
                       <p className="text-xs">
                         <span className={`px-1.5 py-0.5 rounded text-xs ${
@@ -295,16 +343,17 @@ export function EWAWallet({ employeeId, isEmployer = false }: EWAWalletProps) {
               <Button 
                 className="w-full" 
                 onClick={handleTransfer} 
-                disabled={
-                  isProcessing || 
+                disabled={ // Disable button based on mutation status and validation
+                  transferMutation.isPending || // Use isPending from mutation
                   !transferAmount || 
                   parseFloat(transferAmount) <= 0 || 
-                  parseFloat(transferAmount) > wallet.totalBalance ||
+                  !wallet || // Ensure wallet data is loaded
+                  parseFloat(transferAmount) > wallet.employerBalance ||
                   !accountNumber ||
                   !receiverName
                 }
               >
-                {isProcessing ? "Processing..." : "Transfer Funds"}
+                {transferMutation.isPending ? "Processing..." : "Transfer Funds"} {/* Show pending state */}
               </Button>
             </div>
           </TabsContent>
@@ -312,9 +361,9 @@ export function EWAWallet({ employeeId, isEmployer = false }: EWAWalletProps) {
       </CardContent>
       <CardFooter className="flex justify-between border-t pt-4">
         <p className="text-xs text-muted-foreground">
-          Last updated: {new Date().toLocaleString()}
+          Last updated: {wallet.updatedAt ? formatDate(wallet.updatedAt) : 'N/A'}
         </p>
-        <Button variant="ghost" size="sm" onClick={() => refetch()}>
+        <Button variant="ghost" size="sm" onClick={() => { refetchWallet(); refetchTransactions(); }}>
           Refresh
         </Button>
       </CardFooter>

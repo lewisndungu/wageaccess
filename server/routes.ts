@@ -2504,6 +2504,81 @@ export async function registerRoutes(app: Express): Promise<Server> {
     });
   });
 
+  // NEW: Transfer funds endpoint
+  app.post("/api/wallet/transfer", async (req, res) => {
+    const { amount, accountNumber, receiverName, employeeId } = req.body;
+
+    // Validate input
+    if (!amount || isNaN(parseFloat(amount)) || parseFloat(amount) <= 0) {
+      return res.status(400).json({ message: "Valid positive amount is required" });
+    }
+    if (!accountNumber || typeof accountNumber !== 'string' || !accountNumber.trim()) {
+      return res.status(400).json({ message: "Valid account number is required" });
+    }
+    if (!receiverName || typeof receiverName !== 'string' || !receiverName.trim()) {
+      return res.status(400).json({ message: "Valid receiver name is required" });
+    }
+
+    const parsedAmount = parseFloat(amount);
+
+    try {
+      const wallet = await storage.getWallet();
+      if (!wallet) {
+        return res.status(404).json({ message: "Wallet not found" });
+      }
+
+      // Check employer balance
+      if (parsedAmount > wallet.employerBalance) {
+        return res.status(400).json({ message: "Insufficient employer balance" });
+      }
+
+      // Update employer balance
+      const updatedWallet = await storage.updateWallet(
+        ensureStringId(wallet.id),
+        {
+          employerBalance: wallet.employerBalance - parsedAmount,
+          updatedAt: new Date()
+        }
+      );
+
+      if (!updatedWallet) {
+        throw new Error("Failed to update wallet balance");
+      }
+
+      // Create transaction record
+      await storage.createWalletTransaction({
+        amount: -parsedAmount, // Negative amount for outgoing transfer
+        walletId: wallet.id,
+        transactionType: "transfer_out",
+        description: `Transfer to ${receiverName} (Acc: ${accountNumber})`,
+        referenceId: `TRN-${Date.now()}`,
+        fundingSource: "employer", // Transfers always come from employer balance
+        status: "completed", // Assuming instant completion for mock
+        transactionDate: new Date(),
+        employeeId: employeeId // Optional: Link transfer to an employee if provided
+      });
+
+      // Calculate total balance for response
+      const totalBalance = updatedWallet.employerBalance + updatedWallet.jahaziiBalance;
+
+      return res.status(200).json({
+        success: true,
+        message: `Transfer of ${formatKESValue(parsedAmount)} to ${receiverName} successful.`,
+        wallet: {
+          ...updatedWallet,
+          totalBalance
+        }
+      });
+
+    } catch (error) {
+      console.error("Error processing wallet transfer:", error);
+      return res.status(500).json({
+        message: "Failed to process transfer",
+        error: error instanceof Error ? error.message : "Unknown error",
+      });
+    }
+  });
+
   // Statistics for dashboard
   app.get("/api/statistics/dashboard", async (_req, res) => {
     const employees = await storage.getAllEmployees();

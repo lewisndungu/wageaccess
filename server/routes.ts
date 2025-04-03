@@ -3260,7 +3260,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const { userId } = req.body;
-      const result = await chatService.processFile(req.file, userId);
+      // Extract the processAllSheets flag (convert string back to boolean)
+      const processAllSheets = req.body.processAllSheets === 'true';
+
+      // Pass the flag to the chat service
+      const result = await chatService.processFile(req.file, userId, processAllSheets);
       res.json(result);
     } catch (error) {
       console.error("Error processing uploaded file:", error);

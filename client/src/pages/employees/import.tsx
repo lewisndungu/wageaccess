@@ -9,6 +9,7 @@ import {
   Download,
   Users,
   RefreshCw,
+  Trash2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -47,6 +48,7 @@ import { downloadTransformedData } from "@/lib/spreadsheet-processor";
 import FileUploadZone from "./components/FileUploadZone";
 import get from "lodash/get";
 import axios from "axios";
+import { Label } from "@/components/ui/label";
 
 // Session storage keys
 const SESSION_STORAGE_KEYS = {
@@ -115,17 +117,17 @@ const HEADER_TO_FIELD_MAP: Record<string, string> = {
   "ID Number": "id_no",
   "NSSF No": "nssf_no",
   "KRA Pin": "tax_pin",
-  "Position": "position",
+  Position: "position",
   "Gross Pay": "gross_income",
   "Employer Advance": "employer_advances",
-  "PAYE": "statutory_deductions.tax",
-  "Levy": "statutory_deductions.levy",
-  "NHIF": "statutory_deductions.nhif",
-  "NSSF": "statutory_deductions.nssf",
+  PAYE: "statutory_deductions.tax",
+  Levy: "statutory_deductions.levy",
+  NHIF: "statutory_deductions.nhif",
+  NSSF: "statutory_deductions.nssf",
   "Loan Deduction": "loan_deductions",
   "Bank Account Number": "bank_info.acc_no",
   "MPesa Number": "contact.phoneNumber",
-  "Gender": "sex",
+  Gender: "sex",
 };
 
 // Helper function to get potentially nested values safely
@@ -140,27 +142,29 @@ const getNestedValue = (obj: any, path: string, defaultValue: any = "") => {
 };
 
 const EmployeeImportPage: React.FC = () => {
-  const [currentStep, setCurrentStep] = useState(1);
-  const [steps, setSteps] = useState(IMPORT_STEPS);
-  const [file, setFile] = useState<File | null>(null);
-  const [isProcessing, setIsProcessing] = useState(false);
-  const [isReviewing, setIsReviewing] = useState(false);
-  const [processedData, setProcessedData] = useState<ProcessedData | null>(
+  const [currentStep, setCurrentStep] = React.useState<number>(1);
+  const [steps, setSteps] = React.useState<typeof IMPORT_STEPS>(IMPORT_STEPS);
+  const [file, setFile] = React.useState<File | null>(null);
+  const [isProcessing, setIsProcessing] = React.useState<boolean>(false);
+  const [isReviewing, setIsReviewing] = React.useState<boolean>(false);
+  const [processedData, setProcessedData] =
+    React.useState<ProcessedData | null>(null);
+  const [showCancelDialog, setShowCancelDialog] = React.useState(false);
+  const [showConfirmDialog, setShowConfirmDialog] = React.useState(false);
+  const [isImporting, setIsImporting] = React.useState(false);
+  const [importStats, setImportStats] = React.useState<ImportStats | null>(
     null
   );
-  const [showCancelDialog, setShowCancelDialog] = useState(false);
-  const [showConfirmDialog, setShowConfirmDialog] = useState(false);
-  const [isImporting, setIsImporting] = useState(false);
-  const [importStats, setImportStats] = useState<ImportStats | null>(null);
-  const [searchTerm, setSearchTerm] = useState("");
-  const [editingCell, setEditingCell] = useState<{
+  const [searchTerm, setSearchTerm] = React.useState("");
+  const [editingCell, setEditingCell] = React.useState<{
     rowId: string;
     column: string;
     value: any;
     fieldName?: string;
   } | null>(null);
-  const [statusFilter, setStatusFilter] = useState<string | null>(null);
-  const [showBulkDeleteDialog, setShowBulkDeleteDialog] = useState(false);
+  const [statusFilter, setStatusFilter] = React.useState<string | null>(null);
+  const [showBulkDeleteDialog, setShowBulkDeleteDialog] = React.useState(false);
+  const [processAllSheets, setProcessAllSheets] = React.useState(false);
 
   const navigate = useNavigate();
 
@@ -240,7 +244,7 @@ const EmployeeImportPage: React.FC = () => {
 
   // Update stepper state based on current step
   const updateStepperState = (step: number) => {
-    setSteps((prevSteps) =>
+    setSteps((prevSteps: typeof IMPORT_STEPS) =>
       prevSteps.map((s) => ({
         ...s,
         current: s.id === step,
@@ -261,8 +265,21 @@ const EmployeeImportPage: React.FC = () => {
     try {
       setIsProcessing(true);
 
-      // Use chatService to upload and process file
-      const result = await chatService.uploadFile(file);
+      // Use FormData to send file and checkbox state
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("userId", chatService.getUserId()); // Assuming chatService provides userId
+      formData.append("processAllSheets", String(processAllSheets)); // Send checkbox state as string
+
+      // Update the API call to send FormData
+      const response = await axios.post("/api/chat/upload", formData, {
+        headers: {
+          "Content-Type": "multipart/form-data",
+        },
+      });
+
+      // Process the result from the backend
+      const result = response.data; // Assuming backend returns the processed data directly
 
       // Add unique ID to each row if not present
       const dataWithIds = {
@@ -537,8 +554,8 @@ const EmployeeImportPage: React.FC = () => {
       const response = await axios.post(
         "/api/payroll/export/master-template",
         {
-          data: processedData.extractedData.filter(row => !row.excluded), // Only send non-excluded rows
-          fileName: `Import_Report_${dateStr}.xlsx`
+          data: processedData.extractedData.filter((row) => !row.excluded), // Only send non-excluded rows
+          fileName: `Import_Report_${dateStr}.xlsx`,
         },
         {
           responseType: "blob", // Important for handling binary data
@@ -733,7 +750,7 @@ const EmployeeImportPage: React.FC = () => {
                   for processing and import.
                 </CardDescription>
               </CardHeader>
-              <CardContent>
+              <CardContent className="space-y-6">
                 <FileUploadZone
                   onFileSelected={handleFileSelected}
                   file={file}
@@ -741,14 +758,40 @@ const EmployeeImportPage: React.FC = () => {
                   accept=".xlsx,.xls,.csv"
                   maxSize={10 * 1024 * 1024} // 10MB
                 />
+
+                <div className="flex flex-col gap-4">
+                  <div className="items-top flex space-x-2">
+                    <Checkbox
+                      id="process-all-sheets"
+                      checked={processAllSheets}
+                      onCheckedChange={(checked) =>
+                        setProcessAllSheets(Boolean(checked))
+                      }
+                    />
+                    <div className="grid gap-1.5 leading-none">
+                      <Label
+                        htmlFor="process-all-sheets"
+                        className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                      >
+                        Process all worksheets
+                      </Label>
+                      <p className="text-sm text-muted-foreground">
+                        If this option is selected, the system will try to process data from all worksheets in the uploaded file.
+                      </p>
+                    </div>
+                  </div>
+                </div>
               </CardContent>
+
               <CardFooter className="flex justify-between">
                 <Button variant="outline" onClick={handleCancelImport}>
                   Cancel
                 </Button>
+
                 <Button
                   onClick={handleProcessFile}
                   disabled={!file || isProcessing}
+                  className="self-end"
                 >
                   {isProcessing ? (
                     <>
@@ -890,14 +933,17 @@ const EmployeeImportPage: React.FC = () => {
                     </div>
 
                     {getFilteredData().length > 0 && statusFilter && (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="text-destructive border-destructive hover:bg-destructive/10"
-                        onClick={() => setShowBulkDeleteDialog(true)}
-                      >
-                        Delete {getFilteredData().length} filtered records
-                      </Button>
+                      <div className="px-4 py-2 flex justify-end border-b">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="text-destructive border-destructive hover:bg-destructive/10"
+                          onClick={() => setShowBulkDeleteDialog(true)}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                          Delete {getFilteredData().length} filtered records
+                        </Button>
+                      </div>
                     )}
 
                     <div className="h-[calc(100vh-460px)] min-h-[400px]">
@@ -918,7 +964,9 @@ const EmployeeImportPage: React.FC = () => {
                                       {header}
                                     </TableHead>
                                   ))}
-                                  <TableHead className="sticky right-0 bg-background">Status</TableHead>
+                                  <TableHead className="sticky right-0 bg-background">
+                                    Status
+                                  </TableHead>
                                 </TableRow>
                               </TableHeader>
                               <TableBody>
@@ -927,9 +975,15 @@ const EmployeeImportPage: React.FC = () => {
                                   const hasMissingName =
                                     !getNestedValue(row, "other_names") &&
                                     !getNestedValue(row, "surname");
-                                  const grossPay = getNestedValue(row, "gross_income", 0);
-                                  const hasInvalidGrossPay = !grossPay || grossPay <= 0;
-                                  const hasCriticalError = hasMissingName || hasInvalidGrossPay;
+                                  const grossPay = getNestedValue(
+                                    row,
+                                    "gross_income",
+                                    0
+                                  );
+                                  const hasInvalidGrossPay =
+                                    !grossPay || grossPay <= 0;
+                                  const hasCriticalError =
+                                    hasMissingName || hasInvalidGrossPay;
                                   // Check for warnings from backend
                                   const hasWarnings =
                                     Array.isArray(row.extractionErrors) &&
@@ -969,9 +1023,12 @@ const EmployeeImportPage: React.FC = () => {
                                             fieldPath === "surname") &&
                                           hasMissingName;
                                         // Gross pay error applies if the field is missing or zero
-                                        const cellIsGrossPayError = 
-                                          fieldPath === "gross_income" && hasInvalidGrossPay;
-                                        const cellHasError = cellIsNameError || cellIsGrossPayError;
+                                        const cellIsGrossPayError =
+                                          fieldPath === "gross_income" &&
+                                          hasInvalidGrossPay;
+                                        const cellHasError =
+                                          cellIsNameError ||
+                                          cellIsGrossPayError;
 
                                         return (
                                           <TableCell
@@ -1030,7 +1087,8 @@ const EmployeeImportPage: React.FC = () => {
                                                 >
                                                   {/* Format the display value */}
                                                   {
-                                                    displayValue !== undefined &&
+                                                    displayValue !==
+                                                      undefined &&
                                                     displayValue !== null
                                                       ? typeof displayValue ===
                                                         "number"
@@ -1100,7 +1158,9 @@ const EmployeeImportPage: React.FC = () => {
                                             }
                                             title={
                                               hasWarnings
-                                                ? row.extractionErrors?.join("\n")
+                                                ? row.extractionErrors?.join(
+                                                    "\n"
+                                                  )
                                                 : undefined
                                             }
                                           >

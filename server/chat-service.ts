@@ -498,7 +498,7 @@ function findBestMatch(targetColumn: string, availableColumns: string[]): string
       exclude: ['NHIF DEDUCTION', 'NHIF AMOUNT', 'NHIF CONTRIBUTION', 'NHIF', 'SHIF', 'SHIF ']
     },
     'NHIF': {
-      exact: ['NHIF', 'NHIF DEDUCTION', 'NHIF AMOUNT', 'NHIF CONTRIBUTION', 'SHIF', 'SHIF DEDUCTION', 'SHIF AMOUNT', 'SHIF CONTRIBUTION', 'SHIF '],
+      exact: ['NHIF', 'NHIF DEDUCTION', 'NHIF AMOUNT', 'NHIF CONTRIBUTION', 'SHIF', 'SHIF DEDUCTION', 'SHIF AMOUNT', 'SHIF CONTRIBUTION', 'SHIF', 'SHA'],
       variations: ['HEALTH INSURANCE DEDUCTION', 'NHIF DED', 'SHIF DED'],
       exclude: ['NHIF NO', 'NHIF NUMBER', 'NHIF MEMBERSHIP', 'SHIF NO', 'SHIF NUMBER']
     },

@@ -506,7 +506,11 @@ function findBestMatch(targetColumn: string, availableColumns: string[]): string
     'Emp No': ['EMPLO NO.', 'EMPLOYEE NO', 'EMPLOYEE NUMBER', 'EMP NUMBER', 'STAFF NO'],
     'Employee Name': ['EMPLOYEES\' FULL NAMES', 'FULL NAME', 'NAME', 'EMPLOYEE NAMES', 'STAFF NAME', 'EMPLOYEE FULL NAME', 'SURNAME', 'OTHER NAMES'],
     'Probation Period': ['PROBATION', 'ON PROBATION'],
-    'ID Number': ['ID NO', 'NATIONAL ID', 'IDENTITY NUMBER', 'ID', 'IDENTIFICATION', 'ID NUMBER'],
+    'ID Number': {
+      exact: ['ID NO', 'ID NUMBER', 'NATIONAL ID', 'IDENTITY NUMBER'],
+      variations: ['ID', 'IDENTIFICATION'],
+      exclude: ['BANK ACCOUNT', 'ACC NO', 'ACCOUNT NUMBER'] // Prevent matching with bank fields
+    },
     'KRA Pin': ['KRA PIN NO.', 'KRA', 'PIN NO', 'PIN NUMBER', 'TAX PIN', 'KRA PIN NUMBER'],
     'Position': ['JOB TITTLE', 'TITLE', 'JOB TITLE', 'DESIGNATION', 'ROLE', 'SITE'],
     'Gross Pay': ['GROSS SALARY', 'GROSS', 'MONTHLY SALARY', 'GROSS INCOME', 'TOTAL GROSS PAY', 'GROSS PAY', 'BASIC PAY', 'BASIC SALARY'],
@@ -516,7 +520,11 @@ function findBestMatch(targetColumn: string, availableColumns: string[]): string
     'Employer Advance': ['ADVANCE', 'SALARY ADVANCE', 'ADVANCE SALARY', 'ADVANCE PAYMENT', 'EMPLOYER ADVANCES', 'SALARY ADVANCE'],
     'Net Pay': ['NET SALARY', 'TAKE HOME', 'FINAL PAY', 'NET PAY', 'NET INCOME'],
     'MPesa Number': ['MPESA', 'MOBILE MONEY', 'PHONE NO', 'MOBILE NO', 'TEL NO.'],
-    'Bank Account Number': ['BANK ACC', 'BANK ACCOUNT', 'ACCOUNT NUMBER', 'ACC NO', 'ACCOUNT NO'],
+    'Bank Account Number': {
+      exact: ['BANK ACC', 'BANK ACCOUNT', 'ACCOUNT NUMBER', 'ACC NO', 'ACCOUNT NO'],
+      variations: ['BANK', 'ACCOUNT'],
+      exclude: ['ID NO', 'ID NUMBER', 'NATIONAL ID'] // Prevent matching with ID fields
+    },
     'T & C Accepted': ['TERMS ACCEPTED', 'T&C', 'AGREED TERMS'],
     'CONTACTS': ['CONTACT', 'CONTACTS', 'PHONE', 'MOBILE', 'TELEPHONE', 'PHONE NUMBER', 'MOBILE NUMBER', 'TEL NO.'],
     'GENDER': ['SEX', 'MALE/FEMALE', 'M/F'],
@@ -552,7 +560,6 @@ function findBestMatch(targetColumn: string, availableColumns: string[]): string
       if (specialCase.variations.some(variation => col.includes(variation.toUpperCase()))) return col; // Return original case
     }
   } else {
-    // Original matching logic for other columns
     
     // 1. Exact match (case-insensitive)
     const exactMatch = cleanedAvailableColumns.find(col => col === upperTargetColumn);

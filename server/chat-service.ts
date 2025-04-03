@@ -209,6 +209,7 @@ You can also use the quick action buttons below the chat to access common functi
       // Implement file processing logic with advanced data extraction
       try {
         // 1. Read the XLSX file
+        console.log('1. Processing file:', file.originalname);
         const workbook = XLSX.read(file.buffer, { type: 'buffer' });
         
         // Original JSON data for fallback or direct extraction if needed
@@ -217,6 +218,7 @@ You can also use the quick action buttons below the chat to access common functi
         const originalJsonData = XLSX.utils.sheet_to_json(worksheet, { defval: '' }) as Record<string, any>[];
 
         // 2. Preprocess the data (NEW)
+        console.log('2. Preprocessing data...');
         let processedResult: { transformedData: Array<any>; failedRows: Array<{row: Record<string, any>, reason: string}> } | null = null;
         let preprocessingFailed = false;
         let preprocessingReason = '';
@@ -236,6 +238,7 @@ You can also use the quick action buttons below the chat to access common functi
             } else {
                 console.log(`Header row detected at index ${headerRowIndex}. Processing ${cleanedData.length} data rows.`);
                 // 3. Transform the cleaned data (EXISTING - but will be modified)
+                console.log('3. Transforming data...');
                 processedResult = transformData(cleanedData); // Pass cleanedData here
             }
         } catch (preprocessError: any) {
@@ -247,6 +250,7 @@ You can also use the quick action buttons below the chat to access common functi
         let extractedData: Array<any> = [];
         let finalFailedRows: Array<{row: Record<string, any>, reason: string}> = [];
 
+        console.log('4. Processing data...');
         if (processedResult && !preprocessingFailed) {
             extractedData = processedResult.transformedData;
             finalFailedRows = processedResult.failedRows;
@@ -310,6 +314,7 @@ You can also use the quick action buttons below the chat to access common functi
           }
         };
 
+        console.log('5. Saving message...');
         await storageModule.saveMessage(fileMessage);
 
         return result; // Return the structured result
@@ -532,7 +537,7 @@ function findBestMatch(targetColumn: string, availableColumns: string[]): string
     'Employee Name': ['EMPLOYEES\' FULL NAMES', 'FULL NAME', 'NAME', 'EMPLOYEE NAMES', 'STAFF NAME', 'EMPLOYEE FULL NAME', 'SURNAME', 'OTHER NAMES'],
     'Probation Period': ['PROBATION', 'ON PROBATION'],
     'Position': ['JOB TITTLE', 'TITLE', 'JOB TITLE', 'DESIGNATION', 'ROLE', 'SITE'],
-    'Gross Pay': ['GROSS SALARY', 'GROSS', 'MONTHLY SALARY', 'GROSS INCOME', 'TOTAL GROSS PAY', 'GROSS PAY', 'BASIC PAY', 'BASIC SALARY'],
+    'Gross Pay': ['GROSS SALARY', 'GROSS', 'MONTHLY SALARY', 'GROSS INCOME', 'TOTAL GROSS PAY', 'GROSS PAY'],
     'PAYE': ['TAX', 'INCOME TAX', 'PAYE'],
     'Levy': ['H-LEVY', 'HOUSING LEVY', 'HOUSE LEVY', 'HOUSING', 'LEVIES'],
     'Loan Deduction': ['LOANS', 'LOAN', 'LOAN REPAYMENT', 'DEBT REPAYMENT', 'TOTAL LOAN DEDUCTIONS', 'LOAN DEDUCTION'],
@@ -712,7 +717,9 @@ function findHeaderRow(data: Array<Record<string, any>>, maxRowsToCheck = 10): n
 }
 
 // **** NEW: Find Header Row in CSV-like data ****
-function findHeaderRowInCSV(csvData: any[][], maxRowsToCheck = 20): number {
+function findHeaderRowInCSV(csvData: any[][], maxRowsToCheck = 10): number {
+  console.log('csvData', csvData.slice(0, 5));
+
   const expectedPatterns = [
       /emp|staff|no/i, /name|full|surname|other/i, // Employee Identifiers
       /gross|basic|salary|pay\b/i, // Gross Pay variants
@@ -839,12 +846,13 @@ function convertToJsonWithHeaders(headerRow: any[], dataRows: any[][]): Array<Re
   }).filter(obj => Object.values(obj).some(v => v !== null && v !== undefined && String(v).trim() !== '')); // Filter out completely empty rows
 }
 
-// **** NEW: Preprocessing Function ****
+// This function removes the header row and converts the data to JSON format using the normalized headers.
 function preprocessPayrollData(workbook: XLSX.WorkBook): {
   headerRowIndex: number;
   cleanedData: Array<Record<string, any>>;
 } {
   // 1. Convert the first sheet to CSV-like array structure (array of arrays)
+  console.log('2.1. Converting sheet to CSV-like array structure...');
   const sheetName = workbook.SheetNames[0];
   if (!sheetName) {
       throw new Error("Workbook contains no sheets.");
@@ -857,7 +865,8 @@ function preprocessPayrollData(workbook: XLSX.WorkBook): {
       return { headerRowIndex: -1, cleanedData: [] };
   }
 
-  // 2. Find header row using the scoring mechanism
+  // 2. Find header row using the scoring mechanism (now checks max 10 rows by default)
+  console.log('2.2. Finding header row using the scoring mechanism...');
   const headerRowIndex = findHeaderRowInCSV(csvData);
 
   if (headerRowIndex === -1) {
@@ -865,8 +874,37 @@ function preprocessPayrollData(workbook: XLSX.WorkBook): {
       return { headerRowIndex: -1, cleanedData: [] };
   }
 
-  // 3. Extract the header row and all subsequent data rows
+  // 3. Extract the header row and potentially merge with the previous row
+  console.log('2.3. Extracting header row and potentially merging with the preceding row...');
   const headerRow = csvData[headerRowIndex];
+  let mergedHeaders = [...headerRow]; // Start with a copy of the found header row
+
+  if (headerRowIndex > 0) {
+      const previousRow = csvData[headerRowIndex - 1];
+      console.log(`Merging header row (index ${headerRowIndex}) with previous row (index ${headerRowIndex - 1}).`);
+      mergedHeaders = headerRow.map((cell, index) => {
+          const currentHeaderCell = cell === null || cell === undefined || String(cell).trim() === '' ? null : String(cell).trim();
+          // Check if the current header cell is empty
+          if (!currentHeaderCell) {
+              const previousCell = (index < previousRow.length && previousRow[index] !== null && previousRow[index] !== undefined && String(previousRow[index]).trim() !== '') ? String(previousRow[index]).trim() : null;
+              // If the corresponding cell in the previous row is NOT empty, use it
+              if (previousCell) {
+                  console.log(` - Merging column ${index}: Replacing empty header with '${previousCell}' from previous row.`);
+                  return previousCell; // Use the value from the previous row
+              }
+          }
+          return currentHeaderCell ?? cell; // Otherwise, keep the original header cell (or original null/empty value)
+      });
+       console.log('Merged Headers:', mergedHeaders);
+  } else {
+      console.log(`Header row found at index 0, no previous row to merge.`);
+      // Normalize headers even if no merge happens
+      mergedHeaders = headerRow.map(cell => cell === null || cell === undefined ? null : String(cell).trim());
+  }
+
+
+  // 4. Extract all subsequent data rows
+  console.log('2.4. Extracting all subsequent data rows...');
   const dataRows = csvData.slice(headerRowIndex + 1);
 
   if (dataRows.length === 0) {
@@ -875,16 +913,15 @@ function preprocessPayrollData(workbook: XLSX.WorkBook): {
       return { headerRowIndex, cleanedData: [] };
   }
 
-  // 4. Convert data rows to JSON format using normalized headers
-  const cleanedData = convertToJsonWithHeaders(headerRow, dataRows);
+  // 5. Convert data rows to JSON format using the (potentially merged and) normalized headers
+  console.log('2.5. Converting data rows to JSON format using merged/normalized headers...');
+  const cleanedData = convertToJsonWithHeaders(mergedHeaders, dataRows); // Use mergedHeaders here
 
   return { headerRowIndex, cleanedData };
 }
 
-// **** MODIFIED: Transform data function ****
 function transformData(data: Array<Record<string, any>>): {
-  transformedData: Array<Record<string, any>>;
-  failedRows: Array<{row: Record<string, any>, reason: string}>;
+   transformedData: Array<Record<string, any>>; failedRows: Array<{row: Record<string, any>, reason: string}>;
 } {
   // Input `data` is now assumed to be pre-processed:
   // - It's an array of objects.
@@ -918,7 +955,7 @@ function transformData(data: Array<Record<string, any>>): {
 
   // Check if enough essential headers were mapped
   const mappedSchemaFields = Object.values(headerMapping);
-  const essentialFieldsMapped = ['fullName', 'gross_income', 'nssf_no', 'nhif_no', 'tax_pin'].filter(field => mappedSchemaFields.includes(field)).length;
+  const essentialFieldsMapped = ['fullName', 'gross_income'].filter(field => mappedSchemaFields.includes(field)).length;
 
   if (Object.keys(headerMapping).length === 0) {
     // This case should ideally be caught by preprocessPayrollData, but as a fallback...
@@ -934,7 +971,6 @@ function transformData(data: Array<Record<string, any>>): {
   }
 
   // --- Process Data Rows ---
-  // We no longer slice the data, as it's already cleaned.
   const failedRows: Array<{row: Record<string, any>, reason: string}> = [];
 
   const transformedData = data.map((row, rowIndex) => {
@@ -945,7 +981,6 @@ function transformData(data: Array<Record<string, any>>): {
     if (isEmpty) return null;
 
     // Initialize with Employee interface structure and defaults
-    // (Keep the existing initialization)
     const transformedRow: Employee & { extractionErrors?: string[] } = {
       id: `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
       status: 'active',
@@ -1078,7 +1113,7 @@ function transformData(data: Array<Record<string, any>>): {
     const totalDed = transformedRow.total_deductions ?? 0;
 
     if (nssf > 4320) {
-      transformedRow.extractionErrors?.push(`Warning: NSSF (${nssf}) exceeds the KES 2160 cap.`);
+      transformedRow.extractionErrors?.push(`Warning: NSSF (${nssf}) exceeds the KES 4320 cap.`);
     }
     if (levy > 2500) {
       transformedRow.extractionErrors?.push(`Warning: Housing Levy (${levy}) exceeds the KES 2500 cap.`);

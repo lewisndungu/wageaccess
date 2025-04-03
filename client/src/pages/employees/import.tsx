@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   X,
@@ -140,6 +140,271 @@ const getNestedValue = (obj: any, path: string, defaultValue: any = "") => {
   }
   return get(obj, path, defaultValue); // Use lodash get
 };
+
+// --- NEW ReviewTable Component ---
+interface ReviewTableProps {
+  data: ExtractedRow[];
+  headers: string[];
+  editingCell: {
+    rowId: string;
+    column: string;
+    value: any;
+    fieldName?: string;
+  } | null;
+  onToggleRowExclusion: (rowId: string) => void;
+  onCellEdit: (rowId: string, displayHeader: string, value: any) => void;
+  onCellSave: () => void;
+  onCellEditCancel: () => void;
+  onDeleteRow: (rowId: string) => void;
+  setEditingCell: React.Dispatch<
+    React.SetStateAction<{
+      rowId: string;
+      column: string;
+      value: any;
+      fieldName?: string;
+    } | null>
+  >;
+}
+
+const ReviewTable = React.memo(
+  ({
+    data,
+    headers,
+    editingCell,
+    onToggleRowExclusion,
+    onCellEdit,
+    onCellSave,
+    onCellEditCancel,
+    onDeleteRow,
+    setEditingCell,
+  }: ReviewTableProps) => {
+    return (
+      <div className="overflow-x-auto">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead className="w-[50px] sticky left-0 bg-background">
+                <span className="sr-only">Include</span>
+              </TableHead>
+              {headers.map((header) => (
+                <TableHead key={header} className="whitespace-nowrap">
+                  {header}
+                </TableHead>
+              ))}
+              <TableHead className="sticky right-0 bg-background">
+                Status
+              </TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {data.map((row) => {
+              // Corrected critical error checks for rendering
+              const hasMissingName =
+                !getNestedValue(row, "other_names") &&
+                !getNestedValue(row, "surname");
+              const grossPay = getNestedValue(row, "gross_income", 0);
+              const hasInvalidGrossPay = !grossPay || grossPay <= 0;
+              const hasCriticalError = hasMissingName || hasInvalidGrossPay;
+              // Check for warnings from backend
+              const hasWarnings =
+                Array.isArray(row.extractionErrors) &&
+                row.extractionErrors.length > 0;
+
+              return (
+                <TableRow
+                  key={row.id}
+                  className={
+                    row.excluded ? "opacity-50 bg-muted/30" : ""
+                  }
+                >
+                  <TableCell className="sticky left-0 bg-background">
+                    <Checkbox
+                      checked={!row.excluded}
+                      onCheckedChange={() => onToggleRowExclusion(row.id)}
+                    />
+                  </TableCell>
+
+                  {headers.map((header) => {
+                    const fieldPath = HEADER_TO_FIELD_MAP[header];
+                    const displayValue = getNestedValue(row, fieldPath);
+
+                    // Determine if THIS SPECIFIC cell contributes to a critical error
+                    const cellIsEmpNoError = false; // Employee number is no longer a critical error
+                    // Name error applies if either name field is missing *and* this is a name field
+                    const cellIsNameError =
+                      (fieldPath === "other_names" ||
+                        fieldPath === "surname") &&
+                      hasMissingName;
+                    // Gross pay error applies if the field is missing or zero
+                    const cellIsGrossPayError =
+                      fieldPath === "gross_income" && hasInvalidGrossPay;
+                    const cellHasError = cellIsNameError || cellIsGrossPayError;
+
+                    return (
+                      <TableCell
+                        key={`${row.id}-${header}`}
+                        className="py-2 min-w-[120px]"
+                      >
+                        {editingCell &&
+                        editingCell.rowId === row.id &&
+                        editingCell.column === header ? (
+                          <div className="flex gap-2">
+                            <Input
+                              value={editingCell.value}
+                              onChange={(e) =>
+                                setEditingCell({
+                                  ...editingCell,
+                                  value: e.target.value,
+                                })
+                              }
+                              className="h-8 min-w-[100px]"
+                              // Optionally set input type based on field
+                              type={
+                                typeof getNestedValue(row, fieldPath) ===
+                                "number"
+                                  ? "number"
+                                  : "text"
+                              }
+                            />
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={onCellSave}
+                              className="h-8 w-8 p-0"
+                            >
+                              <Check className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={onCellEditCancel}
+                              className="h-8 w-8 p-0"
+                            >
+                              <X className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        ) : (
+                          <div className="flex items-center justify-between group">
+                            <span
+                              className={`truncate max-w-[200px] ${
+                                cellHasError
+                                  ? "text-destructive font-semibold"
+                                  : "" // Highlight specific error cell
+                              }`}
+                              title={String(displayValue)}
+                            >
+                              {/* Format the display value */}
+                              {displayValue !== undefined &&
+                              displayValue !== null
+                                ? typeof displayValue === "number"
+                                  ? Number.isInteger(displayValue)
+                                    ? displayValue.toString()
+                                    : displayValue.toFixed(2) // Keep number formatting
+                                  : typeof displayValue === "boolean"
+                                  ? displayValue
+                                    ? "Yes"
+                                    : "No"
+                                  : String(displayValue) // Default to string
+                                : "" /* Render empty string for null/undefined */}
+                            </span>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              // Pass the current display value to edit function
+                              onClick={() =>
+                                onCellEdit(row.id, header, displayValue)
+                              }
+                              className="opacity-0 group-hover:opacity-100 h-6 w-6 p-0"
+                              disabled={row.excluded}
+                            >
+                              {/* Edit SVG Icon */}
+                              <svg
+                                xmlns="http://www.w3.org/2000/svg"
+                                width="15"
+                                height="15"
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                                strokeWidth="2"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                              >
+                                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+                              </svg>
+                            </Button>
+                          </div>
+                        )}
+                      </TableCell>
+                    );
+                  })}
+
+                  <TableCell className="sticky right-0 bg-background">
+                    <div className="flex items-center gap-2">
+                      <Badge
+                        variant={
+                          row.excluded
+                            ? "secondary"
+                            : hasCriticalError
+                            ? "destructive"
+                            : hasWarnings // Check for warnings
+                            ? "warning"
+                            : "success"
+                        }
+                        title={
+                          hasWarnings
+                            ? row.extractionErrors?.join("\n")
+                            : undefined
+                        }
+                      >
+                        {row.excluded
+                          ? "Excluded"
+                          : hasCriticalError
+                          ? "Error"
+                          : hasWarnings // Check for warnings
+                          ? "Warning"
+                          : "Valid"}
+                      </Badge>
+
+                      {/* Add this delete button */}
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => onDeleteRow(row.id)}
+                        className="h-6 w-6 p-0 text-destructive hover:text-destructive hover:bg-destructive/10"
+                        title="Delete record"
+                      >
+                        <svg
+                          xmlns="http://www.w3.org/2000/svg"
+                          width="15"
+                          height="15"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        >
+                          <path d="M3 6h18"></path>
+                          <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"></path>
+                          <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path>
+                          <line x1="10" y1="11" x2="10" y2="17"></line>
+                          <line x1="14" y1="11" x2="14" y2="17"></line>
+                        </svg>
+                      </Button>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              );
+            })}
+          </TableBody>
+        </Table>
+      </div>
+    );
+  }
+);
+ReviewTable.displayName = "ReviewTable"; // Add display name for DevTools
+// --- END ReviewTable Component ---
 
 const EmployeeImportPage: React.FC = () => {
   const [currentStep, setCurrentStep] = React.useState<number>(1);
@@ -643,6 +908,9 @@ const EmployeeImportPage: React.FC = () => {
     });
   };
 
+  // Memoize the filtered data to prevent recalculation on every render
+  const filteredData = useMemo(getFilteredData, [processedData, searchTerm, statusFilter]);
+
   // Count critical errors
   const countCriticalErrors = () => {
     if (!processedData) return 0;
@@ -837,7 +1105,7 @@ const EmployeeImportPage: React.FC = () => {
                           placeholder="Search records..."
                           value={searchTerm}
                           onChange={(e) => setSearchTerm(e.target.value)}
-                          className="max-w-xs"
+                          className=""
                         />
                       </div>
 
@@ -932,7 +1200,7 @@ const EmployeeImportPage: React.FC = () => {
                       </div>
                     </div>
 
-                    {getFilteredData().length > 0 && statusFilter && (
+                    {filteredData.length > 0 && statusFilter && (
                       <div className="px-4 py-2 flex justify-end border-b">
                         <Button
                           size="sm"
@@ -941,284 +1209,25 @@ const EmployeeImportPage: React.FC = () => {
                           onClick={() => setShowBulkDeleteDialog(true)}
                         >
                           <Trash2 className="h-4 w-4" />
-                          Delete {getFilteredData().length} filtered records
+                          Delete {filteredData.length} filtered records
                         </Button>
                       </div>
                     )}
 
                     <div className="h-[calc(100vh-460px)] min-h-[400px]">
                       <ScrollArea className="h-full w-full">
-                        {processedData && getFilteredData().length > 0 ? (
-                          <div className="overflow-x-auto">
-                            <Table>
-                              <TableHeader>
-                                <TableRow>
-                                  <TableHead className="w-[50px] sticky left-0 bg-background">
-                                    <span className="sr-only">Include</span>
-                                  </TableHead>
-                                  {TARGET_HEADERS.map((header) => (
-                                    <TableHead
-                                      key={header}
-                                      className="whitespace-nowrap"
-                                    >
-                                      {header}
-                                    </TableHead>
-                                  ))}
-                                  <TableHead className="sticky right-0 bg-background">
-                                    Status
-                                  </TableHead>
-                                </TableRow>
-                              </TableHeader>
-                              <TableBody>
-                                {getFilteredData().map((row) => {
-                                  // Corrected critical error checks for rendering
-                                  const hasMissingName =
-                                    !getNestedValue(row, "other_names") &&
-                                    !getNestedValue(row, "surname");
-                                  const grossPay = getNestedValue(
-                                    row,
-                                    "gross_income",
-                                    0
-                                  );
-                                  const hasInvalidGrossPay =
-                                    !grossPay || grossPay <= 0;
-                                  const hasCriticalError =
-                                    hasMissingName || hasInvalidGrossPay;
-                                  // Check for warnings from backend
-                                  const hasWarnings =
-                                    Array.isArray(row.extractionErrors) &&
-                                    row.extractionErrors.length > 0;
-
-                                  return (
-                                    <TableRow
-                                      key={row.id}
-                                      className={
-                                        row.excluded
-                                          ? "opacity-50 bg-muted/30"
-                                          : ""
-                                      }
-                                    >
-                                      <TableCell className="sticky left-0 bg-background">
-                                        <Checkbox
-                                          checked={!row.excluded}
-                                          onCheckedChange={() =>
-                                            toggleRowExclusion(row.id)
-                                          }
-                                        />
-                                      </TableCell>
-
-                                      {TARGET_HEADERS.map((header) => {
-                                        const fieldPath =
-                                          HEADER_TO_FIELD_MAP[header];
-                                        const displayValue = getNestedValue(
-                                          row,
-                                          fieldPath
-                                        );
-
-                                        // Determine if THIS SPECIFIC cell contributes to a critical error
-                                        const cellIsEmpNoError = false; // Employee number is no longer a critical error
-                                        // Name error applies if either name field is missing *and* this is a name field
-                                        const cellIsNameError =
-                                          (fieldPath === "other_names" ||
-                                            fieldPath === "surname") &&
-                                          hasMissingName;
-                                        // Gross pay error applies if the field is missing or zero
-                                        const cellIsGrossPayError =
-                                          fieldPath === "gross_income" &&
-                                          hasInvalidGrossPay;
-                                        const cellHasError =
-                                          cellIsNameError ||
-                                          cellIsGrossPayError;
-
-                                        return (
-                                          <TableCell
-                                            key={`${row.id}-${header}`}
-                                            className="py-2 min-w-[120px]"
-                                          >
-                                            {editingCell &&
-                                            editingCell.rowId === row.id &&
-                                            editingCell.column === header ? (
-                                              <div className="flex gap-2">
-                                                <Input
-                                                  value={editingCell.value}
-                                                  onChange={(e) =>
-                                                    setEditingCell({
-                                                      ...editingCell,
-                                                      value: e.target.value,
-                                                    })
-                                                  }
-                                                  className="h-8 min-w-[100px]"
-                                                  // Optionally set input type based on field
-                                                  type={
-                                                    typeof getNestedValue(
-                                                      row,
-                                                      fieldPath
-                                                    ) === "number"
-                                                      ? "number"
-                                                      : "text"
-                                                  }
-                                                />
-                                                <Button
-                                                  size="sm"
-                                                  variant="ghost"
-                                                  onClick={handleCellSave}
-                                                  className="h-8 w-8 p-0"
-                                                >
-                                                  <Check className="h-4 w-4" />
-                                                </Button>
-                                                <Button
-                                                  size="sm"
-                                                  variant="ghost"
-                                                  onClick={handleCellEditCancel}
-                                                  className="h-8 w-8 p-0"
-                                                >
-                                                  <X className="h-4 w-4" />
-                                                </Button>
-                                              </div>
-                                            ) : (
-                                              <div className="flex items-center justify-between group">
-                                                <span
-                                                  className={`truncate max-w-[200px] ${
-                                                    cellHasError
-                                                      ? "text-destructive font-semibold"
-                                                      : "" // Highlight specific error cell
-                                                  }`}
-                                                  title={String(displayValue)}
-                                                >
-                                                  {/* Format the display value */}
-                                                  {
-                                                    displayValue !==
-                                                      undefined &&
-                                                    displayValue !== null
-                                                      ? typeof displayValue ===
-                                                        "number"
-                                                        ? Number.isInteger(
-                                                            displayValue
-                                                          )
-                                                          ? displayValue.toString()
-                                                          : displayValue.toFixed(
-                                                              2
-                                                            ) // Keep number formatting
-                                                        : typeof displayValue ===
-                                                          "boolean"
-                                                        ? displayValue
-                                                          ? "Yes"
-                                                          : "No"
-                                                        : String(displayValue) // Default to string
-                                                      : "" /* Render empty string for null/undefined */
-                                                  }
-                                                </span>
-                                                <Button
-                                                  size="sm"
-                                                  variant="ghost"
-                                                  // Pass the current display value to edit function
-                                                  onClick={() =>
-                                                    handleCellEdit(
-                                                      row.id,
-                                                      header,
-                                                      displayValue
-                                                    )
-                                                  }
-                                                  className="opacity-0 group-hover:opacity-100 h-6 w-6 p-0"
-                                                  disabled={row.excluded}
-                                                >
-                                                  {/* Edit SVG Icon */}
-                                                  <svg
-                                                    xmlns="http://www.w3.org/2000/svg"
-                                                    width="15"
-                                                    height="15"
-                                                    viewBox="0 0 24 24"
-                                                    fill="none"
-                                                    stroke="currentColor"
-                                                    strokeWidth="2"
-                                                    strokeLinecap="round"
-                                                    strokeLinejoin="round"
-                                                  >
-                                                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
-                                                    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
-                                                  </svg>
-                                                </Button>
-                                              </div>
-                                            )}
-                                          </TableCell>
-                                        );
-                                      })}
-
-                                      <TableCell className="sticky right-0 bg-background">
-                                        <div className="flex items-center gap-2">
-                                          <Badge
-                                            variant={
-                                              row.excluded
-                                                ? "secondary"
-                                                : hasCriticalError
-                                                ? "destructive"
-                                                : hasWarnings // Check for warnings
-                                                ? "warning"
-                                                : "success"
-                                            }
-                                            title={
-                                              hasWarnings
-                                                ? row.extractionErrors?.join(
-                                                    "\n"
-                                                  )
-                                                : undefined
-                                            }
-                                          >
-                                            {row.excluded
-                                              ? "Excluded"
-                                              : hasCriticalError
-                                              ? "Error"
-                                              : hasWarnings // Check for warnings
-                                              ? "Warning"
-                                              : "Valid"}
-                                          </Badge>
-
-                                          {/* Add this delete button */}
-                                          <Button
-                                            size="sm"
-                                            variant="ghost"
-                                            onClick={() =>
-                                              handleDeleteRow(row.id)
-                                            }
-                                            className="h-6 w-6 p-0 text-destructive hover:text-destructive hover:bg-destructive/10"
-                                            title="Delete record"
-                                          >
-                                            <svg
-                                              xmlns="http://www.w3.org/2000/svg"
-                                              width="15"
-                                              height="15"
-                                              viewBox="0 0 24 24"
-                                              fill="none"
-                                              stroke="currentColor"
-                                              strokeWidth="2"
-                                              strokeLinecap="round"
-                                              strokeLinejoin="round"
-                                            >
-                                              <path d="M3 6h18"></path>
-                                              <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"></path>
-                                              <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path>
-                                              <line
-                                                x1="10"
-                                                y1="11"
-                                                x2="10"
-                                                y2="17"
-                                              ></line>
-                                              <line
-                                                x1="14"
-                                                y1="11"
-                                                x2="14"
-                                                y2="17"
-                                              ></line>
-                                            </svg>
-                                          </Button>
-                                        </div>
-                                      </TableCell>
-                                    </TableRow>
-                                  );
-                                })}
-                              </TableBody>
-                            </Table>
-                          </div>
+                        {processedData && filteredData.length > 0 ? (
+                          <ReviewTable
+                            data={filteredData}
+                            headers={TARGET_HEADERS}
+                            editingCell={editingCell}
+                            setEditingCell={setEditingCell}
+                            onToggleRowExclusion={toggleRowExclusion}
+                            onCellEdit={handleCellEdit}
+                            onCellSave={handleCellSave}
+                            onCellEditCancel={handleCellEditCancel}
+                            onDeleteRow={handleDeleteRow}
+                          />
                         ) : (
                           <div className="p-8 text-center text-muted-foreground">
                             {processedData
@@ -1434,7 +1443,7 @@ const EmployeeImportPage: React.FC = () => {
           <DialogHeader>
             <DialogTitle>Confirm Bulk Delete</DialogTitle>
             <DialogDescription>
-              Are you sure you want to delete {getFilteredData().length}{" "}
+              Are you sure you want to delete {filteredData.length}{" "}
               records? This action cannot be undone.
             </DialogDescription>
           </DialogHeader>

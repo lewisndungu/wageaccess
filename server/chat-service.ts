@@ -5,7 +5,7 @@ import { calculatePayrollBasedOnAttendance } from '../client/src/lib/kenyan-payr
 import * as XLSX from 'xlsx';
 
 // Column mapping configuration - Based on User's Master Template
-const columnMappings: Record<string, string> = {
+export const columnMappings: Record<string, string> = {
   'Emp No': 'employeeNumber', // Maps to Employee.employeeNumber
   'Employee Name': 'fullName', // Will be split into surname & other_names later
   'Probation Period': 'is_on_probation', // Maps to Employee.is_on_probation (boolean)
@@ -706,7 +706,7 @@ function findHeaderRowInCSV(csvData: any[][], maxRowsToCheck = 20): number {
       /gross|basic|salary|pay\b/i, // Gross Pay variants
       /net|take\s?home/i, // Net Pay variants
       /nssf|social/i, // NSSF variants
-      /nhif|health|shif/i, // NHIF/SHIF variants
+      /nhif|health|shif|sha/i, // NHIF/SHIF variants
       /tax|paye/i, // Tax variants
       /levy|housing/i, // Housing Levy variants
       /deduction|deduct/i, // General Deductions
@@ -715,7 +715,7 @@ function findHeaderRowInCSV(csvData: any[][], maxRowsToCheck = 20): number {
       /id\s?no|identi/i, // ID Number
       /kra|pin/i, // KRA PIN
       /bank/i, // Bank Info
-      /position|title|designation/i, // Position
+      /position|title|designation|role|site/i, // Position
       /phone|contact|mobile|mpesa/i, // Contact
   ];
   

@@ -40,6 +40,7 @@ import {
   differenceInMinutes,
 } from "date-fns";
 import { chatService } from "./index";
+import { generatePayrollExcel } from './payroll-export';
 
 // Add this utility function for formatting currency values (Kenyan Shillings)
 function formatKESValue(value: number): string {
@@ -3664,6 +3665,59 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.post("/api/payroll/export/master-template", async (req, res) => {
+    try {
+      const { data, fileName } = req.body;
+
+      if (!data || !Array.isArray(data)) {
+        return res.status(400).json({ error: "Invalid data format" });
+      }
+
+      const now = new Date();
+      
+      // Generate Excel buffer using the master template format
+      const buffer = await generatePayrollExcel(data.map(employee => ({
+        employee,
+        payroll: {
+          id: `temp-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
+          employeeId: employee.id || '',
+          periodStart: now,
+          periodEnd: now,
+          grossPay: employee.gross_income || 0,
+          netPay: employee.net_income || 0,
+          taxDeductions: employee.statutory_deductions?.tax || 0,
+          otherDeductions: (employee.loan_deductions || 0) + (employee.employer_advances || 0),
+          ewaDeductions: 0,
+          hoursWorked: 0,
+          status: 'completed',
+          statutory_deductions: {
+            tax: employee.statutory_deductions?.tax || 0,
+            nhif: employee.statutory_deductions?.nhif || 0,
+            nssf: employee.statutory_deductions?.nssf || 0,
+            levy: employee.statutory_deductions?.levy || 0
+          }
+        }
+      })));
+
+      // Set response headers
+      res.setHeader(
+        "Content-Type",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+      );
+      res.setHeader(
+        "Content-Disposition",
+        `attachment; filename=${fileName || 'Import_Report.xlsx'}`
+      );
+
+      // Send the buffer
+      res.send(buffer);
+    } catch (error) {
+      console.error("Error generating master template export:", error);
+      res.status(500).json({ error: "Failed to generate master template export" });
+    }
+  });
+
   const httpServer = createServer(app);
   return httpServer;
 }
+

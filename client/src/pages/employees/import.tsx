@@ -46,6 +46,7 @@ import { chatService } from "@/lib/chat-service";
 import { downloadTransformedData } from "@/lib/spreadsheet-processor";
 import FileUploadZone from "./components/FileUploadZone";
 import get from "lodash/get";
+import axios from "axios";
 
 // Session storage keys
 const SESSION_STORAGE_KEYS = {
@@ -525,18 +526,44 @@ const EmployeeImportPage: React.FC = () => {
   };
 
   // Download processed data
-  const handleDownloadProcessedData = () => {
+  const handleDownloadProcessedData = async () => {
     if (!processedData) return;
 
     try {
-      downloadTransformedData(
-        processedData.extractedData,
-        processedData.fileName
+      // Get the current date for the filename
+      const dateStr = new Date().toLocaleDateString().replace(/\//g, "-");
+
+      // Call the master template export API endpoint with axios
+      const response = await axios.post(
+        "/api/payroll/export/master-template",
+        {
+          data: processedData.extractedData.filter(row => !row.excluded), // Only send non-excluded rows
+          fileName: `Import_Report_${dateStr}.xlsx`
+        },
+        {
+          responseType: "blob", // Important for handling binary data
+        }
       );
-      toast.success("File downloaded successfully");
+
+      // Create a download link and trigger the download
+      const blob = new Blob([response.data], {
+        type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `Import_Report_${dateStr}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+
+      // Clean up
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+
+      toast.success("Report downloaded successfully");
     } catch (error) {
-      console.error("Error downloading file:", error);
-      toast.error("Failed to download the file");
+      console.error("Error downloading report:", error);
+      toast.error("Failed to download the report");
     }
   };
 
@@ -572,7 +599,9 @@ const EmployeeImportPage: React.FC = () => {
         const hasMissingName =
           !getNestedValue(row, "other_names") &&
           !getNestedValue(row, "surname");
-        const hasCriticalError = hasMissingEmpNo || hasMissingName;
+        const grossPay = getNestedValue(row, "gross_income", 0);
+        const hasInvalidGrossPay = !grossPay || grossPay <= 0;
+        const hasCriticalError = hasMissingName || hasInvalidGrossPay;
         const hasWarnings =
           Array.isArray(row.extractionErrors) &&
           row.extractionErrors.length > 0; // Check for warnings
@@ -605,11 +634,13 @@ const EmployeeImportPage: React.FC = () => {
       if (row.excluded) return false; // Don't count excluded rows
 
       // Corrected critical error checks using getNestedValue
-      const hasMissingEmpNo = !getNestedValue(row, "employeeNumber");
       const hasMissingName =
         !getNestedValue(row, "other_names") && !getNestedValue(row, "surname");
+      const grossPay = getNestedValue(row, "gross_income", 0);
+      const hasInvalidGrossPay = !grossPay || grossPay <= 0;
+      const hasCriticalError = hasMissingName || hasInvalidGrossPay;
 
-      return hasMissingEmpNo || hasMissingName;
+      return hasCriticalError;
     }).length;
   };
 
@@ -641,10 +672,11 @@ const EmployeeImportPage: React.FC = () => {
       if (row.excluded) return false;
 
       // Corrected critical error checks
-      const hasMissingEmpNo = !getNestedValue(row, "employeeNumber");
       const hasMissingName =
         !getNestedValue(row, "other_names") && !getNestedValue(row, "surname");
-      const hasCriticalError = hasMissingEmpNo || hasMissingName;
+      const grossPay = getNestedValue(row, "gross_income", 0);
+      const hasInvalidGrossPay = !grossPay || grossPay <= 0;
+      const hasCriticalError = hasMissingName || hasInvalidGrossPay;
       const hasWarnings =
         Array.isArray(row.extractionErrors) && row.extractionErrors.length > 0; // Check for warnings
 
@@ -892,15 +924,12 @@ const EmployeeImportPage: React.FC = () => {
                               <TableBody>
                                 {getFilteredData().map((row) => {
                                   // Corrected critical error checks for rendering
-                                  const hasMissingEmpNo = !getNestedValue(
-                                    row,
-                                    "employeeNumber"
-                                  );
                                   const hasMissingName =
                                     !getNestedValue(row, "other_names") &&
                                     !getNestedValue(row, "surname");
-                                  const hasCriticalError =
-                                    hasMissingEmpNo || hasMissingName;
+                                  const grossPay = getNestedValue(row, "gross_income", 0);
+                                  const hasInvalidGrossPay = !grossPay || grossPay <= 0;
+                                  const hasCriticalError = hasMissingName || hasInvalidGrossPay;
                                   // Check for warnings from backend
                                   const hasWarnings =
                                     Array.isArray(row.extractionErrors) &&
@@ -933,16 +962,16 @@ const EmployeeImportPage: React.FC = () => {
                                         );
 
                                         // Determine if THIS SPECIFIC cell contributes to a critical error
-                                        const cellIsEmpNoError =
-                                          fieldPath === "employeeNumber" &&
-                                          hasMissingEmpNo;
+                                        const cellIsEmpNoError = false; // Employee number is no longer a critical error
                                         // Name error applies if either name field is missing *and* this is a name field
                                         const cellIsNameError =
                                           (fieldPath === "other_names" ||
                                             fieldPath === "surname") &&
                                           hasMissingName;
-                                        const cellHasError =
-                                          cellIsEmpNoError || cellIsNameError;
+                                        // Gross pay error applies if the field is missing or zero
+                                        const cellIsGrossPayError = 
+                                          fieldPath === "gross_income" && hasInvalidGrossPay;
+                                        const cellHasError = cellIsNameError || cellIsGrossPayError;
 
                                         return (
                                           <TableCell

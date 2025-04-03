@@ -502,16 +502,35 @@ function findBestMatch(targetColumn: string, availableColumns: string[]): string
       variations: ['HEALTH INSURANCE DEDUCTION', 'NHIF DED', 'SHIF DED'],
       exclude: ['NHIF NO', 'NHIF NUMBER', 'NHIF MEMBERSHIP', 'SHIF NO', 'SHIF NUMBER']
     },
+    'KRA Pin': { // Updated to match columnMappings key exactly
+        exact: ['KRA PIN NUMBER', 'KRA PIN', 'TAX PIN'], // Put exact header first
+        variations: ['PIN NO', 'PIN NUMBER', 'KRA PIN NO.', 'KRA NUMBER'],
+        exclude: ['PHONE', 'CONTACT', 'MOBILE', 'BANK', 'ACCOUNT', 'NSSF', 'NHIF', 'ID', 'EMP', 'STAFF']
+    },
+     'CONTACTS': { // Add specific exclusions
+        exact: ['CONTACT', 'CONTACTS', 'PHONE', 'MOBILE', 'TELEPHONE', 'PHONE NUMBER', 'MOBILE NUMBER', 'TEL NO.'],
+        variations: [],
+        exclude: ['KRA', 'PIN', 'TAX', 'NSSF', 'NHIF', 'ID', 'EMP', 'STAFF', 'BANK', 'ACCOUNT'] // Ensure KRA/PIN/TAX are excluded
+     },
+     'MPesa Number': { // Add specific exclusions
+        exact: ['MPESA', 'MOBILE MONEY', 'PHONE NO', 'MOBILE NO', 'TEL NO.'],
+        variations: [],
+        exclude: ['KRA', 'PIN', 'TAX', 'NSSF', 'NHIF', 'ID', 'EMP', 'STAFF', 'BANK', 'ACCOUNT'] // Ensure KRA/PIN/TAX are excluded
+     },
+     'Bank Account Number': { // Keep existing structure
+        exact: ['BANK ACC', 'BANK ACCOUNT', 'ACCOUNT NUMBER', 'ACC NO', 'ACCOUNT NO'],
+        variations: ['BANK', 'ACCOUNT'],
+        exclude: ['ID NO', 'ID NUMBER', 'NATIONAL ID', 'KRA', 'PIN', 'PHONE', 'MOBILE'] // Prevent matching with ID/Tax/Phone fields
+     },
+     'ID Number': { // Add explicit structure
+        exact: ['ID NO', 'ID NUMBER', 'NATIONAL ID', 'IDENTITY NUMBER'],
+        variations: ['ID', 'IDENTIFICATION'],
+        exclude: ['BANK', 'ACCOUNT', 'ACC NO', 'KRA', 'PIN', 'PHONE', 'EMP NO'] // Prevent matching with bank/tax/phone/emp fields
+     },
     // Simple array format for other cases
     'Emp No': ['EMPLO NO.', 'EMPLOYEE NO', 'EMPLOYEE NUMBER', 'EMP NUMBER', 'STAFF NO'],
     'Employee Name': ['EMPLOYEES\' FULL NAMES', 'FULL NAME', 'NAME', 'EMPLOYEE NAMES', 'STAFF NAME', 'EMPLOYEE FULL NAME', 'SURNAME', 'OTHER NAMES'],
     'Probation Period': ['PROBATION', 'ON PROBATION'],
-    'ID Number': {
-      exact: ['ID NO', 'ID NUMBER', 'NATIONAL ID', 'IDENTITY NUMBER'],
-      variations: ['ID', 'IDENTIFICATION'],
-      exclude: ['BANK ACCOUNT', 'ACC NO', 'ACCOUNT NUMBER'] // Prevent matching with bank fields
-    },
-    'KRA Pin': ['KRA PIN NO.', 'KRA', 'PIN NO', 'PIN NUMBER', 'TAX PIN', 'KRA PIN NUMBER'],
     'Position': ['JOB TITTLE', 'TITLE', 'JOB TITLE', 'DESIGNATION', 'ROLE', 'SITE'],
     'Gross Pay': ['GROSS SALARY', 'GROSS', 'MONTHLY SALARY', 'GROSS INCOME', 'TOTAL GROSS PAY', 'GROSS PAY', 'BASIC PAY', 'BASIC SALARY'],
     'PAYE': ['TAX', 'INCOME TAX', 'PAYE'],
@@ -519,21 +538,14 @@ function findBestMatch(targetColumn: string, availableColumns: string[]): string
     'Loan Deduction': ['LOANS', 'LOAN', 'LOAN REPAYMENT', 'DEBT REPAYMENT', 'TOTAL LOAN DEDUCTIONS', 'LOAN DEDUCTION'],
     'Employer Advance': ['ADVANCE', 'SALARY ADVANCE', 'ADVANCE SALARY', 'ADVANCE PAYMENT', 'EMPLOYER ADVANCES', 'SALARY ADVANCE'],
     'Net Pay': ['NET SALARY', 'TAKE HOME', 'FINAL PAY', 'NET PAY', 'NET INCOME'],
-    'MPesa Number': ['MPESA', 'MOBILE MONEY', 'PHONE NO', 'MOBILE NO', 'TEL NO.'],
-    'Bank Account Number': {
-      exact: ['BANK ACC', 'BANK ACCOUNT', 'ACCOUNT NUMBER', 'ACC NO', 'ACCOUNT NO'],
-      variations: ['BANK', 'ACCOUNT'],
-      exclude: ['ID NO', 'ID NUMBER', 'NATIONAL ID'] // Prevent matching with ID fields
-    },
     'T & C Accepted': ['TERMS ACCEPTED', 'T&C', 'AGREED TERMS'],
-    'CONTACTS': ['CONTACT', 'CONTACTS', 'PHONE', 'MOBILE', 'TELEPHONE', 'PHONE NUMBER', 'MOBILE NUMBER', 'TEL NO.'],
     'GENDER': ['SEX', 'MALE/FEMALE', 'M/F'],
     'BANK CODE': ['BANK BRANCH CODE', 'BRANCH CODE'],
-    'BANK': ['BANK NAME'],
-    'HOUSE ALLOWANCE': ['HSE ALLOWANCE', 'H/ALLOWANCE', 'HOUSING', 'HOLIDAY'],
+    'BANK': ['BANK NAME'], // Keep simple unless conflicts arise
+    'HOUSE ALLOWANCE': ['HSE ALLOWANCE', 'H/ALLOWANCE', 'HOUSING'], // Removed 'HOLIDAY'
     'JAHAZII': ['JAHAZII ADVANCE', 'JAHAZII LOAN', 'JAHAZII'],
     'STATUS': ['EMPLOYEE STATUS', 'ACTIVE', 'INACTIVE', 'EMPLOYMENT STATUS'],
-    'Total Deductions': ['TOTAL DEDUCTIONS', 'TOTAL DED', 'TOTAL DEDUCTS'],
+    'Total Deductions': ['TOTAL DEDUCTIONS', 'TOTAL DED', 'TOTAL DEDUCTS'], // Keep simple
   };
 
   const cleanedAvailableColumns = availableColumns.map(col => {
@@ -1065,10 +1077,7 @@ function transformData(data: Array<Record<string, any>>): {
     const levy = transformedRow.statutory_deductions?.levy ?? 0;
     const totalDed = transformedRow.total_deductions ?? 0;
 
-    if (nhif > 1700) {
-      transformedRow.extractionErrors?.push(`Warning: NHIF (${nhif}) exceeds the KES 1700 cap.`);
-    }
-    if (nssf > 2160) {
+    if (nssf > 4320) {
       transformedRow.extractionErrors?.push(`Warning: NSSF (${nssf}) exceeds the KES 2160 cap.`);
     }
     if (levy > 2500) {

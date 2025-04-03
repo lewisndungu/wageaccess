@@ -208,85 +208,114 @@ You can also use the quick action buttons below the chat to access common functi
     async processFile(file: UploadedFile, userId: string): Promise<any> {
       // Implement file processing logic with advanced data extraction
       try {
-        // Read directly from the buffer
+        // 1. Read the XLSX file
         const workbook = XLSX.read(file.buffer, { type: 'buffer' });
+        
+        // Original JSON data for fallback or direct extraction if needed
         const sheetName = workbook.SheetNames[0];
         const worksheet = workbook.Sheets[sheetName];
-        const jsonData = XLSX.utils.sheet_to_json(worksheet, { defval: '' });
-        
-        // Find actual data rows (skip headers)
-        const dataRows = findActualDataRows(jsonData as Record<string, any>[]);
-        
-        // Process the data through our transformation pipeline
-        const { transformedData, failedRows } = transformData(dataRows.length > 0 ? dataRows : jsonData as Record<string, any>[]);
-        
-        let extractedData = transformedData;
-        let finalFailedRows = failedRows;
-        
-        // If no data was extracted using standard transformation, try direct extraction
-        if (transformedData.length === 0 && jsonData.length > 0) { // Check jsonData length
-          const { directExtracted, directFailedRows } = directDataExtraction(jsonData as Record<string, any>[]);
-          if (directExtracted.length > 0) { // Only use if direct extraction found something
-             extractedData = directExtracted;
-             finalFailedRows = [...failedRows, ...directFailedRows]; // Combine failed rows
-          } else {
-             // If both standard and direct fail, add all original rows (if any) as failed
-             if (dataRows.length > 0) {
-                finalFailedRows = dataRows.map((row, index) => ({
-                    row: row,
-                    reason: `Row ${index + 1}: Could not automatically map or extract data. Requires manual review.`
-                }));
-             } else if (jsonData.length > 0) {
-                 finalFailedRows = (jsonData as Record<string, any>[]).map((row, index) => ({
-                    row: row,
-                    reason: `Row ${index + 1}: Could not automatically map or extract data. Requires manual review.`
-                 }));
-             }
-          }
-        } else if (transformedData.length === 0 && jsonData.length === 0) {
-            // Handle case where the file was empty or contained no processable data
-            finalFailedRows = [{ row: {}, reason: "No data found in the uploaded file." }];
+        const originalJsonData = XLSX.utils.sheet_to_json(worksheet, { defval: '' }) as Record<string, any>[];
+
+        // 2. Preprocess the data (NEW)
+        let processedResult: { transformedData: Array<any>; failedRows: Array<{row: Record<string, any>, reason: string}> } | null = null;
+        let preprocessingFailed = false;
+        let preprocessingReason = '';
+
+        try {
+            const { cleanedData, headerRowIndex } = preprocessPayrollData(workbook);
+
+            if (headerRowIndex === -1) {
+                preprocessingFailed = true;
+                preprocessingReason = 'Could not reliably detect a header row.';
+                console.warn('Preprocessing failed:', preprocessingReason);
+            } else if (!cleanedData || cleanedData.length === 0) {
+                preprocessingFailed = true;
+                preprocessingReason = 'Preprocessing completed, but no data rows found after the header.';
+                console.warn('Preprocessing notice:', preprocessingReason);
+                // Treat as failure for data processing, but maybe not a hard error
+            } else {
+                console.log(`Header row detected at index ${headerRowIndex}. Processing ${cleanedData.length} data rows.`);
+                // 3. Transform the cleaned data (EXISTING - but will be modified)
+                processedResult = transformData(cleanedData); // Pass cleanedData here
+            }
+        } catch (preprocessError: any) {
+            preprocessingFailed = true;
+            preprocessingReason = `Preprocessing error: ${preprocessError.message}`;
+            console.error(preprocessingReason);
         }
-        
-        // Format the result - Return extractedData directly
+
+        let extractedData: Array<any> = [];
+        let finalFailedRows: Array<{row: Record<string, any>, reason: string}> = [];
+
+        if (processedResult && !preprocessingFailed) {
+            extractedData = processedResult.transformedData;
+            finalFailedRows = processedResult.failedRows;
+            console.log(`Transformation successful: ${extractedData.length} records extracted, ${finalFailedRows.length} failed.`);
+        } else {
+            // Fallback to direct extraction if preprocessing/transformation failed or yielded nothing
+            console.warn(`Preprocessing/Transformation failed or yielded no data (Reason: ${preprocessingReason || 'No data after transformation'}). Attempting direct extraction...`);
+            
+            if (originalJsonData.length > 0) {
+                const { directExtracted, directFailedRows } = directDataExtraction(originalJsonData);
+                if (directExtracted.length > 0) {
+                    extractedData = directExtracted;
+                    // Prepend preprocessing/transformation failures to direct failures
+                    finalFailedRows = [{ row: {}, reason: `Initial processing failed: ${preprocessingReason || 'No data after transformation'}. Results below are from direct extraction.` }, ...directFailedRows];
+                    console.log(`Direct extraction successful: ${extractedData.length} records extracted, ${directFailedRows.length} direct failures.`);
+                } else {
+                    // If both methods fail, report the initial failure reason + direct failure
+                    finalFailedRows = [
+                        { row: {}, reason: `Initial processing failed: ${preprocessingReason || 'No data after transformation'}.` },
+                        ...directFailedRows, // Include direct failures if any
+                        ...(directFailedRows.length === 0 && originalJsonData.length > 0 ? [{ row: {}, reason: 'Direct extraction also failed to find usable data.' }] : [])
+                    ];
+                     console.error('Both standard processing and direct extraction failed.');
+                }
+            } else {
+                finalFailedRows = [{ row: {}, reason: "No data found in the uploaded file." }];
+                 console.error('File appears empty or contains no processable data.');
+            }
+        }
+
+        // Format the result
         const result = {
-          // No longer returning headers from backend
-          extractedData: extractedData, // Use the data from transformation/extraction
+          extractedData: extractedData,
           failedRows: finalFailedRows,
           fileName: file.originalname
         };
-        
+
         // Save a message about the file upload
         const fileMessage: ChatMessage = {
           id: Date.now().toString(),
           userId,
           type: 'file',
-          content: `Processed: ${file.originalname}. Found ${extractedData.length} potential records, ${finalFailedRows.length} rows need attention.`, // Updated content
+          content: `Processed: ${file.originalname}. Found ${extractedData.length} potential records, ${finalFailedRows.length} rows need attention.`,
           timestamp: new Date(),
-          fileData: { // Keep fileData for potential use, but structure might differ now
+          fileData: {
              fileName: result.fileName,
              recordCount: extractedData.length,
              failedCount: finalFailedRows.length
           },
-          // Add actions based on processing outcome
           actions: extractedData.length > 0 ? [
             {
               id: 'view-data',
-              label: 'Review & Import' // Changed label
+              label: 'Review & Import'
             }
-          ] : (finalFailedRows.length > 0 ? [{ id: 'view-failed-rows', label: 'View Failed Rows'}] : []), // Add action for failed rows if no success
-          metadata: { // Add counts to metadata
+          ] : (finalFailedRows.length > 0 ? [{ id: 'view-failed-rows', label: 'View Failed Rows'}] : []),
+          metadata: {
              processedCount: extractedData.length,
-             failedCount: finalFailedRows.length
+             failedCount: finalFailedRows.length,
+             preprocessingFailed: preprocessingFailed, // Add flag
+             preprocessingReason: preprocessingReason // Add reason
           }
         };
-        
+
         await storageModule.saveMessage(fileMessage);
-        
+
         return result; // Return the structured result
+
       } catch (error: any) { // Handle as a generic error with message property
         console.error('Error processing file:', error);
-        // Optionally save an error message to chat history
          await storageModule.saveMessage({
              id: Date.now().toString(),
              userId,
@@ -501,74 +530,70 @@ function findBestMatch(targetColumn: string, availableColumns: string[]): string
 
   const cleanedAvailableColumns = availableColumns.map(col => {
     if (col && col.startsWith('__EMPTY')) return null;
-    return col;
+    return String(col || '').trim().toUpperCase();
   }).filter(Boolean) as string[];
 
-  // For NSSF and NHIF special handling
+  // Normalize target column once
+  const upperTargetColumn = targetColumn.toUpperCase();
+
+  // Handle special cases first (NSSF/NHIF No vs Deduction)
   const specialCase = specialCases[targetColumn];
   if (specialCase && !Array.isArray(specialCase)) {
-    // First check exact matches
+    // Check exact matches (case-insensitive)
     for (const col of cleanedAvailableColumns) {
       if (!col) continue;
-      const upperCol = col.toUpperCase();
-      
-      // Check if this column should be excluded
-      if (specialCase.exclude.some(excl => upperCol === excl.toUpperCase())) {
-        continue;
-      }
-      
-      // Check exact matches first
-      if (specialCase.exact.some(exact => upperCol === exact.toUpperCase())) {
-        return col;
-      }
+      if (specialCase.exclude.some(excl => col === excl.toUpperCase())) continue;
+      if (specialCase.exact.some(exact => col === exact.toUpperCase())) return col; // Return the original case from availableColumns
     }
-    
-    // Then check variations
+    // Check variations (case-insensitive includes)
     for (const col of cleanedAvailableColumns) {
       if (!col) continue;
-      const upperCol = col.toUpperCase();
-      
-      // Skip if in exclude list
-      if (specialCase.exclude.some(excl => upperCol.includes(excl.toUpperCase()))) {
-        continue;
-      }
-      
-      // Check variations
-      if (specialCase.variations.some(variation => upperCol.includes(variation.toUpperCase()))) {
-        return col;
-      }
+      if (specialCase.exclude.some(excl => col.includes(excl.toUpperCase()))) continue;
+      if (specialCase.variations.some(variation => col.includes(variation.toUpperCase()))) return col; // Return original case
     }
   } else {
     // Original matching logic for other columns
-    const exactMatch = cleanedAvailableColumns.find(col => 
-      col && col.toLowerCase() === targetColumn.toLowerCase());
-    if (exactMatch) return exactMatch;
     
+    // 1. Exact match (case-insensitive)
+    const exactMatch = cleanedAvailableColumns.find(col => col === upperTargetColumn);
+    if (exactMatch) {
+         // Find the original case version in the input list
+         return availableColumns.find(originalCol => String(originalCol || '').trim().toUpperCase() === exactMatch) || exactMatch;
+    }
+
+    // 2. Match variations from specialCases if it's an array
     if (specialCase && Array.isArray(specialCase)) {
-      for (const variation of specialCase) {
-        const specialMatch = cleanedAvailableColumns.find(col => 
-          col && col.toLowerCase() === variation.toLowerCase());
-        if (specialMatch) return specialMatch;
+      const upperVariations = specialCase.map(v => v.toUpperCase());
+      const variationMatch = cleanedAvailableColumns.find(col => upperVariations.includes(col));
+      if (variationMatch) {
+           return availableColumns.find(originalCol => String(originalCol || '').trim().toUpperCase() === variationMatch) || variationMatch;
       }
     }
-    
+
+    // 3. Substring containment check (both ways, case-insensitive)
     for (const col of cleanedAvailableColumns) {
-      if (col && (col.toLowerCase().includes(targetColumn.toLowerCase()) || 
-          targetColumn.toLowerCase().includes(col.toLowerCase()))) {
-        return col;
+      if (col.includes(upperTargetColumn) || upperTargetColumn.includes(col)) {
+         return availableColumns.find(originalCol => String(originalCol || '').trim().toUpperCase() === col) || col;
       }
     }
-    
-    const targetWords = targetColumn.toLowerCase().split(/[\s.,\-_]+/).filter(word => word.length > 2);
-    for (const col of cleanedAvailableColumns) {
-      if (!col) continue;
-      const colWords = col.toLowerCase().split(/[\s.,\-_]+/).filter(word => word.length > 2);
-      const hasCommonWords = targetWords.some(word => colWords.includes(word));
-      if (hasCommonWords) return col;
+
+    // 4. Word overlap check (more robust)
+    const targetWords = upperTargetColumn.split(/[\s.,\-_]+/).filter(word => word.length > 2);
+    if (targetWords.length > 0) {
+        for (const col of cleanedAvailableColumns) {
+            const colWords = col.split(/[\s.,\-_]+/).filter(word => word.length > 2);
+            if (colWords.length > 0) {
+                const commonWords = targetWords.filter(word => colWords.includes(word));
+                // Require at least one common word, maybe more for longer names?
+                if (commonWords.length > 0) {
+                    return availableColumns.find(originalCol => String(originalCol || '').trim().toUpperCase() === col) || col;
+                }
+            }
+        }
     }
   }
-  
-  return null;
+
+  return null; // No suitable match found
 }
 
 // Function to skip header rows and find the actual data rows
@@ -636,7 +661,7 @@ function parseNumber(value: any, defaultValue = 0): number {
   return num;
 }
 
-// Function to find the header row and return its index
+// Function to find the header row in XLSX data
 function findHeaderRow(data: Array<Record<string, any>>, maxRowsToCheck = 10): number {
   let bestMatchCount = 0;
   let bestMatchIndex = -1;
@@ -667,75 +692,241 @@ function findHeaderRow(data: Array<Record<string, any>>, maxRowsToCheck = 10): n
   return bestMatchIndex;
 }
 
-// Transform data function
+// **** NEW: Find Header Row in CSV-like data ****
+function findHeaderRowInCSV(csvData: any[][], maxRowsToCheck = 20): number {
+  const expectedPatterns = [
+      /emp|staff|no/i, /name|full|surname|other/i, // Employee Identifiers
+      /gross|basic|salary|pay\b/i, // Gross Pay variants
+      /net|take\s?home/i, // Net Pay variants
+      /nssf|social/i, // NSSF variants
+      /nhif|health|shif/i, // NHIF/SHIF variants
+      /tax|paye/i, // Tax variants
+      /levy|housing/i, // Housing Levy variants
+      /deduction|deduct/i, // General Deductions
+      /loan/i, // Loans
+      /advance/i, // Advances
+      /id\s?no|identi/i, // ID Number
+      /kra|pin/i, // KRA PIN
+      /bank/i, // Bank Info
+      /position|title|designation/i, // Position
+      /phone|contact|mobile|mpesa/i, // Contact
+  ];
+  
+  // More weight to essential columns
+  const essentialPatterns = [
+      /name|full|surname|other/i,
+      /gross|basic|salary|pay\b/i,
+      /nssf|social/i,
+      /nhif|health|shif/i,
+      /tax|paye/i,
+  ];
+
+  let bestRowIndex = -1; // Default to -1 if no suitable header is found
+  let bestScore = 0;
+  const minRequiredScore = 3; // Minimum score to be considered a potential header
+
+  // Check first N rows or less if file is smaller
+  const rowsToCheck = Math.min(csvData.length, maxRowsToCheck);
+  
+  for (let i = 0; i < rowsToCheck; i++) {
+      const row = csvData[i];
+      // Skip rows that are mostly empty or seem like title rows (e.g., only 1-2 cells filled)
+      const filledCells = row.filter(cell => cell !== null && cell !== undefined && String(cell).trim() !== '').length;
+      if (filledCells < minRequiredScore) continue; // Skip rows with too few values
+
+      let score = 0;
+      let essentialMatches = 0;
+      const matchedPatterns = new Set<RegExp>(); // Track patterns matched in this row
+
+      // Score each cell in the row
+      for (const cell of row) {
+          if (cell === null || cell === undefined) continue;
+          const cellStr = String(cell).trim().toLowerCase(); // Normalize cell content
+          if (cellStr === '') continue;
+
+          let patternMatchedInCell = false;
+          // Check against all expected patterns
+          for (const pattern of expectedPatterns) {
+              if (!matchedPatterns.has(pattern) && pattern.test(cellStr)) {
+                  score++;
+                  matchedPatterns.add(pattern); // Count each *pattern* only once per row
+                  patternMatchedInCell = true;
+                  // Check if it's an essential pattern
+                  if (essentialPatterns.some(essential => essential.source === pattern.source)) {
+                      essentialMatches++;
+                  }
+                  // Optimization: if a pattern matches, maybe we don't need to check others for this cell?
+                  // break; // If we want to count each *cell* only once
+              }
+          }
+      }
+
+      // Add bonus for essential matches
+      score += essentialMatches; // Give extra weight to rows with essential headers
+
+      // Update best score if this row is better AND meets minimum criteria
+      if (score > bestScore && score >= minRequiredScore) {
+          bestScore = score;
+          bestRowIndex = i;
+      }
+  }
+  
+  // Final check: if best score is too low, invalidate
+  if (bestScore < minRequiredScore) {
+      console.warn(`Warning: Possible header detection issue. Best row (index ${bestRowIndex}) only scored ${bestScore}. Minimum required: ${minRequiredScore}.`);
+      return -1; // Indicate header not found reliably
+  }
+  
+  console.log(`Detected header row at index ${bestRowIndex} with score ${bestScore}.`);
+  return bestRowIndex;
+}
+
+// **** NEW: Convert CSV-like data to JSON using provided headers ****
+function convertToJsonWithHeaders(headerRow: any[], dataRows: any[][]): Array<Record<string, any>> {
+  // Normalize header names: trim, replace multiple spaces, handle nulls/undefined
+  const normalizedHeaders = headerRow.map((header, index) => {
+      const trimmedHeader = String(header || '').trim().replace(/\s+/g, ' ');
+      // Handle potentially duplicate or empty headers after normalization
+      // If empty, use a placeholder like '__EMPTY_COL_INDEX__'
+      // If duplicate, maybe append index? For now, let's allow duplicates, downstream mapping should handle it.
+      return trimmedHeader === '' ? `__EMPTY_COL_${index}__` : trimmedHeader;
+  });
+
+  // Keep track of unique headers to handle potential duplicates if needed later
+  const uniqueHeaders = new Set(normalizedHeaders);
+  if (uniqueHeaders.size !== normalizedHeaders.length) {
+      console.warn('Duplicate headers detected after normalization:', normalizedHeaders);
+      // Consider adding logic here to rename duplicates if it causes issues
+  }
+
+  // Convert data rows to objects
+  return dataRows.map((row, rowIndex) => {
+      const rowObject: Record<string, any> = {};
+      // Ensure row is treated as an array, even if sparse
+      const numHeaders = normalizedHeaders.length;
+      for (let i = 0; i < numHeaders; i++) {
+          const header = normalizedHeaders[i];
+          // Handle rows that might be shorter than the header row
+          const cellValue = (i < row.length) ? row[i] : undefined; // Or null? Let's use undefined
+          // Assign value to the corresponding normalized header key
+          // Skip placeholder empty columns unless needed
+          if (!header.startsWith('__EMPTY_COL_')) {
+            rowObject[header] = cellValue;
+          }
+      }
+      // Add original row index if needed for debugging/error reporting
+      // rowObject.__originalRowIndex = headerRowIndex + 1 + rowIndex; // Example
+      return rowObject;
+  }).filter(obj => Object.values(obj).some(v => v !== null && v !== undefined && String(v).trim() !== '')); // Filter out completely empty rows
+}
+
+// **** NEW: Preprocessing Function ****
+function preprocessPayrollData(workbook: XLSX.WorkBook): {
+  headerRowIndex: number;
+  cleanedData: Array<Record<string, any>>;
+} {
+  // 1. Convert the first sheet to CSV-like array structure (array of arrays)
+  const sheetName = workbook.SheetNames[0];
+  if (!sheetName) {
+      throw new Error("Workbook contains no sheets.");
+  }
+  const worksheet = workbook.Sheets[sheetName];
+  const csvData: any[][] = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: null }); // Use null for empty cells
+
+  if (!csvData || csvData.length === 0) {
+      console.warn("Sheet appears empty after CSV conversion.");
+      return { headerRowIndex: -1, cleanedData: [] };
+  }
+
+  // 2. Find header row using the scoring mechanism
+  const headerRowIndex = findHeaderRowInCSV(csvData);
+
+  if (headerRowIndex === -1) {
+      // Header detection failed or confidence is too low
+      return { headerRowIndex: -1, cleanedData: [] };
+  }
+
+  // 3. Extract the header row and all subsequent data rows
+  const headerRow = csvData[headerRowIndex];
+  const dataRows = csvData.slice(headerRowIndex + 1);
+
+  if (dataRows.length === 0) {
+      console.warn("Header row found, but no data rows detected afterwards.");
+      // Still return header index, but data is empty
+      return { headerRowIndex, cleanedData: [] };
+  }
+
+  // 4. Convert data rows to JSON format using normalized headers
+  const cleanedData = convertToJsonWithHeaders(headerRow, dataRows);
+
+  return { headerRowIndex, cleanedData };
+}
+
+// **** MODIFIED: Transform data function ****
 function transformData(data: Array<Record<string, any>>): {
   transformedData: Array<Record<string, any>>;
   failedRows: Array<{row: Record<string, any>, reason: string}>;
 } {
+  // Input `data` is now assumed to be pre-processed:
+  // - It's an array of objects.
+  // - Keys of the objects are the normalized headers detected by preprocessPayrollData.
+  // - Rows before the header are already removed.
+
   if (!data || data.length === 0) {
     return { transformedData: [], failedRows: [] };
   }
 
-  // Find the header row
-  const headerRowIndex = findHeaderRow(data);
-  if (headerRowIndex === -1) {
-    return {
-      transformedData: [],
-      failedRows: data.map((row, index) => ({ 
-        row, 
-        reason: `Row ${index + 1}: Could not find a valid header row in the first few rows.` 
-      }))
-    };
-  }
+  // --- Header Mapping ---
+  // We no longer need to find the header row index.
+  // We map from the MASTER template keys (columnMappings) to the *actual normalized headers* present in the data.
+  const actualHeaders = Object.keys(data[0] || {}); // Get normalized headers from the first data row
+  const headerMapping: Record<string, string> = {}; // Maps *actualHeader* -> *targetSchemaField*
 
-  // Get the header row and create mapping
-  const headerRow = data[headerRowIndex];
-  const headerMapping: Record<string, string> = {};
-  
-  // Get all values from header row, including __EMPTY_X columns
-  const headerEntries = Object.entries(headerRow);
-  
-  // For each master template column, find the best matching header
-  Object.entries(columnMappings).forEach(([masterKey, targetField]) => {
-    // Create array of header values for matching
-    const headerValues = headerEntries.map(([key, value]) => ({
-      key,
-      value: String(value || '').trim()
-    })).filter(h => h.value); // Filter out empty values
-
-    // Find best match among header values for this master key
-    for (const header of headerValues) {
-      if (findBestMatch(masterKey, [header.value])) {
-        headerMapping[header.key] = targetField;
-        break; // Stop after finding first match for this master key
-      }
+  Object.entries(columnMappings).forEach(([masterKey, targetSchemaField]) => {
+    // Find the best matching *actual header* for this *master template key*
+    const bestMatchHeader = findBestMatch(masterKey, actualHeaders);
+    if (bestMatchHeader) {
+        // Check if this actual header is already mapped (e.g., 'Name' matching both 'Employee Name' and 'Surname')
+        // Prioritize the first match or implement more complex logic if needed. For now, overwrite.
+         if (headerMapping[bestMatchHeader] && headerMapping[bestMatchHeader] !== targetSchemaField) {
+             console.warn(`Header mapping conflict: Actual header '${bestMatchHeader}' matched master key '${masterKey}' (field: ${targetSchemaField}), but was already mapped to field '${headerMapping[bestMatchHeader]}'. Overwriting mapping.`);
+         }
+        headerMapping[bestMatchHeader] = targetSchemaField;
     }
   });
 
-  console.log('Detected header mapping:', headerMapping);
+  console.log('Detected header mapping (Actual Header -> Schema Field):', headerMapping);
+
+  // Check if enough essential headers were mapped
+  const mappedSchemaFields = Object.values(headerMapping);
+  const essentialFieldsMapped = ['fullName', 'gross_income', 'nssf_no', 'nhif_no', 'tax_pin'].filter(field => mappedSchemaFields.includes(field)).length;
 
   if (Object.keys(headerMapping).length === 0) {
+    // This case should ideally be caught by preprocessPayrollData, but as a fallback...
     return {
       transformedData: [],
-      failedRows: data.map((row, index) => ({ 
-        row, 
-        reason: `Row ${index + 1}: Could not map any headers to expected columns.` 
+      failedRows: data.map((row, index) => ({
+        row,
+        reason: `Row ${index + 1}: Could not map any headers to expected schema fields.`
       }))
     };
+  } else if (Object.keys(headerMapping).length < 3 || essentialFieldsMapped < 1) {
+     console.warn(`Low confidence mapping: Only ${Object.keys(headerMapping).length} headers mapped (${essentialFieldsMapped} essential fields). Proceeding, but results may be incomplete.`);
   }
 
-  // Process data rows (skip header row)
-  const dataRows = data.slice(headerRowIndex + 1);
+  // --- Process Data Rows ---
+  // We no longer slice the data, as it's already cleaned.
   const failedRows: Array<{row: Record<string, any>, reason: string}> = [];
-  
-  const transformedData = dataRows.map((row, rowIndex) => {
-    // Skip empty rows
-    const isEmpty = Object.values(row).every(val => 
+
+  const transformedData = data.map((row, rowIndex) => {
+    // Skip empty rows (should have been filtered by convertToJsonWithHeaders, but double-check)
+    const isEmpty = Object.values(row).every(val =>
       val === "" || val === null || val === undefined
     );
     if (isEmpty) return null;
 
     // Initialize with Employee interface structure and defaults
+    // (Keep the existing initialization)
     const transformedRow: Employee & { extractionErrors?: string[] } = {
       id: `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
       status: 'active',
@@ -764,13 +955,13 @@ function transformData(data: Array<Record<string, any>>): {
       employeeNumber: '',
       position: '',
       extractionErrors: [],
-      total_loan_deductions: 0,
+      total_loan_deductions: 0, // Note: This seems redundant with loan_deductions, clarify if needed
       id_confirmed: false,
       mobile_confirmed: false,
       tax_pin_verified: false,
       hourlyRate: 0,
       hoursWorked: 0,
-      startDate: new Date(),
+      startDate: new Date(), // Consider if this should be parsed or defaulted
       created_at: new Date(),
       modified_at: new Date(),
       active: true,
@@ -783,45 +974,60 @@ function transformData(data: Array<Record<string, any>>): {
 
     let mappedFields = 0;
 
-    // Process each field according to the header mapping
-    Object.entries(row).forEach(([key, value]) => {
-      if (headerMapping[key] && value !== null && value !== undefined && String(value).trim() !== '') {
-        const targetField = headerMapping[key];
+    // Process each field based on the *actual header* and the derived headerMapping
+    Object.entries(row).forEach(([actualHeader, value]) => {
+      // Check if this actual header corresponds to a target schema field
+      if (headerMapping[actualHeader] && value !== null && value !== undefined && String(value).trim() !== '') {
+        const targetSchemaField = headerMapping[actualHeader];
         const processedValue = String(value).trim();
 
         try {
-          if (targetField === 'fullName') {
+          // Apply parsing/transformation based on the targetSchemaField
+          if (targetSchemaField === 'fullName') {
             const nameParts = processedValue.split(/\s+/);
             if (nameParts.length >= 2) {
               transformedRow.surname = nameParts.slice(-1).join(' ');
               transformedRow.other_names = nameParts.slice(0, -1).join(' ');
             } else {
               transformedRow.other_names = processedValue;
+              // Ensure surname isn't accidentally left from a previous mapping if name is short
+              transformedRow.surname = '';
             }
-          } else if (targetField === 'is_on_probation' || targetField === 'terms_accepted') {
-            setNestedValue(transformedRow, targetField, parseBoolean(processedValue));
+          } else if (targetSchemaField === 'is_on_probation' || targetSchemaField === 'terms_accepted') {
+            setNestedValue(transformedRow, targetSchemaField, parseBoolean(processedValue));
           } else if (
-            targetField.startsWith('statutory_deductions.') ||
-            targetField === 'gross_income' ||
-            targetField === 'net_income' ||
-            targetField === 'loan_deductions' ||
-            targetField === 'employer_advances' ||
-            targetField === 'jahazii_advances' ||
-            targetField === 'house_allowance'
+            targetSchemaField.startsWith('statutory_deductions.') ||
+            targetSchemaField === 'gross_income' ||
+            targetSchemaField === 'net_income' ||
+            targetSchemaField === 'loan_deductions' ||
+            targetSchemaField === 'employer_advances' ||
+            targetSchemaField === 'jahazii_advances' ||
+            targetSchemaField === 'house_allowance'
           ) {
-            setNestedValue(transformedRow, targetField, parseNumber(processedValue));
+            setNestedValue(transformedRow, targetSchemaField, parseNumber(processedValue));
           } else {
-            setNestedValue(transformedRow, targetField, processedValue);
+            // Default: set string value, use setNestedValue for paths like 'contact.phoneNumber'
+            setNestedValue(transformedRow, targetSchemaField, processedValue);
           }
           mappedFields++;
         } catch (e) {
-          console.warn(`Error processing field '${targetField}' with value '${value}' for row index ${rowIndex}:`, e);
-          transformedRow.extractionErrors?.push(`Error processing ${targetField}: ${e instanceof Error ? e.message : 'Unknown error'}`);
+          console.warn(`Error processing field '${targetSchemaField}' (from header '${actualHeader}') with value '${value}' for row index ${rowIndex}:`, e);
+          transformedRow.extractionErrors?.push(`Error processing ${targetSchemaField}: ${e instanceof Error ? e.message : 'Unknown error'}`);
         }
       }
     });
 
-    // Post-processing calculations
+    // --- Post-processing calculations & Sanity checks ---
+    // Keep the existing logic here, it operates on the transformedRow object
+
+    // Example: Ensure full name is consistent if mapped separately
+    if (mappedSchemaFields.includes('surname') && mappedSchemaFields.includes('other_names') && !mappedSchemaFields.includes('fullName')) {
+        // If surname and other_names were mapped directly, ensure they are populated
+        // This might override the split logic if 'fullName' wasn't found but 'surname'/'other_names' were.
+        // The current logic prioritizes 'fullName' if found.
+    }
+
+
     const houseAllowance = transformedRow.house_allowance ?? 0;
     transformedRow.total_deductions =
       (transformedRow.statutory_deductions?.tax ?? 0) +
@@ -832,17 +1038,20 @@ function transformData(data: Array<Record<string, any>>): {
       (transformedRow.employer_advances ?? 0) +
       houseAllowance;
 
-    if (transformedRow.gross_income && !Object.values(headerMapping).includes('net_income')) {
+    // Calculate Net Income only if not explicitly provided in the sheet
+    if (transformedRow.gross_income && !mappedSchemaFields.includes('net_income')) {
       transformedRow.net_income = (transformedRow.gross_income ?? 0) - (transformedRow.total_deductions ?? 0);
     }
 
+    // Calculate EWA limits
     const netIncomeForLimit = transformedRow.net_income ?? 0;
-    if (netIncomeForLimit > 0 && !transformedRow.max_salary_advance_limit) {
+    // Only calculate if limit wasn't explicitly mapped
+    if (netIncomeForLimit > 0 && !mappedSchemaFields.includes('max_salary_advance_limit')) {
       transformedRow.max_salary_advance_limit = Math.floor(netIncomeForLimit * 0.5);
       transformedRow.available_salary_advance_limit = transformedRow.max_salary_advance_limit;
     }
 
-    // Sanity checks
+    // Sanity checks (keep existing)
     const gross = transformedRow.gross_income ?? 0;
     const nhif = transformedRow.statutory_deductions?.nhif ?? 0;
     const nssf = transformedRow.statutory_deductions?.nssf ?? 0;
@@ -858,219 +1067,42 @@ function transformData(data: Array<Record<string, any>>): {
     if (levy > 2500) {
       transformedRow.extractionErrors?.push(`Warning: Housing Levy (${levy}) exceeds the KES 2500 cap.`);
     }
-    if (gross > 0 && totalDed > gross) {
-      transformedRow.extractionErrors?.push(`Warning: Total Deductions (${totalDed}) exceed Gross Income (${gross}).`);
+    if (gross > 0 && totalDed > gross && mappedSchemaFields.includes('net_income') && (transformedRow.net_income ?? 0) < 0) {
+       // Only flag if total deductions > gross AND net income wasn't calculated by us (meaning it came from sheet)
+       transformedRow.extractionErrors?.push(`Warning: Total Deductions (${totalDed}) exceed Gross Income (${gross}), resulting in negative Net Pay (${transformedRow.net_income}).`);
+    } else if (gross > 0 && totalDed > gross && !mappedSchemaFields.includes('net_income')) {
+       // If we calculated net_income and it's negative
+       transformedRow.extractionErrors?.push(`Warning: Calculated Total Deductions (${totalDed}) exceed Gross Income (${gross}).`);
     }
 
-    // Final validation
-    const hasIdentifier = transformedRow.employeeNumber || transformedRow.other_names || transformedRow.surname;
-    
-    if (mappedFields < 3 || !hasIdentifier) {
+
+    // --- Final validation ---
+    // Check for essential identifiers and minimum mapped fields
+    const hasIdentifier = transformedRow.employeeNumber || transformedRow.id_no || (transformedRow.other_names && transformedRow.surname) || transformedRow.other_names;
+    const minFieldsRequired = 3; // Adjust as needed
+
+    if (mappedFields < minFieldsRequired || !hasIdentifier) {
       failedRows.push({
-        row,
-        reason: `Row ${rowIndex + headerRowIndex + 2}: Only ${mappedFields} fields mapped or no clear identifier (Name/Emp No).`
+        row, // The original row object from the preprocessed data
+        reason: `Row ${rowIndex + 1}: Insufficient data mapped (${mappedFields} fields) or missing key identifier (Name/Emp No/ID No).`
       });
-      return null;
+      return null; // Mark row as failed
     }
 
-    return transformedRow;
+    return transformedRow; // Return the successfully transformed row
   })
   .filter((row): row is Employee & { extractionErrors?: string[] } => {
+    // Filter out null values (failed rows)
     return row !== null && typeof row === 'object';
   });
 
   return { transformedData, failedRows };
 }
 
-// Extract data with detected headers
-function extractDataWithDetectedHeaders( allRows: Array<Record<string, any>>, dataRows: Array<Record<string, any>>): {
-  transformedData: Array<Record<string, any>>;
-  failedRows: Array<{row: Record<string, any>, reason: string}>;
-} {
-  if (allRows.length === 0 || dataRows.length === 0) {
-    return { transformedData: [], failedRows: [] };
-  }
-  
-  const headerRow = allRows[0]; // The row identified as a potential header
-  const headerMapping: Record<string, string> = {}; // Maps internal key (e.g., '__EMPTY_1') to target field (e.g., 'fullName')
-  const failedRows: Array<{row: Record<string, any>, reason: string}> = [];
-  
-  // Extract detected header values and their original keys
-  const detectedHeaders = Object.entries(headerRow)
-                              .map(([key, value]) => ({ key, value: String(value || '').trim() }))
-                              .filter(h => h.value);
-  const detectedHeaderValues = detectedHeaders.map(h => h.value);
+// Extract data with detected headers - *Likely NO LONGER NEEDED* as transformData now handles preprocessed data
+// function extractDataWithDetectedHeaders( allRows: Array<Record<string, any>>, dataRows: Array<Record<string, any>>): { ... }
 
-  // Iterate through the MASTER template keys we expect (from columnMappings)
-  for (const masterKey of Object.keys(columnMappings)) {
-    const targetFieldName = columnMappings[masterKey]; // e.g., 'fullName'
-
-    // Use findBestMatch to find the best matching DETECTED header VALUE for this masterKey
-    const bestMatchValue = findBestMatch(masterKey, detectedHeaderValues);
-
-    if (bestMatchValue) {
-      // Find the original internal key corresponding to this best matching value
-      const matchingHeader = detectedHeaders.find(h => h.value === bestMatchValue);
-      if (matchingHeader) {
-        // Map the internal key (e.g., '__EMPTY_1') to the target field name (e.g., 'fullName')
-        // Avoid overwriting if multiple masterKeys somehow map to the same detected header
-        if (!headerMapping[matchingHeader.key]) {
-             headerMapping[matchingHeader.key] = targetFieldName;
-        }
-      }
-    }
-  }
-
-  // If very few headers were mapped, consider it a failure
-  if (Object.keys(headerMapping).length < 3) {
-      return {
-          transformedData: [],
-          failedRows: dataRows.map((row, index) => ({ row, reason: `Row ${index + 1}: Could not reliably map detected headers.` }))
-      };
-  }
-  
-  const transformedData = dataRows.map((row, rowIndex) => {
-    const isEmpty = Object.values(row).every(val => 
-      val === "" || val === null || val === undefined
-    );
-    if (isEmpty) return null;
-
-    // No need for header check here as we are processing rows after the detected header
-    
-    // Initialize with Employee interface structure and defaults
-    const transformedRow: Partial<Employee> & { extractionErrors?: string[] } = {
-      id: `emp-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
-      status: 'active',
-      is_on_probation: false,
-      role: 'employee',
-      country: 'KE',
-      statutory_deductions: { nhif: 0, nssf: 0, tax: 0, levy: 0 },
-      contact: { email: '', phoneNumber: '' },
-      bank_info: { acc_no: null, bank_name: null, bank_code: null },
-      gross_income: 0,
-      net_income: 0,
-      total_deductions: 0,
-      loan_deductions: 0,
-      employer_advances: 0,
-      jahazii_advances: 0,
-      max_salary_advance_limit: 0,
-      available_salary_advance_limit: 0,
-      terms_accepted: false,
-      surname: '',
-      other_names: '',
-      id_no: '',
-      tax_pin: '',
-      sex: '',
-      nssf_no: '',
-      nhif_no: '', // Ensure nhif_no is initialized
-      employeeNumber: '',
-      position: '',
-      extractionErrors: [], // Initialize error array
-    };
-    
-    let mappedFields = 0;
-    
-    Object.entries(row).forEach(([key, value]) => {
-      // Use the headerMapping derived from detected headers
-      if (headerMapping[key] && value !== null && value !== undefined && String(value).trim() !== '') {
-        const targetField = headerMapping[key];
-        const processedValue = String(value).trim();
-
-        try {
-          if (targetField === 'fullName') {
-            const nameParts = processedValue.split(/\s+/);
-            if (nameParts.length >= 2) {
-              transformedRow.surname = nameParts.slice(-1).join(' ');
-              transformedRow.other_names = nameParts.slice(0, -1).join(' ');
-            } else {
-              transformedRow.other_names = processedValue;
-            }
-          } else if (targetField === 'is_on_probation' || targetField === 'terms_accepted') {
-            setNestedValue(transformedRow, targetField, parseBoolean(processedValue));
-          } else if (
-            targetField.startsWith('statutory_deductions.') ||
-            targetField === 'gross_income' ||
-            targetField === 'net_income' ||
-            targetField === 'loan_deductions' ||
-            targetField === 'employer_advances' ||
-            targetField === 'jahazii_advances' ||
-            targetField === 'house_allowance'
-          ) {
-            setNestedValue(transformedRow, targetField, parseNumber(processedValue));
-          } else {
-            setNestedValue(transformedRow, targetField, processedValue);
-          }
-          mappedFields++;
-        } catch (e) {
-          console.warn(`Error processing field '${targetField}' with value '${value}' for detected header row index ${rowIndex}:`, e);
-           transformedRow.extractionErrors?.push(`Error processing ${targetField}: ${e instanceof Error ? e.message : 'Unknown error'}`);
-        }
-      }
-    });
-    
-    // Post-processing and calculations
-    const houseAllowance = (transformedRow as any).house_allowance ?? 0;
-    transformedRow.total_deductions =
-      (transformedRow.statutory_deductions?.tax ?? 0) +
-      (transformedRow.statutory_deductions?.nssf ?? 0) +
-      (transformedRow.statutory_deductions?.nhif ?? 0) +
-      (transformedRow.statutory_deductions?.levy ?? 0) +
-      (transformedRow.loan_deductions ?? 0) +
-      (transformedRow.employer_advances ?? 0) +
-      houseAllowance;
-
-    if (transformedRow.gross_income && !Object.values(headerMapping).includes('net_income')) {
-      transformedRow.net_income = (transformedRow.gross_income ?? 0) - (transformedRow.total_deductions ?? 0);
-    }
-    
-    const netIncomeForLimit = transformedRow.net_income ?? 0;
-    if (netIncomeForLimit > 0 && !transformedRow.max_salary_advance_limit) {
-      transformedRow.max_salary_advance_limit = Math.floor(netIncomeForLimit * 0.5);
-      transformedRow.available_salary_advance_limit = transformedRow.max_salary_advance_limit;
-    }
-
-    // --- ADD SANITY CHECKS (Identical to transformData) ---
-    const gross = transformedRow.gross_income ?? 0;
-    const nhif = transformedRow.statutory_deductions?.nhif ?? 0;
-    const nssf = transformedRow.statutory_deductions?.nssf ?? 0;
-    const levy = transformedRow.statutory_deductions?.levy ?? 0;
-    const totalDed = transformedRow.total_deductions ?? 0;
-
-    if (nhif > 1700) {
-       transformedRow.extractionErrors?.push(`Warning: NHIF (${nhif}) exceeds the KES 1700 cap.`);
-    }
-    if (nssf > 2160) {
-       transformedRow.extractionErrors?.push(`Warning: NSSF (${nssf}) exceeds the KES 2160 cap.`);
-    }
-     if (levy > 2500) {
-       transformedRow.extractionErrors?.push(`Warning: Housing Levy (${levy}) exceeds the KES 2500 cap.`);
-    }
-     if (gross > 0 && totalDed > gross) {
-         transformedRow.extractionErrors?.push(`Warning: Total Deductions (${totalDed}) exceed Gross Income (${gross}).`);
-     }
-    // --- END SANITY CHECKS ---
-
-    // Final validation
-    const hasIdentifier = transformedRow.employeeNumber || transformedRow.other_names || transformedRow.surname;
-    
-    if (mappedFields < 3 || !hasIdentifier) {
-      failedRows.push({
-        row,
-        reason: `Detected Header Row ${rowIndex + 1}: Only ${mappedFields} fields mapped or no clear identifier (Name/Emp No).`
-      });
-      return null;
-    }
-    
-    return transformedRow;
-  })
-  .filter((row): row is InsertEmployee => {
-    return row !== null && typeof row === 'object';
-  });
-  
-  return { transformedData, failedRows };
-}
-
-// Direct extraction for non-standard formats
+// Direct extraction for non-standard formats - *Retained as Fallback*
 function directDataExtraction(data: Array<Record<string, any>>): {
   directExtracted: Array<InsertEmployee>; // Use InsertEmployee from schema
   directFailedRows: Array<{row: Record<string, any>, reason: string}>;
@@ -1080,16 +1112,18 @@ function directDataExtraction(data: Array<Record<string, any>>): {
 
   data.forEach((row, rowIndex) => { // Added rowIndex for error reporting
     const rowValues = Object.values(row);
-    const hasName = rowValues.some(val => 
-      typeof val === 'string' && val.length > 3 && /[A-Za-z]{2,}\\s+[A-Za-z]{2,}/.test(String(val))
-    );
-    
-    const hasNumber = rowValues.some(val => 
-      typeof val === 'number' || (typeof val === 'string' && /^\\d+$/.test(String(val)))
-    );
-    
-    if (hasName && hasNumber) {
-      // Initialize with InsertEmployee structure
+    // Slightly relaxed check: look for any string that looks like a name and any number
+     const hasNameLike = rowValues.some(val =>
+         typeof val === 'string' && val.length > 3 && /[A-Za-z]{2,}\s?[A-Za-z]*/.test(String(val))
+     );
+     
+    const hasNumberLike = rowValues.some(val =>
+         (typeof val === 'number' && !isNaN(val)) ||
+         (typeof val === 'string' && /^\d+(\.\d+)?$/.test(String(val).trim().replace(/,/g, ''))) // Look for numeric strings (int/float)
+     );
+
+    if (hasNameLike && hasNumberLike) {
+      // Initialize with InsertEmployee structure (keep existing)
       const extractedRow: InsertEmployee = {
         id: `emp-${Date.now()}-${Math.random().toString(36).substring(2, 9)}-direct`, // Add direct indicator
         status: 'active', // Default status
@@ -1117,117 +1151,112 @@ function directDataExtraction(data: Array<Record<string, any>>): {
         nhif_no: '', // Default nhif_no
         employeeNumber: '', // Default employeeNumber
         position: '', // Default position
-        // extractionErrors: [], // Consider adding if useful, needs Employee type
+        // Add extractionErrors if adapting Employee type
         id_confirmed: false,
         mobile_confirmed: false,
         tax_pin_verified: false,
         created_at: new Date(),
         modified_at: new Date(),
         active: true,
+        // Add other fields from InsertEmployee if necessary
       };
       
       let extractedFieldsCount = 0;
       let hasIdentifier = false;
 
+      // Keep existing direct extraction logic attempting to guess fields
       Object.entries(row).forEach(([key, value]) => {
         const processedValue = String(value).trim();
         if (processedValue === '') return; // Skip empty values
 
-        // Full name extraction
-        if (typeof value === 'string' && value.length > 3 && /[A-Za-z]{2,}\\s+[A-Za-z]{2,}/.test(processedValue)) {
-          const nameParts = processedValue.split(/\\s+/);
-          if (nameParts.length >= 2) {
-            extractedRow.surname = nameParts.slice(-1).join(' ');
-            extractedRow.other_names = nameParts.slice(0, -1).join(' ');
-          } else {
-            extractedRow.other_names = processedValue;
-            // Keep surname empty
-          }
-          hasIdentifier = true;
-          extractedFieldsCount++;
+        // Full name extraction (Improved slightly)
+        if (typeof value === 'string' && value.length > 3 && /[A-Za-z]{2,}\s+[A-Za-z]{2,}/.test(processedValue) && !extractedRow.other_names) {
+          const nameParts = processedValue.split(/\s+/);
+           extractedRow.surname = nameParts.slice(-1).join(' ');
+           extractedRow.other_names = nameParts.slice(0, -1).join(' ');
+           hasIdentifier = true;
+           extractedFieldsCount++;
         }
-        // ID number (basic check)
-        else if (/^\\d{5,}$/.test(processedValue) && !extractedRow.id_no) {
-          extractedRow.id_no = processedValue;
+         // Simple Name guess (if full name didn't match)
+         else if (typeof value === 'string' && value.length > 2 && /[A-Za-z]/.test(processedValue) && !hasIdentifier && !extractedRow.position) {
+             // Avoid assigning things like 'Active' as a name
+             if (!['active', 'inactive', 'terminated', 'yes', 'no', 'true', 'false'].includes(processedValue.toLowerCase())) {
+                 extractedRow.other_names = processedValue; // Assume it's at least part of the name
+                 hasIdentifier = true;
+                 extractedFieldsCount++;
+             }
+         }
+        // ID number (basic check - look for 5+ digits)
+        else if (/^\d{5,}$/.test(processedValue.replace(/\s/g, '')) && !extractedRow.id_no) {
+          extractedRow.id_no = processedValue.replace(/\s/g, '');
           extractedFieldsCount++;
         }
         // KRA PIN (basic check)
-        else if (/^[A-Z]\\d{9}[A-Z]$/i.test(processedValue) && !extractedRow.tax_pin) { // Case-insensitive
-          extractedRow.tax_pin = processedValue.toUpperCase();
+        else if (/^[A-Z]\d{9}[A-Z]$/i.test(processedValue.replace(/\s/g, '')) && !extractedRow.tax_pin) { // Case-insensitive, remove spaces
+          extractedRow.tax_pin = processedValue.replace(/\s/g, '').toUpperCase();
           extractedFieldsCount++;
         }
-        // NSSF number (basic check)
-        else if (/^\\d{4,10}$/.test(processedValue) && !extractedRow.nssf_no) {
-          extractedRow.nssf_no = processedValue;
+        // NSSF number (basic check - 4 to 10 digits)
+        else if (/^\d{4,10}$/.test(processedValue.replace(/\s/g, '')) && !extractedRow.nssf_no) {
+          extractedRow.nssf_no = processedValue.replace(/\s/g, '');
           extractedFieldsCount++;
         }
-         // NHIF number (basic check - often same as ID, but could be different)
-         else if (/^\\d{5,}$/.test(processedValue) && !extractedRow.nhif_no && processedValue !== extractedRow.id_no) {
-          extractedRow.nhif_no = processedValue;
+         // NHIF number (basic check - often same as ID, but could be different, 5+ digits)
+         else if (/^\d{5,}$/.test(processedValue.replace(/\s/g, '')) && !extractedRow.nhif_no && processedValue.replace(/\s/g, '') !== extractedRow.id_no) {
+          extractedRow.nhif_no = processedValue.replace(/\s/g, '');
           extractedFieldsCount++;
         }
-        // Employee Number (basic check - alphanumeric)
-        else if (/^[a-zA-Z0-9\-\/]+$/.test(processedValue) && !extractedRow.employeeNumber) {
+        // Employee Number (basic check - alphanumeric with potential hyphen/slash)
+        else if (/^[a-zA-Z0-9\-\/]+$/.test(processedValue) && !extractedRow.employeeNumber && processedValue.length < 15) { // Add length limit?
             extractedRow.employeeNumber = processedValue;
-            hasIdentifier = true;
+            hasIdentifier = true; // Emp No is a valid identifier
             extractedFieldsCount++;
         }
-        // Phone Number (basic check - digits, maybe +)
-        else if (/^\+?\d{9,15}$/.test(processedValue) && !extractedRow.contact!.phoneNumber) {
-            extractedRow.contact!.phoneNumber = processedValue;
+        // Phone Number (basic check - digits, maybe +, 9-15 length)
+        else if (/^\+?\d{9,15}$/.test(processedValue.replace(/\s/g, '')) && !extractedRow.contact!.phoneNumber) {
+            extractedRow.contact!.phoneNumber = processedValue.replace(/\s/g, '');
             extractedFieldsCount++;
         }
-        // Position (string, likely contains letters)
-        else if (typeof value === 'string' && /[a-zA-Z]/.test(processedValue) && !extractedRow.position && !hasIdentifier) { // Avoid grabbing names as positions
+        // Position (string, likely contains letters, avoid simple numbers or IDs)
+        else if (typeof value === 'string' && /[a-zA-Z]{3,}/.test(processedValue) && !extractedRow.position && !/^\d+$/.test(processedValue) && processedValue !== extractedRow.other_names) { // Avoid grabbing names/IDs as positions
              extractedRow.position = processedValue;
              extractedFieldsCount++;
         }
-        // Salary amount (number > 1000)
-        else if (typeof value === 'number' && value > 1000 && !extractedRow.gross_income) {
-          extractedRow.gross_income = value;
-
-          // --- Default statutory calculation based on gross ---
-          // These are rough estimates and may not be accurate.
-          // Consider linking the actual calculation logic if available.
-          const gross = extractedRow.gross_income;
-          // PAYE - Very rough estimate (e.g., 10% after reliefs) - Needs proper calculation
-          if (extractedRow.statutory_deductions) {
-              extractedRow.statutory_deductions.tax = Math.max(0, Math.floor((gross - 24000) * 0.1)); // Simplified PAYE placeholder
-          }
-          // NSSF - Tier I (6% up to 7k) + Tier II (6% from 7k to 36k) - max 2160
-          const nssfTier1Limit = 7000;
-          const nssfTier2Limit = 36000;
-          const nssfRate = 0.06;
-          const nssfTier1 = Math.min(gross, nssfTier1Limit) * nssfRate;
-          const nssfTier2Base = Math.max(0, gross - nssfTier1Limit);
-          const nssfTier2 = Math.min(nssfTier2Base, nssfTier2Limit - nssfTier1Limit) * nssfRate;
-          extractedRow.statutory_deductions!.nssf = Math.min(Math.floor(nssfTier1 + nssfTier2), 2160);
-          // NHIF - Based on gross income bands (simplified) - max 1700
-          let nhifCalc = 0;
-          if (gross >= 100000) nhifCalc = 1700;
-          else if (gross >= 50000) nhifCalc = 1200;
-          else if (gross >= 20000) nhifCalc = 750;
-          else if (gross >= 12000) nhifCalc = 500;
-          else if (gross >= 6000) nhifCalc = 300;
-          else nhifCalc = 150;
-          extractedRow.statutory_deductions!.nhif = nhifCalc;
-          // Housing Levy - 1.5% of gross - max 2500
-          extractedRow.statutory_deductions!.levy = Math.min(Math.floor(gross * 0.015), 2500);
-          // --- End default calculation ---
-
-          extractedFieldsCount++;
+        // Salary amount (number > 500 or numeric string)
+        else if (((typeof value === 'number' && value > 500) || (typeof value === 'string' && /^\d{3,}(\.\d+)?$/.test(processedValue.replace(/,/g,'')))) && !extractedRow.gross_income) {
+           const potentialGross = parseNumber(value, 0);
+           if (potentialGross > 500) { // Check parsed value
+                extractedRow.gross_income = potentialGross;
+                // Keep the default statutory calculation logic
+                const gross = extractedRow.gross_income;
+                if (extractedRow.statutory_deductions) {
+                    extractedRow.statutory_deductions.tax = Math.max(0, Math.floor((gross - 24000) * 0.1)); // Simplified PAYE
+                    const nssfTier1Limit = 7000, nssfTier2Limit = 36000, nssfRate = 0.06;
+                    const nssfTier1 = Math.min(gross, nssfTier1Limit) * nssfRate;
+                    const nssfTier2Base = Math.max(0, gross - nssfTier1Limit);
+                    const nssfTier2 = Math.min(nssfTier2Base, nssfTier2Limit - nssfTier1Limit) * nssfRate;
+                    extractedRow.statutory_deductions.nssf = Math.min(Math.floor(nssfTier1 + nssfTier2), 2160);
+                    let nhifCalc = 0;
+                    if (gross >= 100000) nhifCalc = 1700; else if (gross >= 50000) nhifCalc = 1200;
+                    else if (gross >= 20000) nhifCalc = 750; else if (gross >= 12000) nhifCalc = 500;
+                    else if (gross >= 6000) nhifCalc = 300; else nhifCalc = 150;
+                    extractedRow.statutory_deductions.nhif = nhifCalc;
+                    extractedRow.statutory_deductions.levy = Math.min(Math.floor(gross * 0.015), 2500);
+                }
+                extractedFieldsCount++;
+           }
         }
-        // Other numeric values could be loans, advances (more complex to guess)
+        // Other numeric values could be loans, advances (more complex to guess reliably)
       });
 
-      // Post-processing: Calculate total deductions and net income if possible
+      // Post-processing: Calculate total deductions and net income if possible (Keep existing)
       if ((extractedRow.gross_income ?? 0) > 0) {
           extractedRow.total_deductions =
               (extractedRow.statutory_deductions?.tax ?? 0) +
               (extractedRow.statutory_deductions?.nssf ?? 0) +
               (extractedRow.statutory_deductions?.nhif ?? 0) +
               (extractedRow.statutory_deductions?.levy ?? 0) +
-              (extractedRow.loan_deductions ?? 0) +
+              (extractedRow.loan_deductions ?? 0) + // These will likely be 0 unless guessed
               (extractedRow.employer_advances ?? 0);
 
           extractedRow.net_income = (extractedRow.gross_income ?? 0) - (extractedRow.total_deductions ?? 0);
@@ -1241,27 +1270,32 @@ function directDataExtraction(data: Array<Record<string, any>>): {
       }
 
       // Validation: Check if enough meaningful fields were extracted
-      if (extractedFieldsCount >= 3 && hasIdentifier) { // Require at least 3 fields + a name/employeeNumber
+      const minDirectFields = 3; // Minimum fields for direct extraction
+      if (extractedFieldsCount >= minDirectFields && hasIdentifier) { // Require identifier + min fields
         directExtracted.push(extractedRow);
       } else {
-        directFailedRows.push({
-          row,
-          reason: `Row ${rowIndex + 1}: Only identified ${extractedFieldsCount} fields or missing identifier (Name/Emp No). Minimum 3 fields + identifier required.`
-        });
+         // Only fail rows that had *some* values initially
+          const hasValues = Object.values(row).some(v => v !== "" && v !== null && v !== undefined);
+          if (hasValues) {
+              directFailedRows.push({
+                row,
+                reason: `Direct Extraction - Row ${rowIndex + 1}: Only identified ${extractedFieldsCount} fields or missing identifier (Name/Emp No). Minimum ${minDirectFields} fields + identifier required.`
+              });
+          }
       }
     } else {
-      // Check if the row is truly empty before marking as failed
-      const hasValues = Object.values(row).some(v => v !== "" && v !== null && v !== undefined);
-      if (hasValues) {
+      // Row didn't meet the basic Name+Number pattern check
+       const hasValues = Object.values(row).some(v => v !== "" && v !== null && v !== undefined);
+       if (hasValues) {
         directFailedRows.push({
           row,
-          reason: `Row ${rowIndex + 1}: Does not contain a recognizable pattern (e.g., Name and Number).`
+          reason: `Direct Extraction - Row ${rowIndex + 1}: Does not contain a recognizable pattern (e.g., Name-like string and Number).`
         });
-      }
+       }
       // Ignore completely empty rows silently
     }
   });
-  
+
   return { directExtracted, directFailedRows };
 }
 

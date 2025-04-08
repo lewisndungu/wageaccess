@@ -92,6 +92,7 @@ app.use((req, res, next) => {
     const PORT = process.env.PORT || 3000;
     server.listen(PORT, () => {
       log(`Server running on port ${PORT}`);
+      console.log(`🚀 Server running at http://localhost:${PORT}`);
     });
   } catch (error) {
     console.error("Failed to start server:", error);
